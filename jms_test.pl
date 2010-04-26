@@ -12,20 +12,6 @@ use File::Temp;
 
 use Getopt::Std;
 
-my %job_stats;
-
-my %opts;
-getopts('w:i:o:p:n:', \%opts);
-
-my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
-my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
-my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
-my $split   = $opts{'n'} || 10000 || 30000000;
-
-my $fq_split = '/home/kb468/bin/fastq_split.pl';
-my $bwa      = '/home/kb468/bin/bwa';
-my $samtools = '/home/kb468/bin/samtools';
-
 use lib '/home/kb468/projects/easih-flow/modules';
 use lib '/home/kb468/easih-flow/modules';
 use EASIH::JMS;
@@ -62,6 +48,25 @@ our %flow = ( 'fastq-split'   => "BWA-mapping",
 	      'BWA-merge'     => "samtools-sort",
 	      'samtools-sort' => "bam-rename",
 	      'bam-rename'    => "samtools-index");
+
+EASIH::JMS::store_state();
+
+EASIH::JMS::restore_state();
+
+
+exit;
+
+my %opts;
+getopts('w:i:o:p:n:', \%opts);
+
+my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
+my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
+my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
+my $split   = $opts{'n'} || 10000 || 30000000;
+
+my $fq_split = '/home/kb468/bin/fastq_split.pl';
+my $bwa      = '/home/kb468/bin/bwa';
+my $samtools = '/home/kb468/bin/samtools';
 
 
 #push @EASIH::JMS::jobs, '1003679';

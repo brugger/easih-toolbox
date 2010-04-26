@@ -19,7 +19,7 @@ getopts('w:i:o:p:n:', \%opts);
 
 my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
 my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
-my $prefix  = $opts{'p'} || usage();
+my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
 my $split   = $opts{'n'} || 10000 || 30000000;
 
 my $fq_split = '/home/kb468/bin/fastq_split.pl';
@@ -27,6 +27,7 @@ my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
 
 use lib '/home/kb468/projects/easih-flow/modules';
+use lib '/home/kb468/easih-flow/modules';
 use EASIH::JMS;
 
 our %analysis = ('fastq-split'   => { function   => 'fastq_split',
@@ -62,8 +63,17 @@ our %flow = ( 'fastq-split'   => "BWA-mapping",
 	      'samtools-sort' => "bam-rename",
 	      'bam-rename'    => "samtools-index");
 
-EASIH::JMS::validate_flow('fastq-split');
+
+#push @EASIH::JMS::jobs, '1003679';
+#EASIH::JMS::wait_jobs( );
+
+EASIH::JMS::verbosity(10);
+
+#exit;
+#EASIH::JMS::validate_flow('fastq-split');
 EASIH::JMS::run_flow('fastq-split');
+#EASIH::JMS::dry_run('fastq-split');
+EASIH::JMS::delete_tmp_files();
 
 
 sub fastq_split {
@@ -134,8 +144,9 @@ sub bwa_merge {
   my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
   my $cmd = "$samtools merge $tmp_file @inputs ";
 
+  EASIH::JMS::push_input($tmp_file);
   EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs( );  
+  EASIH::JMS::wait_jobs();
 }
 
 sub samtools_sort {
@@ -143,18 +154,19 @@ sub samtools_sort {
   my @inputs = EASIH::JMS::fetch_n_reset_inputs();
 
   my $tmp_file = EASIH::JMS::tmp_file(".merged.sorted");
-  my $cmd = "$samtools sort -m 2048000000 @inputs > $tmp_file ";
+  my $cmd = "$samtools sort -m 2048000000 @inputs $tmp_file ";
   EASIH::JMS::push_input("$tmp_file.bam");
     
   EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs( );  
+  EASIH::JMS::wait_jobs();  
 }
 
 sub rename {
   my ($hpc_param) = @_;
   my @inputs = EASIH::JMS::fetch_n_reset_inputs();
   my $cmd = "mv @inputs $outfile ";
-  system "$cmd";
+  eval { system "$cmd" };
+  EASIH::JMS::fail($@) if ($@);
 }
 
 sub samtools_index {

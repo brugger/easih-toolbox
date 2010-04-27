@@ -49,15 +49,20 @@ our %flow = ( 'fastq-split'   => "BWA-mapping",
 	      'samtools-sort' => "bam-rename",
 	      'bam-rename'    => "samtools-index");
 
-EASIH::JMS::store_state();
-
-EASIH::JMS::restore_state();
-
-
-exit;
-
 my %opts;
-getopts('w:i:o:p:n:', \%opts);
+getopts('w:i:o:p:n:r', \%opts);
+
+if ( $opts{ r} ) {
+  &EASIH::JMS::restore_state();
+#  EASIH::JMS::print_states();
+  EASIH::JMS::print_HPC_usage();
+  exit;
+  getopts('w:i:o:p:n:r', \%opts);
+  EASIH::JMS::reset();
+#  EASIH::JMS::dry_run('fastq-split');
+#  exit;
+}
+
 
 my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
 my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
@@ -74,11 +79,18 @@ my $samtools = '/home/kb468/bin/samtools';
 
 EASIH::JMS::verbosity(10);
 
+
 #exit;
 #EASIH::JMS::validate_flow('fastq-split');
+
+
+
 EASIH::JMS::run_flow('fastq-split');
+&EASIH::JMS::store_state();
+
 #EASIH::JMS::dry_run('fastq-split');
 EASIH::JMS::delete_tmp_files();
+EASIH::JMS::delete_hpc_logs();
 
 
 sub fastq_split {
@@ -127,7 +139,6 @@ sub bwa_samse {
   }
 
   EASIH::JMS::wait_jobs( );  
-
 }
 
 sub sam2bam {
@@ -136,12 +147,15 @@ sub sam2bam {
   foreach my $input ( @inputs ) {
     my $tmp_file = EASIH::JMS::tmp_file(".bam");
     my $cmd = "$samtools view -b -S $input > $tmp_file ";
+#    my $cmd = "$samtools views -b -S $input > $tmp_file ";
     
     EASIH::JMS::submit_job($cmd, $hpc_param);
     EASIH::JMS::push_input($tmp_file);
   }
+
   EASIH::JMS::wait_jobs( );  
 }
+
 
 sub bwa_merge { 
   my ($hpc_param) = @_;
@@ -150,8 +164,8 @@ sub bwa_merge {
   my $cmd = "$samtools merge $tmp_file @inputs ";
 
   EASIH::JMS::push_input($tmp_file);
-  EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs();
+  EASIH::JMS::submit_n_wait_job($cmd, $hpc_param);
+#  EASIH::JMS::wait_jobs();
 }
 
 sub samtools_sort {

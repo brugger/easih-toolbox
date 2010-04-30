@@ -8,7 +8,6 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use File::Temp;
 
 use Getopt::Std;
 
@@ -53,8 +52,7 @@ my %opts;
 getopts('w:i:o:p:n:r', \%opts);
 
 if ( $opts{ r} ) {
-  &EASIH::JMS::restore_state();
-#  EASIH::JMS::print_states();
+  &EASIH::JMS::restore_state('jms_test.pl.freeze');
   EASIH::JMS::print_HPC_usage();
   exit;
   getopts('w:i:o:p:n:r', \%opts);
@@ -64,31 +62,21 @@ if ( $opts{ r} ) {
 }
 
 
-my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
-my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
-my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
-my $split   = $opts{'n'} || 10000 || 30000000;
+my $infile  = $opts{'i'} || usage();
+my $outfile = $opts{'o'} || usage();
+my $prefix  = $opts{'p'} || usage();
+my $split   = $opts{'n'} || 30000000;
 
 my $fq_split = '/home/kb468/bin/fastq_split.pl';
 my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
 
+#EASIH::JMS::verbosity(10);
 
-#push @EASIH::JMS::jobs, '1003679';
-#EASIH::JMS::wait_jobs( );
-
-EASIH::JMS::verbosity(10);
-
-
-#exit;
-#EASIH::JMS::validate_flow('fastq-split');
-
-
-
+#EASIH::JMS::dry_run('fastq-split');
 EASIH::JMS::run_flow('fastq-split');
 &EASIH::JMS::store_state();
 
-#EASIH::JMS::dry_run('fastq-split');
 EASIH::JMS::delete_tmp_files();
 EASIH::JMS::delete_hpc_logs();
 
@@ -147,7 +135,6 @@ sub sam2bam {
   foreach my $input ( @inputs ) {
     my $tmp_file = EASIH::JMS::tmp_file(".bam");
     my $cmd = "$samtools view -b -S $input > $tmp_file ";
-#    my $cmd = "$samtools views -b -S $input > $tmp_file ";
     
     EASIH::JMS::submit_job($cmd, $hpc_param);
     EASIH::JMS::push_input($tmp_file);
@@ -197,14 +184,13 @@ sub samtools_index {
 
 
 
-
 # 
 # 
 # 
 # Kim Brugger (22 Apr 2010)
 sub usage {
   
-  print "not the right usage\n";
-#  exit;
+  print "Not the right usage, please look at the code\n";
+  exit;
 
 }

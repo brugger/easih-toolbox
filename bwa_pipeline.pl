@@ -16,27 +16,27 @@ use lib '/home/kb468/easih-flow/modules';
 use EASIH::JMS;
 
 our %analysis = ('fastq-split'   => { function   => 'fastq_split',
-				      hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:05:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 
 		 'BWA-mapping'    => { function   => 'bwa_aln',
-				       hpc_param  => "-NEP-fqs -l mem=1000mb,walltime=00:10:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
 		 
 		 'BWA-samse'      => { function   => 'bwa_samse',
-				       hpc_param  => "-NEP-fqs -l mem=1000mb,walltime=00:10:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=25000mb,walltime=08:00:00"},
 		 
 		 'SAM2BAM'        => { function   => 'sam2bam',
-				       hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:10:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=03:00:00"},
 		 
 		 'BWA-merge'      => { function   => 'bwa_merge',
-				       hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:10:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
 		 'samtools-sort'  => { function   => 'samtools_sort',
-				       hpc_param  => "-NEP-fqs -l mem=1000mb,walltime=00:10:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=08:00:00"},
 		 
 		 'bam-rename'     => { function   => 'rename'},
 		 
 		 'samtools-index' =>{ function   => 'samtools_index',
-				      hpc_param  => "-NEP-fqs -l mem=1000mb,walltime=00:10:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
     );
 		     
 
@@ -91,6 +91,7 @@ sub fastq_split {
   EASIH::JMS::wait_jobs( );
 
   open (my $tfile, $tmp_file) || die "Could not open '$tmp_file':$1\n";
+
   while(<$tfile>) {
     chomp;
     EASIH::JMS::push_input( $_ );

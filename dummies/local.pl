@@ -9,12 +9,18 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-my $sleep_time = shift || 300;
+my $sleep_time = shift || 30;
+my $fail_rate = 10;
 
 srand;
 $sleep_time = int(rand( $sleep_time ));
 
-print "Starting sleep for $sleep_time seconds\n";
+#print "Starting sleep for $sleep_time seconds\n";
 sleep($sleep_time);
-print "Done sleeping.\n";
+
+if ( $fail_rate > int(rand(100))) {
+  print "------- Failed -----------\n";
+  exit 1;
+}
+#print "Done sleeping.\n";
 

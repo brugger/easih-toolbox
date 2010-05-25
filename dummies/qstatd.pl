@@ -12,8 +12,8 @@ use IO::Socket;
 use Time::HiRes;
 
 my $port = shift || 8888;
-my $fail_rate = 20;
-my $run_time  = 20;
+my $fail_rate = 10;
+my $run_time  = 10;
 
 my $server =  IO::Socket::INET->new( LocalPort => $port,
 				     Type      => SOCK_STREAM,

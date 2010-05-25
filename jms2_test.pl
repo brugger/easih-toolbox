@@ -14,24 +14,18 @@ use Getopt::Std;
 
 my %job_stats;
 
-my %opts;
-getopts('w:i:o:p:n:', \%opts);
-
-my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
-my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
-my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
-my $split   = $opts{'n'} || 10000 || 30000000;
 
 my $fq_split = '/home/kb468/bin/fastq_split.pl';
 my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
 
 use lib '/home/kb468/projects/easih-flow/modules';
+use lib '/home/brugger/projects/easih-flow/modules';
 use lib '/home/kb468/easih-flow/modules';
 use EASIH::JMS;
 
-our %analysis = ('fastq-split'   => { function   => 'fastq_split',
-				      hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:05:00"},
+our %analysis = ('fastq-split'    => { function   => 'fastq_split',
+				       hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:05:00"},
 		 
 		 'BWA-mapping'    => { function   => 'bwa_aln',
 				       hpc_param  => "-NEP-fqs -l mem=1000mb,walltime=00:10:00"},
@@ -65,6 +59,24 @@ our %flow = ( 'fastq-split'   => "BWA-mapping",
 	      'bam-rename'    => "samtools-index");
 
 
+
+my %opts;
+getopts('w:i:q:o:p:n:r:', \%opts);
+
+if ( $opts{ r} ) {
+  &EASIH::JMS::restore_state($opts{r});
+#  EASIH::JMS::print_HPC_usage();
+#  exit;
+  getopts('w:i:q:o:p:n:', \%opts);
+#  EASIH::JMS::reset();
+}
+
+
+my $infile  = $opts{'i'} || "1_1_1.fastq" || usage();
+my $outfile = $opts{'o'} || "1_1_1.fastq.bam" || usage();
+my $prefix  = $opts{'p'} || " /home/kb468/Hs/hs_GRCh37" || usage();
+my $split   = $opts{'n'} || 10000 || 30000000;
+
 #push @EASIH::JMS::jobs, '1003679';
 #EASIH::JMS::wait_jobs( );
 
@@ -94,8 +106,6 @@ sub bwa_aln {
   my @inputs = glob "$input.*";
 
   return if ( ! @inputs );
-
-  print "@inputs\n";
 
   foreach my $input ( @inputs ) {
     my $tmp_file = EASIH::JMS::tmp_file();

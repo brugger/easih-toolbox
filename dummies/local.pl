@@ -9,8 +9,8 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-my $sleep_time = shift || 30;
-my $fail_rate = 10;
+my $sleep_time = shift || 10;
+my $fail_rate = 20;
 
 srand;
 $sleep_time = int(rand( $sleep_time ));

@@ -34,11 +34,18 @@ my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa = $reg->get_adaptor($species, 'core', 'slice');
 my $ga = $reg->get_adaptor($species, 'core', 'gene');
 
-my $gatk   = shift;
-my $pileup = shift;
-my $bam    = shift || "";
+my $gatk        = shift;
+my $pileup      = shift;
+my $bam         = shift || "";
+my $from_36     = 1;
+my $links       = 0;
+my $full_report = 0;
+my $html_out    = 0;
 
-my $from_36 = 1;
+
+my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
+my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
+
 my ($mapper, $asma, $csa, $cs_from, $cs_to);
 if ( $from_36 ) {
 
@@ -75,6 +82,9 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
 
     my @fields;
+    
+    my $position = "$chr:$pos";
+    
     push @fields, "chr:pos", "Ref base", "All. base", "SNP caller(s)", "Base stats #base(percent)/avg score", "\n$chr:$pos";
 
     push @fields, $SNPs{$chr}{$pos}{ref_base};
@@ -82,55 +92,67 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     my @keys = keys %{$SNPs{$chr}{$pos}};
 
     @keys = grep(!/ref_base/, @keys);
+    
+    $SNPs{$chr}{$pos}{callers} = join("/", @keys);
 
-    if ( @keys == 1 ) {
+    if (keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
+	
       my $key = $keys[0];
 
-      push @fields, $SNPs{$chr}{$pos}{$key}{alt_base};
-      push @fields, $key;
+      $SNPs{$chr}{$pos}{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
 
-      push @fields, base_dist( $chr, $pos);;
-
-      push @fields, snp_effect($chr, $pos, $pos, $SNPs{$chr}{$pos}{$key}{alt_base});
-
+      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos);
+      $SNPs{$chr}{$pos}{snp_effect} = snp_effect($chr, $pos, $pos, "$SNPs{$chr}{$pos}{ref_base}/$SNPs{$chr}{$pos}{alt_base}");
     }
     else {
 
-      my @snps;
-
-      if (keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
-	
-	my $key = $keys[0];
-	
+      my @snps;     
+      foreach my $key ( @keys ) {
 	push @snps, $SNPs{$chr}{$pos}{$key}{alt_base};
+      }
+      
+      $SNPs{$chr}{$pos}{alt_base}   = join("/", @snps);
+      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos);;
 
-	push @fields, $snps[0];
-	push @fields, join("/", @keys);
+      foreach my $snp ( @snps ) {
+	push @{$SNPs{$chr}{$pos}{snp_effects}}, snp_effect($chr, $pos, $pos, $snp );
+      }
+    }
 
-	push @fields, base_dist( $chr, $pos);;
-	push @fields, snp_effect($chr, $pos, $pos, $snps[0] );
+#    print  Dumper( $SNPs{$chr}{$pos} );
 
+    if ( ! $full_report && ! $html_out ) {
+      
+      my @line;
+      push @line, "$chr:$pos", "$SNPs{$chr}{$pos}{ref_base}>$SNPs{$chr}{$pos}{alt_base}";
+      print Dumper( $SNPs{$chr}{$pos}{base_dist} );
+      push @line, ${$SNPs{$chr}{$pos}}{base_dist}{score};
+      push @line, ${$SNPs{$chr}{$pos}}{base_dist}{total};      
 
+      map { push @line, ${$SNPs{$chr}{$pos}}{base_dist}{$_} if (${$SNPs{$chr}{$pos}}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      push @line, ${$SNPs{$chr}{$pos}}{callers};
+
+      if (@{$SNPs{$chr}{$pos}{snp_effect}} ) {
+      
+	foreach my $snp_effect ( @{$SNPs{$chr}{$pos}{snp_effect}} ) {
+#	  print Dumper( $snp_effect);
+	  my @effect_line;
+	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
+	  push @effect_line, $$snp_effect{ position };
+	  push @effect_line, $$snp_effect{ cpos };
+	  push @effect_line, $$snp_effect{ ppos };
+	  push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
+
+	  print join("\t", @line, @effect_line) . "\n";
+	}
       }
       else {
-	foreach my $key ( @keys ) {
-	  
-	  push @snps, $SNPs{$chr}{$pos}{$key}{alt_base};
-	}
-      
-	push @fields, join("/", @snps);
-	push @fields, join("/", @keys);
-
-	push @fields, base_dist( $chr, $pos);;
-	push @fields, snp_effect($chr, $pos, $pos, $snps[0] );
+	print join("\t", @line) . "\n";
       }
 
-
-    }
+    }      
+#    exit;
     
-    
-
-    print join("\t", @fields) . "\n";
 
   }
 
@@ -152,7 +174,7 @@ sub base_dist {
     return;
   }
 
-  my %base_stats = ( A => 0, C => 0, G => 0, T => 0);
+  my %base_stats = ( A => 0, C => 0, G => 0, T => 0, N => 0);
   my %qual_stats;
   my $total = 0;
   
@@ -200,24 +222,29 @@ sub base_dist {
     $qual_stats{$key} = $avg_qual;
   }
 
+
+
   my $ratio = $second/( $first + $second) * 100;
   my $ignore_second = 0;
   if ( $ratio < 10 ) {    
     $ignore_second++;
   }
+  elsif ( $ratio > 15 && $ratio < 35 ) {
+    $ignore_second++;    
+  }
   elsif ( $ratio > 40 && $ratio < 60 ) {
     $ignore_second++;    
   }
-  elsif ($ratio > 60 && $ratio < 80 ) {
+  elsif ($ratio > 60 && $ratio < 83 ) {
     $ignore_second++;    
   }
 
   my ($best, $score) = (1, 0);
-  my @res;
-  foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a} } keys %base_stats ) {
+  my %res;
+  foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     my $qual = $qual_stats{$base} || 0;
-    push @res, "$base: $base_stats{$base}($perc%)/$qual";
+    $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
     if ( $best ) {
       $score = int($base_stats{$base} * $qual);
       $best = 0;
@@ -230,12 +257,11 @@ sub base_dist {
     }
   }
 
-
-  push @res, "SNP score: $score";
+  $res{total} = $total;
+  $res{score} = $score;
 
   
-  return @res;
-  
+  return \%res;
 }
 
 
@@ -266,12 +292,8 @@ sub snp_effect {
     }
   }
 
-
   my @res;
-  push @res, "\n\t";
-  push @res, "Gene","Transcript", "Consequence","Position in cDNA","Position in protein", "Amino acid change","Corresponding Variation", "\n\t";
   
-  my $added_entries = 0;
 
   my $slice;
   # first try to get a chromosome
@@ -306,7 +328,7 @@ sub snp_effect {
   foreach my $vf (@vfs) {
 
     # find any co-located existing VFs
-    my $existing_vf = "N/A";
+    my $existing_vf;
     
     if(defined($new_vf->adaptor->db)) {
       my $fs = $new_vf->feature_Slice;
@@ -315,8 +337,8 @@ sub snp_effect {
       }
       foreach my $existing_vf_obj(@{$new_vf->adaptor->fetch_all_by_Slice($fs)}) {
 	$existing_vf = $existing_vf_obj->variation_name
-	    if $existing_vf_obj->seq_region_start == $new_vf->seq_region_start
-	    and $existing_vf_obj->seq_region_end == $new_vf->seq_region_end;
+	    if ($existing_vf_obj->seq_region_start == $new_vf->seq_region_start &&
+		$existing_vf_obj->seq_region_end   == $new_vf->seq_region_end );
       }
     }
 		
@@ -324,6 +346,9 @@ sub snp_effect {
     # objects that were attached above - it doesn't go off and do
     # the calculation again		
     foreach my $con (@{$new_vf->get_all_TranscriptVariations}) {
+      
+      my %gene_res;
+      
       foreach my $string (@{$con->consequence_type}) {
 	
 	next if ( $string eq "INTERGENIC");
@@ -336,25 +361,83 @@ sub snp_effect {
 	  ($con->{'translation_start'}, $con->{'translation_end'}) = ($con->{'translation_end'}, $con->{'translation_start'});
 	}
 
-	push @res, ($con->transcript ? $ga->fetch_by_transcript_stable_id($con->transcript->stable_id)->stable_id : "N/A");
-	push @res, ($con->transcript ? $con->transcript->stable_id : "N/A");
-	push @res, $string;
-	push @res, ($con->cdna_start ? $con->cdna_start.($con->cdna_end eq $con->cdna_start ? "" : "-".$con->cdna_end) : "N/A");
-	push @res, ($con->translation_start ? $con->translation_start.($con->translation_end eq $con->translation_start ? "" : "-".$con->translation_end) : "N/A");
-	push @res, ($con->pep_allele_string ? $con->pep_allele_string : "N/A");
-	push @res, $existing_vf;
-	$added_entries++;
+	if ( $con->transcript ) {
+
+	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
+	  
+	  $gene_res{ external_name } = $gene->external_name;
+	  
+	  $gene_res{ stable_id} = $gene->stable_id;
+	  $gene_res{ transcript_id} = $con->transcript->stable_id;
+
+	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
+
+	  
+	  if ( $$xref[0] ) {
+	  
+	    $gene_res{ xref } = $$xref[0]->display_id;
+	    $gene_res{ transcript_id} = join("/",$gene_res{ xref },$gene_res{ transcript_id});
+	  }
+
+	  $gene_res{ cpos } = "";
+	  $gene_res{ ppos } = "";
+
+
+	  $gene_res{ position } = $string;
+	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
+
+	  if ( $con->translation_start ) {
+	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
+	    
+	    $old = one2three( $old );
+	    $new = one2three( $new );
+	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	  }
+
+	  $gene_res{ rs_number } = $existing_vf || "";
+	  push @res, \%gene_res;
+	} 
       }
-      push @res, "\n\t";
     }
   }
-
-#  print "\n" . join("\t", @res) . "\n";
-
-  return @res if ( $added_entries );
-  return "\n";
-
+  
+  return \@res;
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (02 Jun 2010)
+sub one2three {
+  my ( $aminoacid) = @_;
+  
+  my %trans = (A => 'Ala',
+	       R => 'Arg',
+	       N => 'Asn',
+	       D => 'Asp',
+	       C => 'Cys',
+	       E => 'Glu',
+	       Q => 'Gln',
+	       G => 'Gly',
+	       H => 'His',
+	       I => 'Ile',
+	       L => 'Leu',
+	       K => 'Lys',
+	       M => 'Met',
+	       F => 'Phe',
+	       P => 'Pro',
+	       S => 'Ser',
+	       T => 'Thr',
+	       W => 'Trp',
+	       Y => 'Tyr',
+	       V => 'Val');
+
+  return $trans{ $aminoacid } if ($trans{ $aminoacid });
+  return $aminoacid;
+}
+
 
 # 
 # 

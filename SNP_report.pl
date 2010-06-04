@@ -101,7 +101,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
       $SNPs{$chr}{$pos}{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
 
-      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos);
+      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos, $SNPs{$chr}{$pos}{ref_base}, $SNPs{$chr}{$pos}{alt_base});
       $SNPs{$chr}{$pos}{snp_effect} = snp_effect($chr, $pos, $pos, "$SNPs{$chr}{$pos}{ref_base}/$SNPs{$chr}{$pos}{alt_base}");
     }
     else {
@@ -115,7 +115,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos);;
 
       foreach my $snp ( @snps ) {
-	push @{$SNPs{$chr}{$pos}{snp_effects}}, snp_effect($chr, $pos, $pos, $snp );
+#	push @{$SNPs{$chr}{$pos}{snp_effects}}, snp_effect($chr, $pos, $pos, $snp );
       }
     }
 
@@ -125,17 +125,15 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       
       my @line;
       push @line, "$chr:$pos", "$SNPs{$chr}{$pos}{ref_base}>$SNPs{$chr}{$pos}{alt_base}";
-      print Dumper( $SNPs{$chr}{$pos}{base_dist} );
       push @line, ${$SNPs{$chr}{$pos}}{base_dist}{score};
       push @line, ${$SNPs{$chr}{$pos}}{base_dist}{total};      
 
       map { push @line, ${$SNPs{$chr}{$pos}}{base_dist}{$_} if (${$SNPs{$chr}{$pos}}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
       push @line, ${$SNPs{$chr}{$pos}}{callers};
 
-      if (@{$SNPs{$chr}{$pos}{snp_effect}} ) {
+      if ($SNPs{$chr}{$pos}{snp_effect} ) {
       
 	foreach my $snp_effect ( @{$SNPs{$chr}{$pos}{snp_effect}} ) {
-#	  print Dumper( $snp_effect);
 	  my @effect_line;
 	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
 	  push @effect_line, $$snp_effect{ position };
@@ -167,7 +165,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 # 
 # Kim Brugger (29 Apr 2010)
 sub base_dist {
-  my ( $chr, $SNP_pos) = @_;
+  my ( $chr, $SNP_pos, $ref, $alt) = @_;
 
   if ( ! $bam ) {
     print STDERR "need a bam file for finding base distribution\n";
@@ -386,11 +384,15 @@ sub snp_effect {
 	  $gene_res{ position } = $string;
 	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
 
-	  if ( $con->translation_start ) {
+	  if ( $con->translation_start) {
 	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
+	    
+	    $new = $old if ( $string eq "SYNONYMOUS_CODING");
 	    
 	    $old = one2three( $old );
 	    $new = one2three( $new );
+	    
+
 	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
 	  }
 
@@ -468,6 +470,38 @@ sub genotype_2_base {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (29 Apr 2010)
+sub subtract_reference {
+  my ($genotype, $reference) = @_;
+
+  return $genotype if ( $genotype eq 'A' ||
+			$genotype eq 'C' ||
+			$genotype eq 'G' ||
+			$genotype eq 'T' );
+
+  my ($base1, $base2);
+
+
+
+  ($base1, $base2) = ('A', 'T') if ( $genotype eq 'W');
+  ($base1, $base2) = ('C', 'G') if ( $genotype eq 'S');
+  ($base1, $base2) = ('A', 'C') if ( $genotype eq 'M');
+  ($base1, $base2) = ('G', 'T') if ( $genotype eq 'K');
+  ($base1, $base2) = ('A', 'G') if ( $genotype eq 'R');
+  ($base1, $base2) = ('C', 'T') if ( $genotype eq 'Y');
+
+  return $base1 if ( $reference eq $base2);
+  return $base2 if ( $reference eq $base1);
+  return $genotype;
+  
+#  print"Cannot subtract $reference from $genotype ( $base1, $base2) \n";
+#  exit -1;
+}
+
+
 
 # 
 # 
@@ -514,6 +548,8 @@ sub readin_cvf {
     
     my ($chr, $pos, $id, $ref_base, $alt_base, $mapq, $filter, $info) = split("\t");
 
+#    print "$_";
+    $alt_base = subtract_reference($alt_base, $ref_base);
 
     my %info_hash;
     foreach my $entry (split("\;", $info )) {
@@ -550,6 +586,9 @@ sub readin_pileup {
     next if (/^\#/);
 
     my ($chr, $pos, $ref_base, $alt_base, $cons_qual, $cons_SNP_qual, $max_map_qual, $depth, $pile, $quals) = split("\t");
+
+#    print "$_";
+    $alt_base = subtract_reference($alt_base, $ref_base);
 
     next if ( $cons_SNP_qual < $min_SNP_qual);
     

@@ -81,13 +81,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
 
-    my @fields;
+    my %res;
     
     my $position = "$chr:$pos";
     
-    push @fields, "chr:pos", "Ref base", "All. base", "SNP caller(s)", "Base stats #base(percent)/avg score", "\n$chr:$pos";
-
-    push @fields, $SNPs{$chr}{$pos}{ref_base};
 
     my @keys = keys %{$SNPs{$chr}{$pos}};
 
@@ -98,11 +95,11 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     if (keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
       my $key = $keys[0];
+      $res{ref_base} = $SNPs{$chr}{$pos}{ref_base};
+      $res{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
 
-      $SNPs{$chr}{$pos}{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
-
-      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos, $SNPs{$chr}{$pos}{ref_base}, $SNPs{$chr}{$pos}{alt_base});
-      $SNPs{$chr}{$pos}{snp_effect} = snp_effect($chr, $pos, $pos, "$SNPs{$chr}{$pos}{ref_base}/$SNPs{$chr}{$pos}{alt_base}");
+      $res{base_dist}  = base_dist( $chr, $pos, $res{ref_base}, $res{alt_base});
+      $res{snp_effect} = snp_effect($chr, $pos, $pos, "$res{ref_base}/$res{alt_base}");
     }
     else {
 
@@ -124,16 +121,16 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     if ( ! $full_report && ! $html_out ) {
       
       my @line;
-      push @line, "$chr:$pos", "$SNPs{$chr}{$pos}{ref_base}>$SNPs{$chr}{$pos}{alt_base}";
-      push @line, ${$SNPs{$chr}{$pos}}{base_dist}{score};
-      push @line, ${$SNPs{$chr}{$pos}}{base_dist}{total};      
+      push @line, "$chr:$pos", "$res{ref_base}>$res{alt_base}";
+      push @line, $res{base_dist}{score};
+      push @line, $res{base_dist}{total};      
 
-      map { push @line, ${$SNPs{$chr}{$pos}}{base_dist}{$_} if (${$SNPs{$chr}{$pos}}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      push @line, ${$SNPs{$chr}{$pos}}{callers};
+      map { push @line, $res{base_dist}{$_} if ($res{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      push @line, $res{callers};
 
       if ($SNPs{$chr}{$pos}{snp_effect} ) {
       
-	foreach my $snp_effect ( @{$SNPs{$chr}{$pos}{snp_effect}} ) {
+	foreach my $snp_effect ( @{$res{snp_effect}} ) {
 	  my @effect_line;
 	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
 	  push @effect_line, $$snp_effect{ position };

@@ -11,7 +11,7 @@ no warnings 'recursion';
 use Data::Dumper;
 use POSIX qw(ceil floor);
 
-use lib '/home/kb468/perllib/';
+use lib '/home/kb468/perllib/modules/';
 use EASIH::Timer;
 my $timer = EASIH::Timer->New();
 
@@ -19,7 +19,7 @@ my $timer = EASIH::Timer->New();
 my $START = 0;
 my $END   = 1;
 my $SUB   = 2;
-
+my $LEVEL = 2;
 
 my $VERBOSE_LEVEL = 0;
 
@@ -58,11 +58,6 @@ if (1) {
        print "STATUS: $counter entries, array length: " . @stack ." \n" if ( $counter++ % 10000 == 0);
       
       b_insert(\@stack, [split("\t", $_)]);
-#    print_stack( \@stack, 0 );
-#    print "--------------------------\n\n";
-      #   $dprint++ if ($counter >= 60);
-#    $VERBOSE_LEVEL = 10 if ($counter >= 1051);
-#    last if ( ! $counter--);
     }
   }
 }
@@ -80,11 +75,13 @@ print " "x20 . "RUNTIME :: ".( $timer->report('s'))."\n";
 print "-"x60 . "\n";
 #print_stack( \@stack, $fragment_cutoff);
 
+print Dumper( flatten_stack( \@stack, $fragment_cutoff));
+
 
 my($nodes, $max_depth, $troughs) = stack_stats( \@stack, $fragment_cutoff );
 
 print "Stack stats :: nodes= $nodes, max depth= $max_depth, troughs= $troughs \n";
-verbose("S2: $identical, $contained, $overlapped, $pushed \n", 0);
+
 
 
 # 
@@ -96,16 +93,16 @@ sub b_inserts_sorted {
 
   # the data is not sorted here so we sort it 
   if ( $sort ) {
-    print "start sorting ... \n";
+#    print "start sorting ... \n";
     @$input_data = sort {$$a[ $START ] <=> $$b[ $START ] || $$b[ $END ] <=> $$a[ $END ] } @$input_data;
-    print "done \n";
+#    print "done \n";
 
   }
 
   my $counter = 0;
   foreach my $data ( @$input_data ) {
     verbose("STATUS: $counter entries, array length: " . @stack ." \n", 0) if ( $counter++ % 10000 == 0);
-    verbose("S2: $identical, $contained, $overlapped, $pushed \n", 0)  if ( ($counter - 1) % 10000 == 0) ;
+#    verbose("S2: $identical, $contained, $overlapped, $pushed \n", 0)  if ( ($counter - 1) % 10000 == 0) ;
     b_insert_sorted( $stack, $data);
   }
   
@@ -155,7 +152,7 @@ sub b_insert_sorted {
 	  $$data[ $START   ] <= $$stack_ref[ -1 ][$END]  ) {
     verbose("JOIN TWO BLOCKS RIGHT\n", 2);
     $overlapped++;
-    b_insert( $$stack_ref[ -1 ][$SUB], [$$data[ $START ], $$stack_ref[ -1 ][$END]]);
+    b_insert_sorted( $$stack_ref[ -1 ][$SUB], [$$data[ $START ], $$stack_ref[ -1 ][$END]]);
     $$stack_ref[ -1 ][$END] = $$data[ $END ];
   }
   # There is a gap between the end block and this one. Just push it on the end of  the array!
@@ -295,37 +292,17 @@ sub b_insert {
       if ( @$stack_ref == 1 ) {
 
 	verbose("SINGLE ENTRY ARRAY \n", 2);
-#	print "REFE: " . Dumper( $stack_ref );
-#	print "DATA: " . Dumper( $data );
-
 	my (@middle_data) = ($$stack_ref[0][$START], $$stack_ref[0][$END], $$stack_ref[0][$SUB]);
 
-#	($$stack_ref[ $START ], $$stack_ref[ $END ], $$stack_ref[ $SUB ]) = ($$data[0], $$data[1], $$data[2]);
-#	@$stack_ref = @$data;
-	
 	($$stack_ref[0][$START], $$stack_ref[0][$END], $$stack_ref[0][$SUB]) = ($$data[$START], $$data[$END], $$data[$SUB]);
-	
-#	print "DATA: " .Dumper( $data );
-#	print "REFE: " . Dumper( $stack_ref );
-#	print "ORIN: " . Dumper( \@stack );
-#	print "MIDD: " .Dumper( \@middle_data );
-#	$dprint++;
 	b_insert( $stack_ref, [@middle_data]);
-#	exit;
 	return;
       }
 
-#      $VERBOSE_LEVEL = 10;
       verbose("MULTIPLE ENTRY ARRAY \n", 2);
       # pick the middle block out of the array and insert it into the current block;
       my $middle_block = splice @$stack_ref, $middle, 1;
-#      print "CONTAINED : " . Dumper( $middle_block);
-#      print "PRE-DATA : " . Dumper( $data);
-#      print "STACK    : " . Dumper( $stack_ref );
       b_insert([ $data], $middle_block);
-#      print "POST-DATA : " . Dumper( $data);
-
-
       #As this block could overlap with other blocks, rerun the loop
       verbose("RERUNNING LOOP\n", 2);
       goto RERUN;
@@ -479,3 +456,26 @@ sub print_stack {
   
 }
 
+
+
+# 
+# 
+# 
+# Kim Brugger (07 Apr 2010)
+sub flatten_stack {
+  my ($stack_ref, $cutoff, $level ) = @_;
+
+  my @res;
+
+  $level ||= 1;
+
+  foreach my $field ( @$stack_ref ) {    
+    next if ( $$field[ $END ] - $$field[ $START ] + 1 < $cutoff);
+    push @res, [$$field[ $START ], $$field[ $END ], $level];
+    if ( @{$$field[ $SUB ]} > 0 ) {
+      push @res, flatten_stack( $$field[ $SUB ], $cutoff, $level + 1);
+    }
+  }
+
+  return @res;
+}

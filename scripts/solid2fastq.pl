@@ -150,7 +150,7 @@ if ($is_paired) { # paired end
 	    $entries_printed = 0;
 	    open($fhw[2], "| gzip >$pre.$file_index.single.fastq.gz") || die;
 	}
-	last if ( $entries_printed > 1000000 );
+	#last if ( $entries_printed > 1000000 );
 
   }
 

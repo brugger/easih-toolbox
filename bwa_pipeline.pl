@@ -12,11 +12,13 @@ use Data::Dumper;
 use Getopt::Std;
 
 use lib '/home/kb468/projects/easih-flow/modules';
-use lib '/home/kb468/easih-flow/modules';
+use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 
-our %analysis = ('fastq-split'   => { function   => 'fastq_split',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
+
+
+our %analysis = ('csfasta2fastq'   => { function   => 'csfasta2fastq',
+					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 
 		 'BWA-mapping'    => { function   => 'bwa_aln',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
@@ -67,9 +69,10 @@ my $outfile = $opts{'o'} || usage();
 my $prefix  = $opts{'p'} || usage();
 my $split   = $opts{'n'} || 30000000;
 
-my $fq_split = '/home/kb468/bin/fastq_split.pl';
+my $solid2fq = '/home/kb468/bin/solid2fastq.pl';
 my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
+
 
 #EASIH::JMS::verbosity(10);
 

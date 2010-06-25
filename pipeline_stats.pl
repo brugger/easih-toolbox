@@ -18,9 +18,7 @@ my $freeze_file = shift || usage();
 
 
 EASIH::JMS::restore_state($freeze_file);
-print EASIH::JMS::job_report( 1 );
-EASIH::JMS::run_stats();    
-EASIH::JMS::memory_stats();    
+print EASIH::JMS::job_report();    
 
 
 

@@ -20,7 +20,7 @@ my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
 
 use lib '/home/kb468/projects/easih-flow/modules';
-use lib '/home/brugger/projects/easih-flow/modules';
+use lib '/home/brugger/easih-pipeline/modules';
 use lib '/home/kb468/easih-flow/modules';
 use EASIH::JMS;
 
@@ -80,6 +80,7 @@ my $split   = $opts{'n'} || 10000 || 30000000;
 #push @EASIH::JMS::jobs, '1003679';
 #EASIH::JMS::wait_jobs( );
 
+EASIH::JMS::hive('Kluster');
 EASIH::JMS::verbosity(10);
 
 #EASIH::JMS::validate_flow('fastq-split');
@@ -92,26 +93,28 @@ EASIH::JMS::run('fastq-split');
 sub fastq_split {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file();
-  my $cmd = "$fq_split -e $split -p $tmp_file $infile";
+  for (my $i = 0; $i < 5; $i++ ) {
 
-  EASIH::JMS::submit_job($cmd, $tmp_file);
+    my $tmp_file = EASIH::JMS::tmp_file();
+    my $cmd = "$fq_split -e $split -p $tmp_file $infile";
+    EASIH::JMS::submit_job($cmd, $tmp_file);
+  }
 }
 
 sub bwa_aln {
   my ($input) = @_;
   
-  $input = " 1_1_1.fastq_split";
+#  $input = " 1_1_1.fastq_split";
   
-  my @inputs = glob "$input.*";
+#  my @inputs = glob "$input.*";
 
-  return if ( ! @inputs );
+#  return if ( ! @inputs );
 
-  foreach my $input ( @inputs ) {
+#  foreach my $input ( @inputs ) {
     my $tmp_file = EASIH::JMS::tmp_file();
     my $cmd = "$bwa aln -f $tmp_file $prefix $input ";
     EASIH::JMS::submit_job($cmd, $tmp_file);
-  }
+#  }
 }
 
 sub bwa_samse {
@@ -133,6 +136,8 @@ sub sam2bam {
 sub bwa_merge { 
   my (@inputs) = @_;
 
+  print "bwa_merge ;::  @inputs \n";
+
   my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
   my $cmd = "$samtools merge $tmp_file @inputs ";
   EASIH::JMS::submit_job($cmd, $tmp_file);
@@ -150,7 +155,7 @@ sub samtools_sort {
 sub rename {
   my ($input) = @_;
 
-  my $cmd = "mv $input $outfile ";
+  my $cmd = "sleep 1 ";
   eval { system "$cmd" };
   EASIH::JMS::fail($@) if ($@);
 }

@@ -21,7 +21,7 @@ our %analysis = ('csfasta2fastq'   => { function   => 'csfasta2fastq',
 					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 
 		 'BWA-mapping'    => { function   => 'bwa_aln',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
 		 
 		 'BWA-samse'      => { function   => 'bwa_samse',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=25000mb,walltime=08:00:00"},
@@ -67,12 +67,12 @@ if ( $opts{ r} ) {
 my $infile  = $opts{'i'} || usage();
 my $outfile = $opts{'o'} || usage();
 my $prefix  = $opts{'p'} || usage();
-my $split   = $opts{'n'} || 30000000;
+my $split   = $opts{'n'} || 5000000;
 
 my $solid2fq = '/home/kb468/bin/solid2fastq.pl';
 my $bwa      = '/home/kb468/bin/bwa';
 my $samtools = '/home/kb468/bin/samtools';
-
+my $fq_split = '/home/kb468/bin/fastq_split.pl';
 
 #EASIH::JMS::verbosity(10);
 
@@ -164,7 +164,7 @@ sub samtools_sort {
   my @inputs = EASIH::JMS::fetch_n_reset_inputs();
 
   my $tmp_file = EASIH::JMS::tmp_file(".merged.sorted");
-  my $cmd = "$samtools sort -m 2048000000 @inputs $tmp_file ";
+  my $cmd = "$samtools sort -m 5000000000 @inputs $tmp_file ";
   EASIH::JMS::push_input("$tmp_file.bam");
     
   EASIH::JMS::submit_job($cmd, $hpc_param);

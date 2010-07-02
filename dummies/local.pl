@@ -10,7 +10,7 @@ use warnings;
 use Data::Dumper;
 
 my $sleep_time = shift || 10;
-my $fail_rate = 50;
+my $fail_rate = 1;
 
 srand;
 $sleep_time = int(rand( $sleep_time ));

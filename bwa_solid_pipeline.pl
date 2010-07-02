@@ -18,9 +18,6 @@ use EASIH::JMS;
 
 our %analysis = ('csfasta2fastq'  => { function   => 'csfasta2fastq',
 					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=05:00:00"},
-		 'fastq-split'    => { function   => 'fastq_split',
-					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=05:00:00"},
-
 		 'BWA-mapping'    => { function   => 'bwa_aln',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
@@ -120,7 +117,6 @@ else {
 #   my $bwa       = '/home/kb468/bin/bwa';
 #   my $samtools  = '/home/kb468/bin/samtools';
   
-  
 
 
 sub csfasta2fastq {
@@ -142,6 +138,7 @@ sub bwa_aln {
   
   $input = $opts{'g'} if ($opts{'g'});
   $input =~ s/\.\z//;
+
   my @inputs = glob "$input*";
 
   return if ( ! @inputs );

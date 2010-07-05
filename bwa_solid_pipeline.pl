@@ -205,7 +205,7 @@ sub samtools_sort {
 sub rename {
   my ($input) = @_;
 
-  EASIH::JMS::submit_job("mv $input $outfile", undef, 1);
+  EASIH::JMS::submit_system_job("mv $input $outfile", undef, 1);
 }
 
 sub samtools_index {

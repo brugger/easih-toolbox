@@ -14,17 +14,18 @@ use Getopt::Std;
 
 my %job_stats;
 
+my $executer = "/home/kb468/easih-pipeline/scripts/dummies/local.pl";
 
-my $fq_split = '/home/kb468/bin/fastq_split.pl';
-my $bwa      = '/home/kb468/bin/bwa';
-my $samtools = '/home/kb468/bin/samtools';
 
-use lib '/home/kb468/projects/easih-flow/modules';
+
 use lib '/home/brugger/easih-pipeline/modules';
-use lib '/home/kb468/easih-flow/modules';
+use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 
 our %analysis = ('fastq-split'    => { function   => 'fastq_split',
+				       hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:05:00"},
+		 
+		 'odd_test'    => { function   => 'odd_test',
 				       hpc_param  => "-NEP-fqs -l mem=500mb,walltime=00:05:00"},
 		 
 		 'BWA-mapping'    => { function   => 'bwa_aln',
@@ -54,6 +55,7 @@ our %flow = ( 'fastq-split'   => "BWA-mapping",
 	      'BWA-mapping'   => "BWA-samse",
 	      'BWA-samse'     => "SAM2BAM",
 	      'SAM2BAM'       => "BWA-merge",
+	      'odd_test'      => "BWA-merge",
 	      'BWA-merge'     => "samtools-sort",
 	      'samtools-sort' => "bam-rename",
 	      'bam-rename'    => "samtools-index");
@@ -81,90 +83,96 @@ my $split   = $opts{'n'} || 10000 || 30000000;
 #EASIH::JMS::wait_jobs( );
 
 EASIH::JMS::hive('Kluster');
-EASIH::JMS::verbosity(10);
+EASIH::JMS::verbosity(0);
 
 #EASIH::JMS::validate_flow('fastq-split');
 #exit;
-EASIH::JMS::run('fastq-split');
+#EASIH::JMS::run('fastq-split');
+#EASIH::JMS::run('fastq-split', "odd_test");
+EASIH::JMS::run("odd_test",'fastq-split');
 #EASIH::JMS::dry_run('fastq-split');
 #EASIH::JMS::delete_tmp_files();
 
+#EASIH::JMS::mail_report( 'kb468@localhost', $outfile, "List of binaries used!");
+
+
+sub odd_test {
+  my ($input) = @_;
+
+
+  my $cmd = "$executer";
+  my $tmp_file = 'fnyt';
+  EASIH::JMS::submit_job("$cmd -S 1", $tmp_file);
+
+}
 
 sub fastq_split {
   my ($input) = @_;
 
-  for (my $i = 0; $i < 5; $i++ ) {
 
-    my $tmp_file = EASIH::JMS::tmp_file();
-    my $cmd = "$fq_split -e $split -p $tmp_file $infile";
-    EASIH::JMS::submit_job($cmd, $tmp_file);
-  }
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
+  EASIH::JMS::submit_job("$cmd ", $tmp_file);
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+  EASIH::JMS::submit_job("$cmd -S 20", $tmp_file);
+
 }
 
 sub bwa_aln {
   my ($input) = @_;
-  
-#  $input = " 1_1_1.fastq_split";
-  
-#  my @inputs = glob "$input.*";
 
-#  return if ( ! @inputs );
-
-#  foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file();
-    my $cmd = "$bwa aln -f $tmp_file $prefix $input ";
-    EASIH::JMS::submit_job($cmd, $tmp_file);
-#  }
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
+  EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub bwa_samse {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file();
-  my $cmd = "$bwa samse $prefix $input > $tmp_file ";
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub sam2bam {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-  my $cmd = "$samtools view -b -S $input > $tmp_file ";
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub bwa_merge { 
   my (@inputs) = @_;
 
-  print "bwa_merge ;::  @inputs \n";
-
-  my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
-  my $cmd = "$samtools merge $tmp_file @inputs ";
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub samtools_sort {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file(".merged.sorted");
-  my $cmd = "$samtools sort -m 2048000000 $input $tmp_file ";
-    
-  EASIH::JMS::submit_job($cmd, "$tmp_file.bam");
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
+  EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub rename {
   my ($input) = @_;
 
-  my $cmd = "sleep 1 ";
-  eval { system "$cmd" };
+  EASIH::JMS::submit_job("sleep 1", undef, 1);
   EASIH::JMS::fail($@) if ($@);
 }
 
 sub samtools_index {
   my ($input) = @_;
 
-  my $cmd = "$samtools index $outfile";
-  EASIH::JMS::submit_job($cmd);
+  my $cmd = "$executer";
+  my $tmp_file = 'tyt';
+  EASIH::JMS::submit_job($cmd, $tmp_file);
 }		     
 
 

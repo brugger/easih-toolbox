@@ -8,6 +8,7 @@
 use strict;
 use warnings;
 use Data::Dumper;
+use Getopt::Std;
 
 use lib '/home/kb468/projects/ensembl-variation/modules/';
 use lib '/home/kb468/projects/e57/ensembl/modules/';
@@ -20,7 +21,10 @@ use Bio::EnsEMBL::Registry;
 use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 
-my $species     = "human";
+my %opts;
+getopts('s:g:p:b:T', \%opts);
+
+my $species     = $opts{s} || "human";
 my $buffer_size = 500;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
@@ -34,10 +38,10 @@ my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa = $reg->get_adaptor($species, 'core', 'slice');
 my $ga = $reg->get_adaptor($species, 'core', 'gene');
 
-my $gatk        = shift;
-my $pileup      = shift;
-my $bam         = shift || "";
-my $from_36     = 1;
+my $gatk        = $opts{g};
+my $pileup      = $opts{p};
+my $bam         = $opts{b};
+my $from_36     = $opts{T} || 0;
 my $links       = 0;
 my $full_report = 0;
 my $html_out    = 0;
@@ -74,13 +78,14 @@ readin_cvf( $gatk )      if ( $gatk);
 
 my %reports;
 
-my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0,0,0, 0);
+my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
-  
+
+  # Hack so we only look at chrX for develop purposes
   $chr = 'chrX';
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
-
+ 
     my %res;
     
     my $position = "$chr:$pos";
@@ -90,7 +95,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
     @keys = grep(!/ref_base/, @keys);
     
-    $SNPs{$chr}{$pos}{callers} = join("/", @keys);
+    $res{callers} = join("/", @keys);
 
     if (keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
@@ -100,37 +105,51 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
       $res{base_dist}  = base_dist( $chr, $pos, $res{ref_base}, $res{alt_base});
       $res{snp_effect} = snp_effect($chr, $pos, $pos, "$res{ref_base}/$res{alt_base}");
+      print_oneliner( $position, \%res);
     }
     else {
 
-      my @snps;     
       foreach my $key ( @keys ) {
-	push @snps, $SNPs{$chr}{$pos}{$key}{alt_base};
-      }
-      
-      $SNPs{$chr}{$pos}{alt_base}   = join("/", @snps);
-      $SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos);;
-
-      foreach my $snp ( @snps ) {
-#	push @{$SNPs{$chr}{$pos}{snp_effects}}, snp_effect($chr, $pos, $pos, $snp );
+	$res{ref_base} = $SNPs{$chr}{$pos}{ref_base};
+	$res{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
+	$SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos, $res{ref_base}, $res{alt_base});
+	$res{snp_effect} = snp_effect($chr, $pos, $pos, "$res{ref_base}/$res{alt_base}");
+	print_oneliner( $position, \%res);
       }
     }
 
 #    print  Dumper( $SNPs{$chr}{$pos} );
 
     if ( ! $full_report && ! $html_out ) {
-      
-      my @line;
-      push @line, "$chr:$pos", "$res{ref_base}>$res{alt_base}";
-      push @line, $res{base_dist}{score};
-      push @line, $res{base_dist}{total};      
+    }      
+#    exit;
+    
 
-      map { push @line, $res{base_dist}{$_} if ($res{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      push @line, $res{callers};
+  }
 
-      if ($SNPs{$chr}{$pos}{snp_effect} ) {
+  last;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (04 Jun 2010)
+sub print_oneliner {
+  my ( $pos, $res ) = @_;
+  
+  my @line;
+  push @line, "$pos", "$$res{ref_base}>$$res{alt_base}";
+  push @line, $$res{base_dist}{score};
+  push @line, $$res{base_dist}{total};      
+
+      map { push @line, $$res{base_dist}{$_} if ($$res{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      push @line, $$res{callers};
+
+      if ($$res{snp_effect} ) {
       
-	foreach my $snp_effect ( @{$res{snp_effect}} ) {
+	foreach my $snp_effect ( @{$$res{snp_effect}} ) {
 	  my @effect_line;
 	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
 	  push @effect_line, $$snp_effect{ position };
@@ -145,14 +164,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	print join("\t", @line) . "\n";
       }
 
-    }      
-#    exit;
-    
 
-  }
 
-  last;
 }
+
 
 
 
@@ -189,50 +204,16 @@ sub base_dist {
     $total++;
   }
 
-  my ($first, $second, $first_qual, $second_qual) = (0,0, 0, 0);
   foreach my $key ( keys %qual_stats ) {
     
     my $sum = eval join '+', @{$qual_stats{$key}};
     my $count = @{$qual_stats{$key}};
     my $avg_qual      =  sprintf("%.2f",$sum / $count);
     $avg_qual ||= 0;
-
-
-    if ( $count ) {
-      if ( ! $first || $first < $count ) { 
-      
-	if ( $first ) {
-	  $second      = $first;
-	  $second_qual = $first_qual;
-	}
-	$first      = $count;
-	$first_qual = $avg_qual;
-      }
-      elsif (! $second || $second < $count ) {
-	$second      = $count;
-	$second_qual = $avg_qual;
-      }      
-    }
-  
     $qual_stats{$key} = $avg_qual;
   }
 
 
-
-  my $ratio = $second/( $first + $second) * 100;
-  my $ignore_second = 0;
-  if ( $ratio < 10 ) {    
-    $ignore_second++;
-  }
-  elsif ( $ratio > 15 && $ratio < 35 ) {
-    $ignore_second++;    
-  }
-  elsif ( $ratio > 40 && $ratio < 60 ) {
-    $ignore_second++;    
-  }
-  elsif ($ratio > 60 && $ratio < 83 ) {
-    $ignore_second++;    
-  }
 
   my ($best, $score) = (1, 0);
   my %res;
@@ -240,16 +221,9 @@ sub base_dist {
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     my $qual = $qual_stats{$base} || 0;
     $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
-    if ( $best ) {
-      $score = int($base_stats{$base} * $qual);
-      $best = 0;
-    }
-    elsif ( $ignore_second ) {
-      $ignore_second = 0;
-    }
-    else {
-      $score -= int($base_stats{$base} * $qual);
-    }
+
+    $score =  int($base_stats{$base} * $qual) if ( $base eq $alt);
+    $score -= int($base_stats{$base} * $qual) if ( $base ne $alt && $base ne $ref);
   }
 
   $res{total} = $total;

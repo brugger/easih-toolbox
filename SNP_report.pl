@@ -25,7 +25,7 @@ my %opts;
 getopts('s:g:p:b:T', \%opts);
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 500;
+my $buffer_size = 1;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -37,6 +37,7 @@ my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa = $reg->get_adaptor($species, 'core', 'slice');
 my $ga = $reg->get_adaptor($species, 'core', 'gene');
+my %slice_hash = ();
 
 my $gatk        = $opts{g};
 my $pileup      = $opts{p};
@@ -79,14 +80,18 @@ readin_cvf( $gatk )      if ( $gatk);
 my %reports;
 
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
+my @vfs;
+
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
   # Hack so we only look at chrX for develop purposes
   $chr = 'chrX';
 
+
+  my %res;
+
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
  
-    my %res;
     
     my $position = "$chr:$pos";
     
@@ -95,19 +100,43 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
     @keys = grep(!/ref_base/, @keys);
     
-    $res{callers} = join("/", @keys);
+    $res{$position}{callers} = join("/", @keys);
 
-    if (keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
+    if (1 || keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
-      my $key = $keys[0];
-      $res{ref_base} = $SNPs{$chr}{$pos}{ref_base};
-      $res{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
+      my $key = "GATK";
+      $res{$position}{ref_base} = $SNPs{$chr}{$pos}{ref_base};
+      $res{$position}{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
 
-      $res{base_dist}  = base_dist( $chr, $pos, $res{ref_base}, $res{alt_base});
-      $res{snp_effect} = snp_effect($chr, $pos, $pos, "$res{ref_base}/$res{alt_base}");
-      print_oneliner( $position, \%res);
+      $res{$position}{base_dist}  = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
+
+      my $Echr = $chr;
+      $Echr =~ s/chr//;
+      ($Echr, $pos) = remap($Echr, $pos, $pos) if ( $from_36 );
+
+      my $slice = fetch_slice($Echr);
+      my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
+
+      # create a new VariationFeature object
+      my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
+	-start          => $pos,
+	-end            => $pos,
+	-slice          => $slice,           # the variation must be attached to a slice
+	-allele_string  => $allele_string,
+	-strand         => 1,
+	-map_weight     => 1,
+	-adaptor        => $vfa,           # we must attach a variation feature adaptor
+	-variation_name => $position, # original position is used as the key!
+	  );
+
+      push @vfs, $new_vf; 
+
+
     }
     else {
+
+      print "BROKEN/NOT USED ANYMORE!!! '$res{$position}{callers}'\n";
+      next;
 
       foreach my $key ( @keys ) {
 	$res{ref_base} = $SNPs{$chr}{$pos}{ref_base};
@@ -118,7 +147,12 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       }
     }
 
-#    print  Dumper( $SNPs{$chr}{$pos} );
+    if ($buffer_size <= @vfs ) {
+      my $effects = variation_effects(\@vfs);
+      print_oneliner( \%res, $effects);
+      @vfs = ();
+      %res = ();
+    }
 
     if ( ! $full_report && ! $html_out ) {
     }      
@@ -126,6 +160,14 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     
 
   }
+
+  if ( @vfs ) {
+    my $effects = variation_effects(\@vfs);
+    print_oneliner( \%res, $effects);
+    @vfs = ();
+    %res = ();
+  }
+
 
   last;
 }
@@ -137,39 +179,248 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 # 
 # Kim Brugger (04 Jun 2010)
 sub print_oneliner {
-  my ( $pos, $res ) = @_;
-  
-  my @line;
-  push @line, "$pos", "$$res{ref_base}>$$res{alt_base}";
-  push @line, $$res{base_dist}{score};
-  push @line, $$res{base_dist}{total};      
+  my ( $mapping, $effects ) = @_;
 
-      map { push @line, $$res{base_dist}{$_} if ($$res{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      push @line, $$res{callers};
+  foreach my $effect ( @$effects ) {
 
-      if ($$res{snp_effect} ) {
+    my $name = $$effect[0]{ name };
+    my @line;
+    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+    if ( $$mapping{$name}{base_dist} ) {
+      push @line, $$mapping{$name}{base_dist}{score};
+      push @line, $$mapping{$name}{base_dist}{total};      
+    
+      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      push @line, $$mapping{$name}{callers};
+    }
+    
+    foreach my $snp_effect (@$effect) {
+
+#      print Dumper( $trans_effect );
+
+      $$snp_effect{ transcript_id } ||= "";
       
-	foreach my $snp_effect ( @{$$res{snp_effect}} ) {
-	  my @effect_line;
-	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
-	  push @effect_line, $$snp_effect{ position };
-	  push @effect_line, $$snp_effect{ cpos };
-	  push @effect_line, $$snp_effect{ ppos };
-	  push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
+      my @effect_line;
+      push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
+										       $$snp_effect{ stable_id } );
 
-	  print join("\t", @line, @effect_line) . "\n";
-	}
-      }
-      else {
-	print join("\t", @line) . "\n";
-      }
+      push @effect_line, "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
+							 $$snp_effect{ stable_id } );
+
+      push @effect_line, "" if (!$$snp_effect{ external_name } && 
+							 !$$snp_effect{ stable_id } );
 
 
-
+      push @effect_line,  "$$snp_effect{ transcript_id }";
+      push @effect_line, $$snp_effect{ position } || "";
+      push @effect_line, $$snp_effect{ cpos }     || "";
+      push @effect_line, $$snp_effect{ ppos }     || "";
+      push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
+      
+      print join("\t", @line, @effect_line) . "\n";
+    }
+  }
 }
 
 
 
+# 
+# 
+# 
+# Kim Brugger (28 May 2010)
+sub variation_effects {
+  my ($var_features) = @_;
+
+
+#  print "Nr of variants: " . @$var_features . "\n";
+
+  my @res = ();
+  my $feature = 0;
+  
+  # get consequences
+  # results are stored attached to reference VF objects
+  # so no need to capture return value here
+  $tva->fetch_all_by_VariationFeatures( $var_features );
+  foreach my $vf (@$var_features) {    
+
+    my $name = $vf->variation_name();
+    # find any co-located existing VFs
+    my $existing_vf = "";
+    
+    if(defined($vf->adaptor->db)) {
+      my $fs = $vf->feature_Slice;
+      if($fs->start > $fs->end) {
+	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
+      }
+      foreach my $existing_vf_obj(@{$vf->adaptor->fetch_all_by_Slice($fs)}) {
+	$existing_vf = $existing_vf_obj->variation_name
+	    if ($existing_vf_obj->seq_region_start == $vf->seq_region_start &&
+		$existing_vf_obj->seq_region_end   == $vf->seq_region_end );
+      }
+    }
+
+		
+    # the get_all_TranscriptVariations here now just retrieves the
+    # objects that were attached above - it doesn't go off and do
+    # the calculation again		
+    foreach my $con (@{$vf->get_all_TranscriptVariations}) {
+
+      my %gene_res;
+      $gene_res{ name } = $name;
+      
+      foreach my $string (@{$con->consequence_type}) {
+	
+	$gene_res{ position } = $string;
+
+	if($con->cdna_start && $con->cdna_end && $con->cdna_start > $con->cdna_end) {
+	  ($con->{'cdna_start'}, $con->{'cdna_end'}) = ($con->{'cdna_end'}, $con->{'cdna_start'});
+	}
+	
+	if($con->translation_start &&  $con->translation_end && $con->translation_start > $con->translation_end) {
+	  ($con->{'translation_start'}, $con->{'translation_end'}) = ($con->{'translation_end'}, $con->{'translation_start'});
+	}
+
+	if ( $con->transcript ) {
+
+	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
+	  
+	  $gene_res{ external_name } = $gene->external_name;
+	  $gene_res{ stable_id}      = $gene->stable_id;
+	  $gene_res{ transcript_id}  = $con->transcript->stable_id;
+
+	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
+
+	  
+	  if ( $$xref[0] ) {
+	    $gene_res{ xref } = $$xref[0]->display_id;
+	    $gene_res{ transcript_id} = join("/",$gene_res{ xref },$gene_res{ transcript_id});
+	  }
+
+	  $gene_res{ cpos } = "";
+	  $gene_res{ ppos } = "";
+
+
+	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
+
+	  if ( $con->translation_start) {
+	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
+	    
+	    $new = $old if ( $string eq "SYNONYMOUS_CODING");
+	    
+	    $old = one2three( $old );
+	    $new = one2three( $new );
+	    
+
+	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	  }
+
+	}
+
+	$gene_res{ rs_number } = $existing_vf || "";
+	push @{$res[$feature]}, \%gene_res;
+
+      }
+    }
+    $feature++;
+  }
+
+  return \@res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2010)
+sub remap {
+  my ($chr, $start, $end, $strand) = @_;
+  
+  $strand ||= 0;
+
+  my @res = $mapper->map($chr, $start, $end, $strand, $cs_from);
+  foreach my $res ( @res ) {
+    if ( $res->isa( 'Bio::EnsEMBL::Mapper::Coordinate' )) {
+      my $chr_slice = $sa->fetch_by_seq_region_id($res->id);
+      return ($chr_slice->seq_region_name, $res->start, $res->end, $res->strand);
+    }
+  }
+
+  return (undef, undef, undef, undef);
+}
+
+
+
+# 
+# cached slice fetcher..
+# 
+# Kim Brugger (06 Jul 2010)
+sub fetch_slice {
+  my ( $chr) = @_;
+
+
+  my $slice;
+  # check if we have fetched this slice already
+  if(defined $slice_hash{$chr}) {
+    $slice = $slice_hash{$chr};
+  }
+ 
+  # if not create a new one
+  else {
+    
+    # first try to get a chromosome
+    eval { $slice = $sa->fetch_by_region('chromosome', $chr); };
+    
+    # if failed, try to get any seq region
+    if(!defined($slice)) {
+      $slice = $sa->fetch_by_region(undef, $chr);
+    }
+    
+    # if failed, die
+    if(!defined($slice)) {
+      die("ERROR: Could not fetch slice named $chr\n");
+    }	
+    # store the hash
+    $slice_hash{$chr} = $slice;
+  }
+
+  return $slice;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (02 Jun 2010)
+sub one2three {
+  my ( $aminoacid) = @_;
+  
+  my %trans = ('A' => 'Ala',
+	       'R' => 'Arg',
+	       'N' => 'Asn',
+	       'D' => 'Asp',
+	       'C' => 'Cys',
+	       'E' => 'Glu',
+	       'Q' => 'Gln',
+	       'G' => 'Gly',
+	       'H' => 'His',
+	       'I' => 'Ile',
+	       'L' => 'Leu',
+	       'K' => 'Lys',
+	       'M' => 'Met',
+	       'F' => 'Phe',
+	       'P' => 'Pro',
+	       'S' => 'Ser',
+	       'T' => 'Thr',
+	       'W' => 'Trp',
+	       'Y' => 'Tyr',
+	       'V' => 'Val',
+	       '*' => 'Ter');
+
+  return $trans{ $aminoacid } if ($trans{ $aminoacid });
+  return $aminoacid;
+}
 
 
 # 
@@ -180,7 +431,7 @@ sub base_dist {
   my ( $chr, $SNP_pos, $ref, $alt) = @_;
 
   if ( ! $bam ) {
-    print STDERR "need a bam file for finding base distribution\n";
+#    print STDERR "need a bam file for finding base distribution\n";
     return;
   }
 
@@ -214,10 +465,10 @@ sub base_dist {
   }
 
 
-
   my ($best, $score) = (1, 0);
   my %res;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
+    print "= sprintf(%.2f, $base_stats{$base}/$total*100); $chr $SNP_pos \n";
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     my $qual = $qual_stats{$base} || 0;
     $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
@@ -231,184 +482,6 @@ sub base_dist {
 
   
   return \%res;
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (28 May 2010)
-sub snp_effect {
-  my ( $chr, $start, $end, $allele_string ) = @_;
-
-  $chr =~ s/chr//;
-
-  my  $strand = 1;
-
-  if ( $from_36 ) {
-    
-    my @res = $mapper->map($chr, $start, $end, $strand, $cs_from);
-    foreach my $res ( @res ) {
-      if ( $res->isa( 'Bio::EnsEMBL::Mapper::Coordinate' )) {
-	my $chr_slice = $sa->fetch_by_seq_region_id($res->id);
-#	print "$chr, $start, $end --> " . join("\t", $chr_slice->seq_region_name, $res->start, $res->end ) . "\n";
-	$start  = $res->start;
-	$end    = $res->end;
-	$strand = $res->strand;
-	last;
-      }
-    }
-  }
-
-  my @res;
-  
-
-  my $slice;
-  # first try to get a chromosome
-  eval { $slice = $sa->fetch_by_region('chromosome', $chr); };
-  
-  # if failed, try to get any seq region
-  if(!defined($slice)) {
-    $slice = $sa->fetch_by_region(undef, $chr);
-  }
-  
-  # if failed, die
-  if(!defined($slice)) {
-    die("ERROR: Could not fetch slice named $chr\n");
-  }	
-
-  my @vfs;
-  
-  # create a new VariationFeature object
-  my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
-    -start => $start,
-    -end => $end,
-    -slice => $slice,           # the variation must be attached to a slice
-    -allele_string => $allele_string,
-    -strand => $strand,
-    -map_weight => 1,
-    -adaptor => $vfa,           # we must attach a variation feature adaptor
-    -variation_name => $chr.'_'.$start.'_'.$allele_string,
-  );
-  push @vfs, $new_vf; 
-  
-  $tva->fetch_all_by_VariationFeatures( \@vfs );
-  foreach my $vf (@vfs) {
-
-    # find any co-located existing VFs
-    my $existing_vf;
-    
-    if(defined($new_vf->adaptor->db)) {
-      my $fs = $new_vf->feature_Slice;
-      if($fs->start > $fs->end) {
-	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
-      }
-      foreach my $existing_vf_obj(@{$new_vf->adaptor->fetch_all_by_Slice($fs)}) {
-	$existing_vf = $existing_vf_obj->variation_name
-	    if ($existing_vf_obj->seq_region_start == $new_vf->seq_region_start &&
-		$existing_vf_obj->seq_region_end   == $new_vf->seq_region_end );
-      }
-    }
-		
-    # the get_all_TranscriptVariations here now just retrieves the
-    # objects that were attached above - it doesn't go off and do
-    # the calculation again		
-    foreach my $con (@{$new_vf->get_all_TranscriptVariations}) {
-      
-      my %gene_res;
-      
-      foreach my $string (@{$con->consequence_type}) {
-	
-	next if ( $string eq "INTERGENIC");
-
-	if($con->cdna_start && $con->cdna_end && $con->cdna_start > $con->cdna_end) {
-	  ($con->{'cdna_start'}, $con->{'cdna_end'}) = ($con->{'cdna_end'}, $con->{'cdna_start'});
-	}
-	
-	if($con->translation_start &&  $con->translation_end && $con->translation_start > $con->translation_end) {
-	  ($con->{'translation_start'}, $con->{'translation_end'}) = ($con->{'translation_end'}, $con->{'translation_start'});
-	}
-
-	if ( $con->transcript ) {
-
-	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
-	  
-	  $gene_res{ external_name } = $gene->external_name;
-	  
-	  $gene_res{ stable_id} = $gene->stable_id;
-	  $gene_res{ transcript_id} = $con->transcript->stable_id;
-
-	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
-
-	  
-	  if ( $$xref[0] ) {
-	  
-	    $gene_res{ xref } = $$xref[0]->display_id;
-	    $gene_res{ transcript_id} = join("/",$gene_res{ xref },$gene_res{ transcript_id});
-	  }
-
-	  $gene_res{ cpos } = "";
-	  $gene_res{ ppos } = "";
-
-
-	  $gene_res{ position } = $string;
-	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
-
-	  if ( $con->translation_start) {
-	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
-	    
-	    $new = $old if ( $string eq "SYNONYMOUS_CODING");
-	    
-	    $old = one2three( $old );
-	    $new = one2three( $new );
-	    
-
-	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
-	  }
-
-	  $gene_res{ rs_number } = $existing_vf || "";
-	  push @res, \%gene_res;
-	} 
-      }
-    }
-  }
-  
-  return \@res;
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (02 Jun 2010)
-sub one2three {
-  my ( $aminoacid) = @_;
-  
-  my %trans = (A => 'Ala',
-	       R => 'Arg',
-	       N => 'Asn',
-	       D => 'Asp',
-	       C => 'Cys',
-	       E => 'Glu',
-	       Q => 'Gln',
-	       G => 'Gly',
-	       H => 'His',
-	       I => 'Ile',
-	       L => 'Leu',
-	       K => 'Lys',
-	       M => 'Met',
-	       F => 'Phe',
-	       P => 'Pro',
-	       S => 'Ser',
-	       T => 'Thr',
-	       W => 'Trp',
-	       Y => 'Tyr',
-	       V => 'Val');
-
-  return $trans{ $aminoacid } if ($trans{ $aminoacid });
-  return $aminoacid;
 }
 
 
@@ -471,37 +544,6 @@ sub subtract_reference {
 #  print"Cannot subtract $reference from $genotype ( $base1, $base2) \n";
 #  exit -1;
 }
-
-
-
-# 
-# 
-# 
-# Kim Brugger (28 Apr 2010)
-sub readin_geli {
-  my ($file, $min_depth) = @_;
-  open (my $in, $file) || die "Could not open '$file': $!\n";
-
-  $min_depth ||= 0;
-
-  while(<$in>) {
-    next if (/^\#/);
-    
-    my ($chr, $pos, $ref_base, $depth, $mapq, $genotype, $best_lod) = split(" ");
-
-    next if ( $depth < $min_depth );
-    
-    $SNPs{$chr}{$pos}{GATK} = { mapping_qual => $mapq,
-				genotype     => $genotype,
-				lodscore     => $best_lod,
-				pos          => $pos};
-    
-    $SNPs{$chr}{$pos}{ref_base} = $ref_base;
-
-  }
-
-}
-
 
 
 # 

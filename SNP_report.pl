@@ -22,10 +22,10 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 
 my %opts;
-getopts('s:g:p:b:T', \%opts);
+getopts('s:g:p:b:Tq:m:', \%opts);
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 1;
+my $buffer_size = 50;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -43,10 +43,11 @@ my $gatk        = $opts{g};
 my $pileup      = $opts{p};
 my $bam         = $opts{b};
 my $from_36     = $opts{T} || 0;
+my $min_mapq    = $opts{m} || undef;
+my $min_qual    = $opts{q} || undef;
 my $links       = 0;
 my $full_report = 0;
 my $html_out    = 0;
-
 
 my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
@@ -105,22 +106,23 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     if (1 || keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
       my $key = "GATK";
-      $res{$position}{ref_base} = $SNPs{$chr}{$pos}{ref_base};
-      $res{$position}{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
-
-      $res{$position}{base_dist}  = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
+      $res{$position}{ref_base}  = $SNPs{$chr}{$pos}{ref_base};
+      $res{$position}{alt_base}  = $SNPs{$chr}{$pos}{$key}{alt_base};
+      $res{$position}{qual}      = $SNPs{$chr}{$pos}{$key}{qual};
+      $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
 
       my $Echr = $chr;
       $Echr =~ s/chr//;
-      ($Echr, $pos) = remap($Echr, $pos, $pos) if ( $from_36 );
+      my $Epos;
+      ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
 
       my $slice = fetch_slice($Echr);
       my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
 
       # create a new VariationFeature object
       my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
-	-start          => $pos,
-	-end            => $pos,
+	-start          => $Epos,
+	-end            => $Epos,
 	-slice          => $slice,           # the variation must be attached to a slice
 	-allele_string  => $allele_string,
 	-strand         => 1,
@@ -133,31 +135,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
 
     }
-    else {
 
-      print "BROKEN/NOT USED ANYMORE!!! '$res{$position}{callers}'\n";
-      next;
-
-      foreach my $key ( @keys ) {
-	$res{ref_base} = $SNPs{$chr}{$pos}{ref_base};
-	$res{alt_base} = $SNPs{$chr}{$pos}{$key}{alt_base};
-	$SNPs{$chr}{$pos}{base_dist}  = base_dist( $chr, $pos, $res{ref_base}, $res{alt_base});
-	$res{snp_effect} = snp_effect($chr, $pos, $pos, "$res{ref_base}/$res{alt_base}");
-	print_oneliner( $position, \%res);
-      }
-    }
-
-    if ($buffer_size <= @vfs ) {
-      my $effects = variation_effects(\@vfs);
-      print_oneliner( \%res, $effects);
-      @vfs = ();
-      %res = ();
-    }
-
-    if ( ! $full_report && ! $html_out ) {
-    }      
-#    exit;
-    
 
   }
 
@@ -184,10 +162,13 @@ sub print_oneliner {
   foreach my $effect ( @$effects ) {
 
     my $name = $$effect[0]{ name };
+    next if ( $min_qual > $$mapping{$name}{qual});
+
     my @line;
     push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+    push @line, $$mapping{$name}{qual};
     if ( $$mapping{$name}{base_dist} ) {
-      push @line, $$mapping{$name}{base_dist}{score};
+#      push @line, $$mapping{$name}{base_dist}{score};
       push @line, $$mapping{$name}{base_dist}{total};      
     
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
@@ -305,12 +286,9 @@ sub variation_effects {
 	  if ( $con->translation_start) {
 	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
 	    
-	    $new = $old if ( $string eq "SYNONYMOUS_CODING");
-	    
+	    $new = $old if ( !$new);
 	    $old = one2three( $old );
 	    $new = one2three( $new );
-	    
-
 	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
 	  }
 
@@ -428,27 +406,38 @@ sub one2three {
 # 
 # Kim Brugger (29 Apr 2010)
 sub base_dist {
-  my ( $chr, $SNP_pos, $ref, $alt) = @_;
+  my ( $chr, $SNP_pos) = @_;
 
   if ( ! $bam ) {
-#    print STDERR "need a bam file for finding base distribution\n";
+    print STDERR "need a bam file for finding base distribution\n";
     return;
   }
 
   my %base_stats = ( A => 0, C => 0, G => 0, T => 0, N => 0);
   my %qual_stats;
   my $total = 0;
-  
+
   open (my $st_pipe, "$samtools view $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!\n";
 
   while(<$st_pipe>) {
     chomp;
     my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");
+    next if ( defined $min_mapq && $min_mapq > $mapq);
+
+    ($sequence, $quality) = patch_alignment($sequence, $quality, $cigar);
+
     my @seq  = split("", $sequence);
-    my @qual = split("", $quality);
+    my @qual = split("", $quality);    
 
     my $base_pos = $SNP_pos - $pos;
     my $base = $seq[ $base_pos ];
+
+    if ( !$base ) {
+      print "$SNP_pos $_\n \n";
+      print STDERR "FAILED !!!! \n";
+      exit;
+    }
+
     my $qual = ord($qual[ $base_pos ])-33;
     $base_stats{ $base }++;
     push @{$qual_stats{$base}},  $qual;
@@ -464,25 +453,72 @@ sub base_dist {
     $qual_stats{$key} = $avg_qual;
   }
 
-
-  my ($best, $score) = (1, 0);
   my %res;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
-    print "= sprintf(%.2f, $base_stats{$base}/$total*100); $chr $SNP_pos \n";
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     my $qual = $qual_stats{$base} || 0;
     $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
 
-    $score =  int($base_stats{$base} * $qual) if ( $base eq $alt);
-    $score -= int($base_stats{$base} * $qual) if ( $base ne $alt && $base ne $ref);
   }
 
   $res{total} = $total;
-  $res{score} = $score;
-
   
   return \%res;
 }
+
+
+# 
+# 
+# 
+# Kim Brugger (20 Jul 2009)
+sub patch_alignment {
+  my ( $seq, $qual, $cigar ) = @_;
+
+  return ($seq, $qual) if ( $cigar !~ /[DIS]/);
+  
+  my @seq  = split("", $seq );
+  my @qual = split("", $qual );
+
+
+  my (@cigar) = $cigar =~ /(\d*\w)/g;
+
+  my $offset = 0;
+
+  # Extended cigar format definition ( from the sam/bam format file)
+  # M Alignment match (can be a sequence match or mismatch)
+  # I Insertion to the reference
+  # D Deletion from the reference
+  # N Skipped region from the reference
+  # S Soft clip on the read (clipped sequence present in <seq>)
+  # H Hard clip on the read (clipped sequence NOT present in <seq>)
+  # P Padding (silent deletion from the padded reference sequence)
+
+
+
+  foreach my $patch ( @cigar ) {
+    my ($length, $type) =  $patch =~ /(\d+)(\w)/;
+
+    if ( $type eq 'M') {
+      $offset += $length;
+      next;
+    }
+    elsif ( $type eq "D") {
+      my @dashes = split("", "-"x$length);
+      splice(@seq,  $offset, 0, @dashes);
+      splice(@qual, $offset, 0, @dashes);
+      $offset += $length;
+    }
+    elsif ( $type eq "I" || $type eq "S" ) {
+      splice(@seq,  $offset, $length);
+      splice(@qual, $offset, $length);
+    }    
+
+  }
+
+
+  return (join("", @seq), join("",@qual));
+}
+
 
 
 # 
@@ -551,15 +587,14 @@ sub subtract_reference {
 # 
 # Kim Brugger (28 Apr 2010)
 sub readin_cvf {
-  my ($file, $min_score) = @_;
+  my ($file) = @_;
   open (my $in, $file) || die "Could not open '$file': $!\n";
 
-  $min_score ||= 0;
 
   while(<$in>) {
     next if (/^\#/);
     
-    my ($chr, $pos, $id, $ref_base, $alt_base, $mapq, $filter, $info) = split("\t");
+    my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);
@@ -573,12 +608,11 @@ sub readin_cvf {
 
     my $depth = $info_hash{ DP };
 
-    next if ( $mapq < $min_score );
     
-    $SNPs{$chr}{$pos}{GATK} = { depth        => $depth,
-				mapping_qual => $mapq,
-				alt_base     => $alt_base,
-				pos => $pos,};
+    $SNPs{$chr}{$pos}{GATK} = { depth     => $depth,
+				qual      => $qual,
+				alt_base  => $alt_base,
+				pos       => $pos,};
 
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
   }

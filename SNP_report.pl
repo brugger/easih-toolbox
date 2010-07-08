@@ -46,7 +46,7 @@ my $from_36     = $opts{T} || 0;
 my $min_mapq    = $opts{m} || undef;
 my $min_qual    = $opts{q} || undef;
 my $full_report = 0;
-my $html_out    = 1;
+my $html_out    = 0;
 my $out_header  = 0;
 
 my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
@@ -139,7 +139,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	print_results( \%res, $effects);
 	@vfs = ();
 	%res = ();
-	last;
+#	last;
       }
       
 
@@ -171,7 +171,7 @@ print table_end() if ($html_out);
 sub print_results {
   my ( $mapping, $effects ) = @_;
   
-  if ( !$full_report && ! $html_out ) {
+  if ( !$full_report ) {
     print_oneliner($mapping, $effects );
   }    
   elsif ( !$full_report && $html_out ) {
@@ -197,7 +197,7 @@ sub print_results {
 # Creates a simple table, the function expects an array of arrays, and a border or not flag.
 # 
 # Kim Brugger (20 Oct 2003)
-sub table {
+sub html_table {
   my ($cells,     # the cells as an array of arrays of values.
       $border,    # border or not.
       $padding,   # how big the cells are (padded around the text).
@@ -212,7 +212,9 @@ sub table {
     $width = @$row if ($width < @$row);
   }
 
-  my $return_string = table_start($border, $padding, $spacing, $bgcolour, $tablewidth);
+#  my $return_string = table_start($border, $padding, $spacing, $bgcolour, $tablewidth);
+
+  my $return_string = "";
 
   foreach my $row (@$cells) {
     
@@ -224,7 +226,23 @@ sub table {
     $return_string .= "</TR>\n";
   }
 
-  $return_string .= table_end();
+
+  return $return_string;
+}
+
+
+
+#
+# Creates a simple table, the function expects an array of arrays, and a border or not flag.
+# 
+# Kim Brugger (20 Oct 2003)
+sub text_table {
+  my ($cells) = @_;
+
+  my $return_string = "";
+  foreach my $line ( @$cells ) {
+    $return_string .= join("\t", @$line) . "\n";
+  }
 
   return $return_string;
 }
@@ -258,12 +276,12 @@ my ($printed_header) = (0);
 # 
 # 
 # Kim Brugger (08 Jul 2010)
-sub print_oneliner_html {
+sub print_oneliner {
   my ( $mapping, $effects ) = @_;
 
   my @res;
   if ( ! $printed_header++ ) {
-    print table_start();
+    print table_start() if ( $html_out);
     
     my @annotations = ('position', 'change', 'score');
     push @annotations, ('depth', '', '', '', '', '') if ( $bam );
@@ -305,69 +323,22 @@ sub print_oneliner_html {
       push @effect_line, $$snp_effect{ cpos }     || "";
       push @effect_line, $$snp_effect{ ppos }     || "";
       push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
+
+      push @effect_line, "pfam: " . $$snp_effect{ pfam } if ( $$snp_effect{ pfam });
       
-
-
 
       push @res, [@line, @effect_line];
     }
   }
     
-  print table(\@res, 1);
 
-  
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (04 Jun 2010)
-sub print_oneliner {
-  my ( $mapping, $effects ) = @_;
-
-
-  foreach my $effect ( @$effects ) {
-
-    my $name = $$effect[0]{ name };
-
-    my @line;
-    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
-    push @line, $$mapping{$name}{qual};
-    if ( $$mapping{$name}{base_dist} ) {
-#      push @line, $$mapping{$name}{base_dist}{score};
-      push @line, $$mapping{$name}{base_dist}{total};      
-    
-      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-#      push @line, $$mapping{$name}{callers};
-    }
-    
-    foreach my $snp_effect (@$effect) {
-
-#      print Dumper( $trans_effect );
-
-      $$snp_effect{ transcript_id } ||= "";
-      
-      my @effect_line;
-      push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
-										       $$snp_effect{ stable_id } );
-
-      push @effect_line, "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
-							 $$snp_effect{ stable_id } );
-
-      push @effect_line, "" if (!$$snp_effect{ external_name } && 
-							 !$$snp_effect{ stable_id } );
-
-
-      push @effect_line,  "$$snp_effect{ transcript_id }";
-      push @effect_line, $$snp_effect{ position } || "";
-      push @effect_line, $$snp_effect{ cpos }     || "";
-      push @effect_line, $$snp_effect{ ppos }     || "";
-      push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
-      
-      print join("\t", @line, @effect_line) . "\n";
-    }
+  if (  $html_out ) {
+    print html_table(\@res, 1);
   }
+  else {
+    print text_table(\@res, 1);
+  }
+  
 }
 
 
@@ -430,6 +401,7 @@ sub variation_effects {
 
 	if ( $con->transcript ) {
 
+
 	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
 	  
 	  $gene_res{ external_name } = $gene->external_name;
@@ -457,8 +429,24 @@ sub variation_effects {
 	    $old = one2three( $old );
 	    $new = one2three( $new );
 	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
-	  }
 
+	    my $protein = $con->transcript->translation();
+	  
+	    my $prot_feats = $protein->get_all_ProteinFeatures();
+	    
+	    while (my $prot_feat = shift @{ $prot_feats }) {
+	      my $logic_name = $prot_feat->analysis()->logic_name();
+	      
+	      next if ( $logic_name ne 'Pfam');
+	      
+	      if ($con->translation_start >= $prot_feat->start() and
+		  $con->translation_end <= $prot_feat->end() ) {
+		
+		$gene_res{ pfam }     = $prot_feat->idesc();
+		$gene_res{ interpro } = $prot_feat->interpro_ac();
+	      } 
+	    }
+	  }
 	}
 
 	$gene_res{ rs_number } = $existing_vf || "";
@@ -576,7 +564,7 @@ sub base_dist {
   my ( $chr, $SNP_pos) = @_;
 
   if ( ! $bam ) {
-    print STDERR "need a bam file for finding base distribution\n";
+#    print STDERR "need a bam file for finding base distribution\n";
     return;
   }
 

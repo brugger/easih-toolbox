@@ -11,6 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 use lib '/home/kb468/projects/ensembl-variation/modules/';
+use lib '/home/kb468/projects/ensembl-functgenomics/modules/';
 use lib '/home/kb468/projects/e57/ensembl/modules/';
 use lib '/home/kb468/projects/e57/bioperl-live/';
 
@@ -20,9 +21,10 @@ use FileHandle;
 use Bio::EnsEMBL::Registry;
 use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
+use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
 my %opts;
-getopts('s:g:p:b:Tq:m:', \%opts);
+getopts('s:g:p:b:Tq:m:Hfr', \%opts);
 
 my $species     = $opts{s} || "human";
 my $buffer_size = 5;
@@ -35,22 +37,30 @@ $reg->load_registry_from_db(-host => $host,-user => $user);
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
-my $sa = $reg->get_adaptor($species, 'core', 'slice');
-my $ga = $reg->get_adaptor($species, 'core', 'gene');
+my $sa  = $reg->get_adaptor($species, 'core', 'slice');
+my $ga  = $reg->get_adaptor($species, 'core', 'gene');
+my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
+
+
 my %slice_hash = ();
 
 my $gatk        = $opts{g};
 my $pileup      = $opts{p};
 my $bam         = $opts{b};
+my $regulation  = $opts{r} || 0;
+my $pfam        = $opts{p} || 0;
 my $from_36     = $opts{T} || 0;
 my $min_mapq    = $opts{m} || undef;
 my $min_qual    = $opts{q} || undef;
-my $full_report = 0;
-my $html_out    = 0;
-my $out_header  = 0;
+my $full_report = $opts{f} || 0;
+my $html_out    = $opts{H} || 0;
 
-my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
-my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
+$full_report = 1;
+
+my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
+my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
+my $ens_gene_link  = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
+my $ens_trans_link = 'http://www.ensembl.org/Homo_sapiens/Transcript/Summary?db=core;t=';
 
 my ($mapper, $asma, $csa, $cs_from, $cs_to);
 if ( $from_36 ) {
@@ -171,21 +181,12 @@ print table_end() if ($html_out);
 sub print_results {
   my ( $mapping, $effects ) = @_;
   
-  if ( !$full_report ) {
-    print_oneliner($mapping, $effects );
-  }    
-  elsif ( !$full_report && $html_out ) {
-    print_oneliner_html($mapping, $effects );
-  }    
-  elsif ( $full_report && ! $html_out ) {
+  if ( $full_report ) {
     print_fullreport($mapping, $effects );
   }    
-  elsif ( $full_report && $html_out ) {
-    print_fullreport_html($mapping, $effects );
-  }    
-  else {
-    die "Does not know how to handle full_report == $full_report || html_out == $html_out\n";
-  }    
+  else { #if ( !$full_report ) {
+    print_oneliner($mapping, $effects );
+  }
 
 
 }
@@ -233,11 +234,64 @@ sub html_table {
 
 
 #
+# Creates an advanced table, the function expects an array of arrays, and a border or not flag.
+# 
+# Kim Brugger (20 Oct 2003)
+sub advanced_table {
+  my ($cells,      # the cells as an array of arrays of hashes, named according to the language:
+                   #              %cell = (value, bgcolor, width, colspan, 
+                   #                       rowspan, cellhalign, cellvalign);
+      $border,     # border or not.
+      $padding,    # how big the cells are (padded around the text).
+      $spacing,    # how the cells should be spaced
+      $bgcolour,   # the colour of the table.
+      $spanning,   # Wether there are spanning cells, or if they should be "padded".
+      $tablewidth, # how wide the table should be, this is a string, 
+                   # so we can handle both pixel width and percentages
+      $class       # Class so CSS can define the behaviour
+      ) = @_;
+
+  my $width = 0;
+  foreach my $row (@$cells) {
+    $width = @$row if ($width < @$row);
+  }
+  
+#  my $return_string = table_start($border, $padding, $spacing, $bgcolour, $tablewidth, $class);
+  my $return_string;
+  foreach my $row (@$cells) {
+    
+    $return_string .= "  <TR>";
+    for (my $i=0; $i<$width;$i++) {
+      
+      if ($$row[$i]) {
+        $return_string .= "<TD";
+
+        foreach my $key (keys %{$$row[$i]}) {
+          next if ($key eq 'value');
+          $return_string .= " $key='$$row[$i]{$key}'";
+        }       
+        $return_string .= ">$$row[$i]{'value'}</TD>" if ($$row[$i]{'value'});
+      }
+      else {
+        $return_string .= "<TD>&nbsp;</TD>" if (!$spanning);
+      }
+
+    }
+    $return_string .= "</TR>\n";
+  }
+
+
+  return $return_string;
+}
+
+
+#
 # Creates a simple table, the function expects an array of arrays, and a border or not flag.
 # 
 # Kim Brugger (20 Oct 2003)
 sub text_table {
   my ($cells) = @_;
+
 
   my $return_string = "";
   foreach my $line ( @$cells ) {
@@ -281,13 +335,18 @@ sub print_oneliner {
 
   my @res;
   if ( ! $printed_header++ ) {
-    print table_start() if ( $html_out);
+    print table_start(1) if ( $html_out);
     
     my @annotations = ('position', 'change', 'score');
     push @annotations, ('depth', '', '', '', '', '') if ( $bam );
       
-    
-    push @res, [@annotations, 'gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref'];
+    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref');
+
+    push @annotations, 'regulation' if ( $regulation );
+
+    push @annotations, 'pfam' if ( $pfam );
+
+    push @res, [@annotations];
   }
 
   foreach my $effect ( @$effects ) {
@@ -305,27 +364,50 @@ sub print_oneliner {
     
     foreach my $snp_effect (@$effect) {
 
-      $$snp_effect{ transcript_id } ||= "";
-      
       my @effect_line;
-      push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
-										       $$snp_effect{ stable_id } );
 
-      push @effect_line, "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
-							 $$snp_effect{ stable_id } );
+      my $gene_id = "";
 
-      push @effect_line, "" if (!$$snp_effect{ external_name } && 
-							 !$$snp_effect{ stable_id } );
+      $gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
+									       $$snp_effect{ stable_id } );
+
+      $gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
+						 $$snp_effect{ stable_id } );
+
+      $gene_id = "<a href='$ens_gene_link$$snp_effect{ stable_id }'>$gene_id</a>"
+	  if ( $gene_id && $html_out && $$snp_effect{ stable_id });
+
+      push @effect_line, $gene_id;
 
 
-      push @effect_line,  "$$snp_effect{ transcript_id }";
+      my $trans_id = "";
+
+      $trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
+									   $$snp_effect{ transcript_id } );
+
+      $trans_id = "$$snp_effect{ transcript_id }" if (!$$snp_effect{ xref } && 
+						      $$snp_effect{ transcript_id } );
+
+      $trans_id = "<a href='$ens_trans_link$$snp_effect{ transcript_id }'>$trans_id</a>"
+	  if ( $trans_id && $html_out && $$snp_effect{ transcript_id });
+
+
+      push @effect_line, $trans_id;
       push @effect_line, $$snp_effect{ position } || "";
       push @effect_line, $$snp_effect{ cpos }     || "";
       push @effect_line, $$snp_effect{ ppos }     || "";
-      push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
-
-      push @effect_line, "pfam: " . $$snp_effect{ pfam } if ( $$snp_effect{ pfam });
       
+
+      $$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+      $$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+      push @effect_line, $$snp_effect{ rs_number } || "";
+
+      push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+      push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
 
       push @res, [@line, @effect_line];
     }
@@ -340,6 +422,108 @@ sub print_oneliner {
   }
   
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (08 Jul 2010)
+sub print_fullreport {
+  my ( $mapping, $effects ) = @_;
+
+  my @res;
+  if ( ! $printed_header++ ) {
+    print table_start(1) if ( $html_out);
+    
+#    my @annotations = ('position', 'change', 'score');
+#    push @annotations, ('depth', '', '', '', '', '') if ( $bam );
+      
+#    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref');
+
+#    push @annotations, ('pfam', 'regulation') if ( $full );
+
+#    push @res, [@annotations];
+  }
+
+  foreach my $effect ( @$effects ) {
+
+    my $name = $$effect[0]{ name };
+
+    my @line;
+    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+
+
+    push @line, $$mapping{$name}{qual};
+    if ( $$mapping{$name}{base_dist} ) {
+      push @line, $$mapping{$name}{base_dist}{total};      
+    
+      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+    }
+
+    push @line, $$effect[0]{ rs_number } || "";
+    push @line, $$effect[0]{ regulation } || "" if ( $regulation );
+    push @res, \@line;
+    
+    foreach my $snp_effect (@$effect) {
+
+      my @effect_line = ("","");
+
+
+      my $gene_id = "";
+
+      $gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
+									       $$snp_effect{ stable_id } );
+
+      $gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
+						 $$snp_effect{ stable_id } );
+
+      $gene_id = "<a href='$ens_gene_link$$snp_effect{ stable_id }'>$gene_id</a>"
+	  if ( $gene_id && $html_out && $$snp_effect{ stable_id });
+
+      push @effect_line, $gene_id;
+
+
+      my $trans_id = "";
+
+      $trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
+									   $$snp_effect{ transcript_id } );
+
+      $trans_id = "$$snp_effect{ transcript_id }" if (!$$snp_effect{ xref } && 
+						      $$snp_effect{ transcript_id } );
+
+      $trans_id = "<a href='$ens_trans_link$$snp_effect{ transcript_id }'>$trans_id</a>"
+	  if ( $trans_id && $html_out && $$snp_effect{ transcript_id });
+
+
+      push @effect_line, $trans_id;
+      push @effect_line, $$snp_effect{ position } || "";
+      push @effect_line, $$snp_effect{ cpos }     || "";
+      push @effect_line, $$snp_effect{ ppos }     || "";
+      
+
+      $$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+      $$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+
+      push @effect_line, $$snp_effect{ pfam } || "";
+      push @res, [@effect_line];
+    }
+  }
+    
+
+  if (  $html_out ) {
+    print html_table(\@res, 1);
+  }
+  else {
+    print text_table(\@res, 1);
+  }
+  
+}
+
 
 
 
@@ -365,9 +549,11 @@ sub variation_effects {
     my $name = $vf->variation_name();
     # find any co-located existing VFs
     my $existing_vf = "";
+    my $regulations;
     
     if(defined($vf->adaptor->db)) {
       my $fs = $vf->feature_Slice;
+
       if($fs->start > $fs->end) {
 	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
       }
@@ -376,6 +562,21 @@ sub variation_effects {
 	    if ($existing_vf_obj->seq_region_start == $vf->seq_region_start &&
 		$existing_vf_obj->seq_region_end   == $vf->seq_region_end );
       }
+
+      if ( $regulation ) {
+	
+	my $features = $afa->fetch_all_by_Slice($fs); 
+	if ( @$features ) {
+	  my @types;
+	  foreach my $f ( @{$features}) {
+	    push @types, $f->display_label();
+	  }
+	  
+	  my %saw;
+	  $regulations = join("/", grep(!$saw{$_}++,@types));
+	}
+      }
+      
     }
 
 		
@@ -411,10 +612,8 @@ sub variation_effects {
 	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
 
 	  
-	  if ( $$xref[0] ) {
-	    $gene_res{ xref } = $$xref[0]->display_id;
-	    $gene_res{ transcript_id} = join("/",$gene_res{ xref },$gene_res{ transcript_id});
-	  }
+	  $gene_res{ xref } = $$xref[0]->display_id
+	      if ( $$xref[0] );
 
 	  $gene_res{ cpos } = "";
 	  $gene_res{ ppos } = "";
@@ -449,7 +648,8 @@ sub variation_effects {
 	  }
 	}
 
-	$gene_res{ rs_number } = $existing_vf || "";
+	$gene_res{ regulation } = $regulations; 
+	$gene_res{ rs_number }  = $existing_vf || "";
 	push @{$res[$feature]}, \%gene_res;
 
       }

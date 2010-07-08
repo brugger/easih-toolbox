@@ -25,7 +25,7 @@ my %opts;
 getopts('s:g:p:b:Tq:m:', \%opts);
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 50;
+my $buffer_size = 5;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -45,9 +45,9 @@ my $bam         = $opts{b};
 my $from_36     = $opts{T} || 0;
 my $min_mapq    = $opts{m} || undef;
 my $min_qual    = $opts{q} || undef;
-my $links       = 0;
 my $full_report = 0;
-my $html_out    = 0;
+my $html_out    = 1;
+my $out_header  = 0;
 
 my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
@@ -134,6 +134,15 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       push @vfs, $new_vf; 
 
 
+      if ( @vfs >= $buffer_size) {
+	my $effects = variation_effects(\@vfs);
+	print_results( \%res, $effects);
+	@vfs = ();
+	%res = ();
+	last;
+      }
+      
+
     }
 
 
@@ -141,7 +150,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
   if ( @vfs ) {
     my $effects = variation_effects(\@vfs);
-    print_oneliner( \%res, $effects);
+    print_results( \%res, $effects);
     @vfs = ();
     %res = ();
   }
@@ -151,6 +160,164 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 }
 
 
+print table_end() if ($html_out);
+
+
+
+# 
+# 
+# 
+# Kim Brugger (08 Jul 2010)
+sub print_results {
+  my ( $mapping, $effects ) = @_;
+  
+  if ( !$full_report && ! $html_out ) {
+    print_oneliner($mapping, $effects );
+  }    
+  elsif ( !$full_report && $html_out ) {
+    print_oneliner_html($mapping, $effects );
+  }    
+  elsif ( $full_report && ! $html_out ) {
+    print_fullreport($mapping, $effects );
+  }    
+  elsif ( $full_report && $html_out ) {
+    print_fullreport_html($mapping, $effects );
+  }    
+  else {
+    die "Does not know how to handle full_report == $full_report || html_out == $html_out\n";
+  }    
+
+
+}
+
+
+
+
+#
+# Creates a simple table, the function expects an array of arrays, and a border or not flag.
+# 
+# Kim Brugger (20 Oct 2003)
+sub table {
+  my ($cells,     # the cells as an array of arrays of values.
+      $border,    # border or not.
+      $padding,   # how big the cells are (padded around the text).
+      $spacing,   # how the cells should be spaced
+      $bgcolour,  # the colour of the table.
+      $tablewidth, # how wide the table should be, this is a string, so we can handle both pixel width and percentages
+      ) = @_;
+
+
+  my $width = 0;
+  foreach my $row (@$cells) {
+    $width = @$row if ($width < @$row);
+  }
+
+  my $return_string = table_start($border, $padding, $spacing, $bgcolour, $tablewidth);
+
+  foreach my $row (@$cells) {
+    
+    $return_string .= "  <TR>";
+    for (my $i=0; $i<$width;$i++) {
+      $$row[$i] = "&nbsp;" if (!$$row[$i]);
+      $return_string .= "<TD>$$row[$i]</TD>" 
+    }
+    $return_string .= "</TR>\n";
+  }
+
+  $return_string .= table_end();
+
+  return $return_string;
+}
+
+
+sub table_start {
+  my ($border, $padding, $spacing, $bgcolour, $width, $class) = @_;
+  
+  my $return_string .= "<TABLE";
+  $return_string .= " border='$border'"        if $border;
+  $return_string .= " cellspacing='$spacing'"  if $spacing;
+  $return_string .= " cellpadding='$padding'"  if $padding;
+  $return_string .= " bgcolor='$bgcolour'"     if $bgcolour;
+  $return_string .= " width='$width'"          if $width;
+  $return_string .= " class='$class'"          if $class;
+  $return_string .= " >\n";
+
+  return $return_string;
+}
+
+sub table_end {
+  return "</TABLE>\n";
+
+}
+
+
+
+my ($printed_header) = (0);
+
+# 
+# 
+# 
+# Kim Brugger (08 Jul 2010)
+sub print_oneliner_html {
+  my ( $mapping, $effects ) = @_;
+
+  my @res;
+  if ( ! $printed_header++ ) {
+    print table_start();
+    
+    my @annotations = ('position', 'change', 'score');
+    push @annotations, ('depth', '', '', '', '', '') if ( $bam );
+      
+    
+    push @res, [@annotations, 'gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref'];
+  }
+
+  foreach my $effect ( @$effects ) {
+
+    my $name = $$effect[0]{ name };
+
+    my @line;
+    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+    push @line, $$mapping{$name}{qual};
+    if ( $$mapping{$name}{base_dist} ) {
+      push @line, $$mapping{$name}{base_dist}{total};      
+    
+      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+    }
+    
+    foreach my $snp_effect (@$effect) {
+
+      $$snp_effect{ transcript_id } ||= "";
+      
+      my @effect_line;
+      push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
+										       $$snp_effect{ stable_id } );
+
+      push @effect_line, "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
+							 $$snp_effect{ stable_id } );
+
+      push @effect_line, "" if (!$$snp_effect{ external_name } && 
+							 !$$snp_effect{ stable_id } );
+
+
+      push @effect_line,  "$$snp_effect{ transcript_id }";
+      push @effect_line, $$snp_effect{ position } || "";
+      push @effect_line, $$snp_effect{ cpos }     || "";
+      push @effect_line, $$snp_effect{ ppos }     || "";
+      push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
+      
+
+
+
+      push @res, [@line, @effect_line];
+    }
+  }
+    
+  print table(\@res, 1);
+
+  
+}
+
 
 # 
 # 
@@ -159,10 +326,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 sub print_oneliner {
   my ( $mapping, $effects ) = @_;
 
+
   foreach my $effect ( @$effects ) {
 
     my $name = $$effect[0]{ name };
-    next if ( $min_qual > $$mapping{$name}{qual});
 
     my @line;
     push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
@@ -172,7 +339,7 @@ sub print_oneliner {
       push @line, $$mapping{$name}{base_dist}{total};      
     
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      push @line, $$mapping{$name}{callers};
+#      push @line, $$mapping{$name}{callers};
     }
     
     foreach my $snp_effect (@$effect) {
@@ -595,6 +762,8 @@ sub readin_cvf {
     next if (/^\#/);
     
     my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
+
+    next if ( defined $min_qual && $min_qual > $qual);
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);

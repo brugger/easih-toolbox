@@ -1,6 +1,6 @@
 #!/usr/bin/perl 
 # 
-# Transform human NCBI36/hg18 coordinates into human GRCh37/hg18 coordinates 
+# Transform human GRCh37/hg18 coordinates into human NCBI36/hg18 coordinates 
 # 
 # 
 # Kim Brugger (27 May 2010), contact: kim.brugger@easih.ac.uk
@@ -8,7 +8,6 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use Getopt::Long;
 
 use lib '/home/kb468/projects/e57/ensembl/modules/';
 use lib '/home/kb468/projects/e57/bioperl-live/';
@@ -18,9 +17,10 @@ use Bio::EnsEMBL::AssemblyMapper;
 use Bio::EnsEMBL::Mapper::Coordinate;
 use Bio::EnsEMBL::DBSQL::SliceAdaptor;
 
+
 my $species     = "human";
-my $from        = 'NCBI36';
-my $to          = 'GRCh37';
+my $to          = 'NCBI36';
+my $from        = 'GRCh37';
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -32,6 +32,7 @@ my $asma = $reg->get_adaptor($species, 'core', 'AssemblyMapper');
 my $csa  = $reg->get_adaptor($species, 'core', 'CoordSystem');
 my $sa   = $reg->get_adaptor($species, 'core', 'Slice');
 
+
 my $from_cs = $csa->fetch_by_name('chromosome', $from );
 die "Unknown coord system: $from\n" if ( !$from_cs );
 my $to_cs   = $csa->fetch_by_name('chromosome', $to);
@@ -39,6 +40,7 @@ die "Unknown coord system: $to\n" if ( !$to_cs );
 
 
 my $mapper  = $asma->fetch_by_CoordSystems( $from_cs, $to_cs );
+
 
 print "Input tab seperated data (chr,start,end) or regions (chr:start-end)\n";
 

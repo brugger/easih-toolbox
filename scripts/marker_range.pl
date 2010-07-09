@@ -17,7 +17,13 @@ use Bio::EnsEMBL::Map::Marker;
 use Bio::EnsEMBL::Map::MarkerFeature;
 use Bio::EnsEMBL::Map::DBSQL::MarkerFeatureAdaptor;
 
-my $species     = "human";
+use Getopt::Std;
+
+my %opts;
+getopts('s:h', \%opts);
+usage() if ( $opts{h});
+
+my $species     = $opts{s} || "human";
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -25,10 +31,10 @@ my $user        = 'anonymous';
 my $reg = 'Bio::EnsEMBL::Registry';
 $reg->load_registry_from_db(-host => $host,-user => $user);
 # get variation adaptors
-my $ma = $reg->get_adaptor($species, 'core', 'Marker');
+my $ma  = $reg->get_adaptor($species, 'core', 'Marker');
 my $mfa = $reg->get_adaptor($species, 'core', 'MarkerFeature');
 
-while($_ =shift ) {
+while( $_ = shift) {
   chomp;
 
   if ( ! /\w:\w/ ) {
@@ -72,4 +78,31 @@ sub fetch_marker_postion {
   
   return ($features[0]->seq_region_name(),$features[0]->seq_region_start(), $features[0]->seq_region_end());
 }
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (09 Jul 2010)
+sub usage {
+
+  print "marker_range.pl finds the chromosome positions between two markers. The script uses the current ensembl version of the species of interest.\n";
+  print "Usage: marker_range.pl <options> markers. The markers can be given on the command line seperated by ':'.\n";
+  exit;
+}
+
+
+=pod
+
+=head1 SYNOPSIS
+
+marker_range.pl finds the chromosome positions between two markers. The script uses the current ensembl version of the species of interest.
+
+=head1 OPTIONS
+
+Usage: marker_range.pl <options> markers. The markers can be either given on the command line seperated by ':'.
+
+=cut
 

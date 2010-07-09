@@ -158,6 +158,9 @@ if ($is_paired) { # paired end
   close($fhw[2]);
 }
 
+#
+# uptimized ky kb468
+#
 sub read1 {
   my $i = shift(@_);
   my $j = ($i-1)<<1;

@@ -24,7 +24,8 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
 my %opts;
-getopts('s:g:p:b:Tq:m:Hfr', \%opts);
+getopts('s:v:p:b:Tq:m:Hfrh', \%opts);
+usage() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
 my $buffer_size = 5;
@@ -44,7 +45,8 @@ my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 
 my %slice_hash = ();
 
-my $gatk        = $opts{g};
+
+my $gatk        = $opts{v};
 my $pileup      = $opts{p};
 my $bam         = $opts{b};
 my $regulation  = $opts{r} || 0;
@@ -54,8 +56,6 @@ my $min_mapq    = $opts{m} || undef;
 my $min_qual    = $opts{q} || undef;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
-
-$full_report = 1;
 
 my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
@@ -125,6 +125,8 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       $Echr =~ s/chr//;
       my $Epos;
       ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
+      
+      next if ( ! $Echr );
 
       my $slice = fetch_slice($Echr);
       my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
@@ -366,43 +368,43 @@ sub print_oneliner {
 
       my @effect_line;
 
-      my $gene_id = "";
+	my $gene_id = "";
 
-      $gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
-									       $$snp_effect{ stable_id } );
+	$gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
+										 $$snp_effect{ stable_id } );
 
-      $gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
-						 $$snp_effect{ stable_id } );
+	$gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
+						   $$snp_effect{ stable_id } );
+	
+	$gene_id = "<a href='$ens_gene_link$$snp_effect{ stable_id }'>$gene_id</a>"
+	    if ( $gene_id && $html_out && $$snp_effect{ stable_id });
+	
+	push @effect_line, $gene_id;
+	
 
-      $gene_id = "<a href='$ens_gene_link$$snp_effect{ stable_id }'>$gene_id</a>"
-	  if ( $gene_id && $html_out && $$snp_effect{ stable_id });
+	my $trans_id = "";
+	
+	$trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
+									     $$snp_effect{ transcript_id } );
+	
+	$trans_id = "$$snp_effect{ transcript_id }" if (!$$snp_effect{ xref } && 
+							$$snp_effect{ transcript_id } );
+	
+	$trans_id = "<a href='$ens_trans_link$$snp_effect{ transcript_id }'>$trans_id</a>"
+	    if ( $trans_id && $html_out && $$snp_effect{ transcript_id });
+	
+	
+	push @effect_line, $trans_id;
+	push @effect_line, $$snp_effect{ position } || "";
+	push @effect_line, $$snp_effect{ cpos }     || "";
+	push @effect_line, $$snp_effect{ ppos }     || "";
+	
 
-      push @effect_line, $gene_id;
+	$$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
 
-
-      my $trans_id = "";
-
-      $trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
-									   $$snp_effect{ transcript_id } );
-
-      $trans_id = "$$snp_effect{ transcript_id }" if (!$$snp_effect{ xref } && 
-						      $$snp_effect{ transcript_id } );
-
-      $trans_id = "<a href='$ens_trans_link$$snp_effect{ transcript_id }'>$trans_id</a>"
-	  if ( $trans_id && $html_out && $$snp_effect{ transcript_id });
-
-
-      push @effect_line, $trans_id;
-      push @effect_line, $$snp_effect{ position } || "";
-      push @effect_line, $$snp_effect{ cpos }     || "";
-      push @effect_line, $$snp_effect{ ppos }     || "";
-      
-
-      $$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
-	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
-
-      $$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
-	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
+	$$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
+	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
 
       push @effect_line, $$snp_effect{ rs_number } || "";
 
@@ -678,6 +680,8 @@ sub remap {
       return ($chr_slice->seq_region_name, $res->start, $res->end, $res->strand);
     }
   }
+
+  print STDERR "Could not remap: $chr, $start, $end\n";
 
   return (undef, undef, undef, undef);
 }
@@ -1008,3 +1012,73 @@ sub readin_pileup {
  
 
 
+
+# 
+# 
+# 
+# Kim Brugger (09 Jul 2010)
+sub usage {
+
+  system "perldoc $0";
+  exit;
+}
+
+
+=pod
+
+=head1 SYNOPSIS
+
+SNP_report turns a vcf file into a nice report, annotated with Ensembl information like effect, regulation etc
+
+=head1 OPTIONS
+
+
+=over
+
+=item B<-b F<bam file>>: 
+
+The bamfile that the SNP calling was based on. This is used for doing the base distribution information for each snp.
+
+=item B<-f>: 
+
+Prints out a multi-line report, otherwise it is done on a oneline basis (good for excel)
+
+=item B<-H>: 
+
+Prints a HTML report, default is a tab-separated one.
+
+=item B<-m>: 
+
+Minumum mapping quality to use for the base distribution report
+
+
+=item B<-p>: 
+
+Extracts pfam domains information from ensembl
+
+=item B<-q>: 
+
+Minumum SNP quality to report
+
+=item B<-r>:
+
+Extracts regulation information from ensembl
+
+=item B<-v F<vcf file>>: 
+
+The infile that is to be converted into a nice report.
+
+=item B<-T>: 
+
+The mapping was done on NCBI36/hg18 and the coordinates should be transformed to GRCh37/hg19.
+
+=back
+
+=head1 NOTES
+
+=over
+
+=item B<-s>: will change the species, but changing that will probably break about just everything.
+
+
+=cut

@@ -1,6 +1,6 @@
 #!/usr/bin/perl 
 # 
-# transform colourspace to basespace.
+# Take a colour space line and transform it into base space.
 # 
 # 
 # Kim Brugger (10 Jun 2010), contact: kim.brugger@easih.ac.uk

@@ -24,7 +24,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
 my %opts;
-getopts('s:v:p:b:Tq:m:Hfrh', \%opts);
+getopts('s:v:pb:Tq:m:Hfrh', \%opts);
 usage() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
@@ -47,7 +47,7 @@ my %slice_hash = ();
 
 
 my $gatk        = $opts{v};
-my $pileup      = $opts{p};
+#my $pileup      = $opts{p};
 my $bam         = $opts{b};
 my $regulation  = $opts{r} || 0;
 my $pfam        = $opts{p} || 0;
@@ -85,7 +85,7 @@ my %SNPs = ();
 my $samtools = `which samtools`;
 chomp( $samtools);
 
-readin_pileup( $pileup ) if ( $pileup);
+#readin_pileup( $pileup ) if ( $pileup);
 readin_cvf( $gatk )      if ( $gatk);
 
 my %reports;
@@ -776,7 +776,7 @@ sub base_dist {
   my %qual_stats;
   my $total = 0;
 
-  open (my $st_pipe, "$samtools view $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!\n";
+  open (my $st_pipe, "$samtools view $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!";
 
   while(<$st_pipe>) {
     chomp;
@@ -947,7 +947,7 @@ sub subtract_reference {
 # Kim Brugger (28 Apr 2010)
 sub readin_cvf {
   my ($file) = @_;
-  open (my $in, $file) || die "Could not open '$file': $!\n";
+  open (my $in, $file) || die "Could not open '$file': $!";
 
 
   while(<$in>) {

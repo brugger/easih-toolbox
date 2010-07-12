@@ -24,6 +24,9 @@ foreach my $chr ( keys %$regions ) {
   
   foreach my $region ( @{$$regions{$chr}}) {
 
+    $chr =~ s/chr//i;
+    $chr ="chr$chr";
+
     my $start = $$region[0] - $leeway;
     my $end   = $$region[1] + $leeway;
 

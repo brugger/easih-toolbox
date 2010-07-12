@@ -9,7 +9,7 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use lib '/home/kb468/easih-misc/modules/';
+use lib '/home/kb468/stats/easih-misc/modules/';
 use EASIH::Profile;
 
 my $infile  = shift || "/home/kb468/X_probes.bed";

@@ -10,8 +10,8 @@ use warnings;
 use Data::Dumper;
 
 my $regions_file  = shift;
-my $leeway        = 100 || 0;
 my $bam_file      = shift;
+my $leeway        = shift || 100;
 
 my $regions = readin_bed( $regions_file, 1 );
 
@@ -23,6 +23,9 @@ foreach my $chr ( keys %$regions ) {
   my $on_target = 0;
   
   foreach my $region ( @{$$regions{$chr}}) {
+
+    $chr =~ s/chr//i;
+    $chr ="chr$chr";
 
     my $start = $$region[0] - $leeway;
     my $end   = $$region[1] + $leeway;

@@ -11,43 +11,48 @@ no warnings 'recursion';
 use Data::Dumper;
 use POSIX qw(ceil floor);
 
-use lib '/home/kb468/easih/modules/';
-use EASIH::Profile;
-
-my $profile = EASIH::Profile->New;
+my $bam2depth = "/usr/local/bin/bam2depth";
+   $bam2depth = "/home/easih/bin/bam2depth";
 
 my $bam_file = shift || die "No bamfile supplied\n";
+my $flanking = shift || 200;
 
-$profile->from_bam($bam_file, "chrX");
-$profile->import_interest_regions('/home/kb468/100_genes_plus_conserved_regions.txt');
-my ($off_target_profile, $on_target_profiles) = $profile->split_by_interest_regions();
+while (<>) {
 
-my @five_tail;
-my @three_tail;
+  $_ =~ s/\r//g;
+  $_ =~ s/\n//g;
+  my ($chr, $start, $end) = split("\t", $_);
+  
+  $chr = "chr$chr" if ( $chr !~ /chr/);
+  
+  stats($chr, $start - $flanking, $start, $start);
+  stats($chr, $end, $end + $flanking, $end);
 
-foreach my $otp ( @$on_target_profiles ) {
 
-  if ($$otp{five}) {
+}
 
-    my $profile =  $$otp{five}->to_text();
-    for( my $i= 0; $i < @$profile; $i++ ) {
-      push @{$five_tail[ $i ]}, $$profile[ $i ][ 1 ];
+
+# 
+# 
+# 
+# Kim Brugger (14 Jun 2010)
+sub stats {
+  my ( $chr, $start, $end, $count_start ) = @_;  
+  
+  my $region = "$chr:$start-$end";
+
+  my ($summed_depth, $length) = (0,0);
+  
+  open (my $bam_pipeline, " $bam2depth $bam_file $region | ") || die "Could not open bam2depth pipeline: $! ($bam2depth $bam_file $region)\n";
+  while ( <$bam_pipeline> ) {
+    chomp;
+    my( $region, $pos, $level) = split("\t");
+
+    next if ( $pos == $end || $pos == $start );
+
+    if ( $region ) {
+      print "". ($pos - $count_start )."\t$level\n";
     }
   }
-
-  if ($$otp{three}) {
-
-    my $profile =  $$otp{three}->to_text();
-    for( my $i= 0; $i < @$profile; $i++ ) {
-      push @{$three_tail[ $i ]}, $$profile[ $i ][ 1 ];
-    }
-  }
 }
 
-for( my $i = 0; $i < @five_tail; $i++ ) {
-  print "-".(@five_tail - $i)."\t". int((eval join '+', @{$five_tail[ $i ]})/@{$five_tail[ $i ]}) . "\n";;
-}
-
-for( my $i = 0; $i < @three_tail; $i++ ) {
-  print "".($i+1)."\t". int((eval join '+', @{$three_tail[ $i ]})/@{$three_tail[ $i ]}) . "\n";;
-}

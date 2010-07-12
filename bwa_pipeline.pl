@@ -11,29 +11,28 @@ use Data::Dumper;
 
 use Getopt::Std;
 
-use lib '/home/kb468/projects/easih-flow/modules';
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 
 
 
-our %analysis = ('csfasta2fastq'   => { function   => 'csfasta2fastq',
-					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
-		 
+our %analysis = ('csfasta2fastq'  => { function   => 'csfasta2fastq',
+					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=05:00:00"},
 		 'BWA-mapping'    => { function   => 'bwa_aln',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
 		 'BWA-samse'      => { function   => 'bwa_samse',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=25000mb,walltime=08:00:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 		 
 		 'SAM2BAM'        => { function   => 'sam2bam',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=03:00:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
-		 'BWA-merge'      => { function   => 'bwa_merge',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
-		 
+		 'BAM-merge'      => { function   => 'bam_merge',
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
+				       sync       => 1},
+
 		 'samtools-sort'  => { function   => 'samtools_sort',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=08:00:00"},
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
 		 'bam-rename'     => { function   => 'rename'},
 		 
@@ -42,151 +41,164 @@ our %analysis = ('csfasta2fastq'   => { function   => 'csfasta2fastq',
     );
 		     
 
-our %flow = ( 'fastq-split'   => "BWA-mapping",
+
+our %flow = ( 'csfasta2fastq' => "BWA-mapping",
 	      'BWA-mapping'   => "BWA-samse",
 	      'BWA-samse'     => "SAM2BAM",
-	      'SAM2BAM'       => "BWA-merge",
-	      'BWA-merge'     => "samtools-sort",
+	      'SAM2BAM'       => "BAM-merge",
+	      'BAM-merge'     => "samtools-sort",
 	      'samtools-sort' => "bam-rename",
 	      'bam-rename'    => "samtools-index");
 
 my %opts;
-getopts('w:i:o:p:n:r', \%opts);
+getopts('i:b:f:n:hlr:g:a:m:', \%opts);
 
 if ( $opts{ r} ) {
-  &EASIH::JMS::restore_state('jms_test.pl.freeze');
-  EASIH::JMS::print_HPC_usage();
-  exit;
-  getopts('w:i:o:p:n:r', \%opts);
-  EASIH::JMS::reset();
+  EASIH::JMS::restore_state($opts{r});
+#  EASIH::JMS::print_HPC_usage();
+#  exit;
+    getopts('i:b:f:n:hlr:g:', \%opts);
+#  EASIH::JMS::reset();
 #  EASIH::JMS::dry_run('fastq-split');
 #  exit;
 }
 
 
-my $infile  = $opts{'i'} || usage();
-my $outfile = $opts{'o'} || usage();
-my $prefix  = $opts{'p'} || usage();
-my $split   = $opts{'n'} || 5000000;
+my $infile    = $opts{'i'} || $opts{'g'} || usage();
+my $outfile   = $opts{'b'} || usage();
+my $reference = $opts{'f'} || usage();
+my $split     = $opts{'n'} || 30000000;
+my $align_param = "  ";
 
-my $solid2fq = '/home/kb468/bin/solid2fastq.pl';
-my $bwa      = '/home/kb468/bin/bwa';
-my $samtools = '/home/kb468/bin/samtools';
-my $fq_split = '/home/kb468/bin/fastq_split.pl';
+my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
+my $bwa       = '/home/easih/bin/bwa';
+my $samtools  = '/home/easih/bin/samtools';
+my $fq_split  = '/home/kb468/bin/fastq_split.pl';
+
 
 #EASIH::JMS::verbosity(10);
 
-#EASIH::JMS::dry_run('fastq-split');
-EASIH::JMS::run_flow('fastq-split');
-&EASIH::JMS::store_state();
+#EASIH::JMS::dry_run('csfasta2fastq');
+#exit;
+EASIH::JMS::hive('Darwin');
 
-EASIH::JMS::delete_tmp_files();
-EASIH::JMS::delete_hpc_logs();
-
-
-sub fastq_split {
-  my ($hpc_param) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file();
-  my $cmd = "$fq_split -e $split $infile > $tmp_file";
-
-  EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs( );
-
-  open (my $tfile, $tmp_file) || die "Could not open '$tmp_file':$1\n";
-
-  while(<$tfile>) {
-    chomp;
-    EASIH::JMS::push_input( $_ );
-  }
-  close ($tmp_file);
-
+if ( $opts{'g'} ) {
+  
+  &EASIH::JMS::run('BWA-mapping');
+#  &EASIH::JMS::run('SAM2BAM');
+  
+}
+else {
+  &EASIH::JMS::run('csfasta2fastq');
 }
 
-sub bwa_aln {
-  my ($hpc_param) = @_;
+&EASIH::JMS::store_state();
 
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
+my $extra_report = "infile ==> $infile\n";
+$extra_report .= "align_param ==> $align_param\n";
+$extra_report .= "Binaries used..\n";
+$extra_report .= `ls -l $samtools`;
+$extra_report .= `ls -l $bwa` . "\n";
+
+EASIH::JMS::mail_report( 'kim.brugger@easih.ac.uk', $outfile, $extra_report);
+
+
+
+sub csfasta2fastq {
+  my ($input) = @_;
+
+  my $tmp_file = EASIH::JMS::tmp_file();
+ 
+  my $cmd = "$solid2fq";
+  $cmd .= " -n $split " if ( $split );
+  $cmd .= "$infile $tmp_file";
+
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+}
+
+
+
+sub bwa_aln {
+  my ($input) = @_;
+  
+  $input = $opts{'g'} if ($opts{'g'});
+  $input =~ s/\.\z//;
+
+  my @inputs = glob "$input";
+
+  return if ( ! @inputs );
 
   foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file();
-    my $cmd = "$bwa aln -f $tmp_file $prefix $input ";
-    EASIH::JMS::push_input("$tmp_file $input");
-    EASIH::JMS::submit_job($cmd, $hpc_param);
+    my $tmp_file = EASIH::JMS::tmp_file(".sai");
+    my $cmd = "$bwa aln $align_param -f $tmp_file $reference $input ";
+    EASIH::JMS::submit_job($cmd, "$tmp_file $input");
   }
-  
-  EASIH::JMS::wait_jobs( );
 }
 
 sub bwa_samse {
-  my ($hpc_param) = @_;
+  my ($input) = @_;
 
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
-
-  foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file();
-    my $cmd = "$bwa samse $prefix $input > $tmp_file ";
-    EASIH::JMS::push_input($tmp_file);
-    EASIH::JMS::submit_job($cmd, $hpc_param);
-  }
-
-  EASIH::JMS::wait_jobs( );  
+  my $tmp_file = EASIH::JMS::tmp_file(".sam");
+  my $cmd = "$bwa samse -f $tmp_file $reference $input  ";
+  EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
 sub sam2bam {
-  my ($hpc_param) = @_;
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
-  foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".bam");
-    my $cmd = "$samtools view -b -S $input > $tmp_file ";
-    
-    EASIH::JMS::submit_job($cmd, $hpc_param);
-    EASIH::JMS::push_input($tmp_file);
-  }
+  my ($input) = @_;
 
-  EASIH::JMS::wait_jobs( );  
+
+#   my @inputs = glob "tmp/*.sam";
+#   foreach $input ( @inputs ) {
+#     my $tmp_file = EASIH::JMS::tmp_file(".bam");
+#     my $cmd = "$samtools view -b -S $input > $tmp_file ";
+#     EASIH::JMS::submit_job($cmd, $tmp_file);
+#   }
+
+
+  my $tmp_file = EASIH::JMS::tmp_file(".bam");
+  my $cmd = "$samtools view -b -S $input > $tmp_file ";
+  EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
+sub bam_merge { 
+  my (@inputs) = @_;
 
-sub bwa_merge { 
-  my ($hpc_param) = @_;
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
   my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
-  my $cmd = "$samtools merge $tmp_file @inputs ";
 
-  EASIH::JMS::push_input($tmp_file);
-  EASIH::JMS::submit_n_wait_job($cmd, $hpc_param);
-#  EASIH::JMS::wait_jobs();
+  print "MERGE :: @inputs \n";
+
+  if (@inputs == 1 ) {
+    EASIH::JMS::submit_job("mv @inputs $tmp_file", $tmp_file, 1);
+  }
+  else {
+    
+    my $cmd = "$samtools merge $tmp_file @inputs ";
+    print "$cmd \n";
+    EASIH::JMS::submit_job($cmd, $tmp_file, 1);
+  }
 }
 
 sub samtools_sort {
-  my ($hpc_param) = @_;
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
+  my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file(".merged.sorted");
-  my $cmd = "$samtools sort -m 5000000000 @inputs $tmp_file ";
-  EASIH::JMS::push_input("$tmp_file.bam");
+  my $cmd = "$samtools sort -m 2048000000 $input $tmp_file ";
     
-  EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs();  
+  EASIH::JMS::submit_job($cmd, "$tmp_file.bam");
 }
 
 sub rename {
-  my ($hpc_param) = @_;
-  my @inputs = EASIH::JMS::fetch_n_reset_inputs();
-  my $cmd = "mv @inputs $outfile ";
-  eval { system "$cmd" };
-  EASIH::JMS::fail($@) if ($@);
+  my ($input) = @_;
+
+  EASIH::JMS::submit_system_job("mv $input $outfile", undef, 1);
 }
 
 sub samtools_index {
-  my ($hpc_param) = @_;
+  my ($input) = @_;
+
   my $cmd = "$samtools index $outfile";
-  EASIH::JMS::submit_job($cmd, $hpc_param);
-  EASIH::JMS::wait_jobs( );  
+  EASIH::JMS::submit_job($cmd);
 }		     
-
-
 
 # 
 # 

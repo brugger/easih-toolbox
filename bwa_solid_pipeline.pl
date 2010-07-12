@@ -68,11 +68,11 @@ my $infile    = $opts{'i'} || $opts{'g'} || usage();
 my $outfile   = $opts{'b'} || usage();
 my $reference = $opts{'f'} || usage();
 my $split     = $opts{'n'} || 30000000;
-my $align_param = " -e 5 ";
+my $align_param = "  ";
 
 my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
-my $bwa       = '/home/kb468/bin/bwa';
-my $samtools  = '/home/kb468/bin/samtools';
+my $bwa       = '/home/easih/bin/bwa';
+my $samtools  = '/home/easih/bin/samtools';
 my $fq_split  = '/home/kb468/bin/fastq_split.pl';
 
 
@@ -94,29 +94,14 @@ else {
 
 &EASIH::JMS::store_state();
 
-#EASIH::JMS::delete_tmp_files();
-#EASIH::JMS::delete_hpc_logs();
+my $extra_report = "infile ==> $infile\n";
+$extra_report .= "align_param ==> $align_param\n";
+$extra_report .= "Binaries used..\n";
+$extra_report .= `ls -l $samtools`;
+$extra_report .= `ls -l $bwa` . "\n";
 
-# if ( $opts{'m'} && $opts{'m'} =~ /\@/) {
+EASIH::JMS::mail_report( 'kim.brugger@easih.ac.uk', $outfile, $extra_report);
 
-#   $0 =~ s/.*\///;
-#   $filename = "$0.freeze";
-
-#   open (my $mpipe, " |  mail $opts{'m'} -s 'pipeline report for $0.freeze'") || die "Could not open mail pipe: $!\n";
-
-#   print $mpipe " \n";
-
-
-#   my $infile    = $opts{'i'} || $opts{'g'} || usage();
-#   my $outfile   = $opts{'b'} || usage();
-#   my $reference = $opts{'f'} || usage();
-#   my $split     = $opts{'n'} || 30000000;
-#   my $align_param = " -e5 ";
-  
-#   my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
-#   my $bwa       = '/home/kb468/bin/bwa';
-#   my $samtools  = '/home/kb468/bin/samtools';
-  
 
 
 sub csfasta2fastq {

@@ -9,7 +9,8 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-while (<>) {
+
+while (<STDIN>) {
   chomp;
 
   print "-"x20 ."\n". value2text($_) . "-"x20 ."\n";

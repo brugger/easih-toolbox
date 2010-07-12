@@ -7,13 +7,13 @@
 
 use strict;
 use warnings;
+no warnings 'recursion';
 use Data::Dumper;
 use POSIX qw(ceil floor);
 use Getopt::Std;
 
-
 my %opts;
-getopts('b:B:f:h', \%opts);
+getopts('b:f:B:h', \%opts);
 usage() if ( $opts{h});
 
 my $bam2depth = `which bam2depth` || "/usr/local/bin/bam2depth";
@@ -21,9 +21,9 @@ chomp($bam2depth);
 
 my $bed_file = $opts{B} || shift;
 my $bam_file = $opts{b} || usage();
-my $flanking = $opts{f} || 200;
+my $flanking = $opts{f} || 5;
 
-
+my $no_coverage = 0;
 
 my $regions = readin_bed( $bed_file);
 
@@ -32,12 +32,17 @@ foreach my $chr ( keys %$regions ) {
   foreach my $se ( @{$$regions{$chr}}) {
     
     my ($start, $end) = @$se;
+    
     $chr = "chr$chr" if ( $chr !~ /chr/);
-  
-    stats($chr, $start - $flanking, $start, $start);
-    stats($chr, $end, $end + $flanking, $end);
+    
+
+    stats($chr, $start - $flanking+1, $start, $start);
+    stats($chr, $end+1, $end + $flanking, $end);
   }
+
 }
+
+print "There where $no_coverage tails with none/partial $flanking intron flanking\n";
 
 
 # 
@@ -46,23 +51,24 @@ foreach my $chr ( keys %$regions ) {
 # Kim Brugger (14 Jun 2010)
 sub stats {
   my ( $chr, $start, $end, $count_start ) = @_;  
-  
+
   my $region = "$chr:$start-$end";
 
   my ($summed_depth, $length) = (0,0);
+
   
   open (my $bam_pipeline, " $bam2depth $bam_file $region | ") || die "Could not open bam2depth pipeline: $! ($bam2depth $bam_file $region)\n";
+  my $count = 0;
   while ( <$bam_pipeline> ) {
     chomp;
     my( $region, $pos, $level) = split("\t");
-
-    next if ( $pos == $end || $pos == $start );
-
-    if ( $region ) {
-      print "". ($pos - $count_start )."\t$level\n";
-    }
+    $count++;
   }
+  
+  $no_coverage++ if ( $count  != $flanking );
+  
 }
+
 
 # 
 # 
@@ -122,7 +128,6 @@ sub readin_bed {
 }
 
 
-
 # 
 # 
 # 
@@ -130,9 +135,9 @@ sub readin_bed {
 sub usage {
   
   $0 =~ s/.*\///;
-  print "Finds the depth surrounding a target.\n";
+  print "Finds the depth targets with a 0 depth of the the surrounding flanking area. If any of the positions has depth 0, it will be tagged\n";
+  print "The maximum of areas should be #nr of inputs*2 as each input should have two ends. Overlapping regions is merged!\n";
   print "Usage: $0 -b<am file> -f[lank, default 200] -B[ed file]/bedfile/STDIN\n";
   exit;
 
 }
-

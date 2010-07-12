@@ -1,6 +1,6 @@
 #!/usr/bin/perl 
 # 
-# 
+# Goes from binned data (value/count) to printing the values count times
 # 
 # 
 # Kim Brugger (25 May 2010), contact: kim.brugger@easih.ac.uk

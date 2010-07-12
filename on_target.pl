@@ -8,12 +8,18 @@
 use strict;
 use warnings;
 use Data::Dumper;
+use Getopt::Std;
 
-my $regions_file  = shift;
-my $bam_file      = shift;
-my $leeway        = shift || 100;
 
-my $regions = readin_bed( $regions_file, 1 );
+my %opts;
+getopts('b:B:f:h', \%opts);
+usage() if ( $opts{h});
+
+my $bed_file = $opts{B} || shift;
+my $bam_file = $opts{b} || usage();
+my $flanking = $opts{f} || 100;
+
+my $regions = readin_bed( $bed_file, 1 );
 
 my $samtools = `which samtools`;
 chomp( $samtools);
@@ -22,16 +28,17 @@ foreach my $chr ( keys %$regions ) {
 
   my $on_target = 0;
   
-  foreach my $region ( @{$$regions{$chr}}) {
-
+  foreach my $se ( @{$$regions{$chr}}) {
+    
     $chr =~ s/chr//i;
     $chr ="chr$chr";
 
-    my $start = $$region[0] - $leeway;
-    my $end   = $$region[1] + $leeway;
+    my ($start, $end) = @$se;
+    $start = $start - $flanking;
+    $end   = $end + $flanking;
 
-    my $st_region = "$chr:$start-$end";
-    open (my $st_pipe, "$samtools view $bam_file $st_region | ") || die "Could not open samtools pipe: $!\n";
+    my $region = "$chr:$start-$end";
+    open (my $st_pipe, "$samtools view $bam_file $region | ") || die "Could not open samtools pipe: $!\n";
 
     while(<$st_pipe>) {
       $on_target++;
@@ -53,8 +60,8 @@ sub readin_bed {
 
   my %res;
 
-  open ( my $in, $infile) || die "Could not open '$infile': $!\n";
-  while(<$in>) {
+  open (STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
+  while(<STDIN>) {
 
     chomp;
     my ($chr, $start, $end) = split("\t", $_);
@@ -79,13 +86,13 @@ sub readin_bed {
 	}
 	
 	# contained in the region
-	if ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ] - $leeway &&
-	     $data[ $i ][ 1 ] <= $tmp[ -1 ][ 1 ] + $leeway) {
+	if ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ] - $flanking &&
+	     $data[ $i ][ 1 ] <= $tmp[ -1 ][ 1 ] + $flanking) {
 	  next;
 	}
 	# overlapping
-	elsif ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ] - $leeway  &&
-		$data[ $i ][ 0 ] <= $tmp[ -1 ][ 1 ] + $leeway) {
+	elsif ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ] - $flanking  &&
+		$data[ $i ][ 0 ] <= $tmp[ -1 ][ 1 ] + $flanking) {
 	  
 	  $tmp[ -1 ][ 1 ] = $data[ $i ][ 1 ];
 	}
@@ -99,4 +106,19 @@ sub readin_bed {
   }
 
   return \%res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (12 Jul 2010)
+sub usage {
+  
+  $0 =~ s/.*\///;
+  print "Finds the nr of reads that can be put onto a target (on a chromosome basis). Overlapping regions are merged.\n";
+  print "Usage: $0 -b<am file> -f[lank, default 100] -B[ed file]/bedfile/STDIN\n";
+  exit;
+
 }

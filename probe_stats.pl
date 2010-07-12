@@ -8,17 +8,25 @@
 use strict;
 use warnings;
 use Data::Dumper;
+use Getopt::Std;
 
-use lib '/home/kb468/stats/easih-misc/modules/';
+use lib '/home/kb468/easih-misc/modules/';
 use EASIH::Profile;
 
-my $infile  = shift || "/home/kb468/X_probes.bed";
-my $bamfile = shift || die "no bam file specified\n";
+
+my %opts;
+getopts('b:B:h', \%opts);
+usage() if ( $opts{h});
+
+
+my $bed_file = $opts{B} || shift;
+my $bam_file = $opts{b} || usage();
+my $flanking = $opts{f} || 200;
 
 my %doc = ();
 
 my $counter = 0;
-open (my $in, $infile) || die "Could not open '$infile': $!\n";
+open (my $in, $bed_file) || die "Could not open '$bed_file': $!\n";
 while (<$in>) {
   chomp;
   
@@ -27,17 +35,29 @@ while (<$in>) {
 
   my $profile = EASIH::Profile->New;
 
-  $profile->from_bam($bamfile, "$region");
+  $profile->from_bam($bam_file, "$region");
   
-#  $profile->dump_profile;
 
   my $mean_coverage = $profile->mean_coverage();
-#  print "MC : $mean_coverage \n";
   $doc{ int($mean_coverage)}++;
-#  last if ( ++$counter >= 100);
 }
 
 
 foreach my $key ( sort { $a <=> $b }keys %doc ) {
   print "$key\t$doc{ $key}\n";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (12 Jul 2010)
+sub usage {
+  
+  $0 =~ s/.*\///;
+  print "Finds mean probe coverage, output is tab seperated mean_depth and nr of regions with that depth\n";
+  print "Usage: $0 -b<am file> -B[ed file]\n";
+  exit;
+
 }

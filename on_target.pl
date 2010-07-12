@@ -10,8 +10,8 @@ use warnings;
 use Data::Dumper;
 
 my $regions_file  = shift;
-my $leeway        = 100 || 0;
 my $bam_file      = shift;
+my $leeway        = shift || 100;
 
 my $regions = readin_bed( $regions_file, 1 );
 

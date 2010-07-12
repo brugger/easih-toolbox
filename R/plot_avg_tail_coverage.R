@@ -1,0 +1,43 @@
+
+bt      = read.table('bfast_tails')
+bt_mean = tapply(bt$V2, bt$V1, FUN=function(x) {sum(x)/1724})
+bt_mean_x = as.integer(rownames(bt_mean))
+pdf('bfast_intron.pdf')
+plot(bt_mean_x , bt_mean, type='n', main="Intron leaking (bfast)", xlab="position", ylab="mean depth of coverage", xlim=c(-200,200))
+lines(bt_mean_x[bt_mean_x > 0] , bt_mean[bt_mean_x > 0])
+lines(bt_mean_x[bt_mean_x < 0] , bt_mean[bt_mean_x < 0])
+abline(v=0, col="red")
+dev.off()
+
+bt      = read.table('bioscope_tails')
+bt_mean = tapply(bt$V2, bt$V1, FUN=function(x) {sum(x)/1724})
+bt_mean_x = as.integer(rownames(bt_mean))
+pdf('bioscope_intron.pdf')
+plot(bt_mean_x , bt_mean, type='n', main="Intron leaking (bioscope)", xlab="position", ylab="mean depth of coverage")
+lines(bt_mean_x[bt_mean_x > 0] , bt_mean[bt_mean_x > 0])
+lines(bt_mean_x[bt_mean_x < 0] , bt_mean[bt_mean_x < 0])
+abline(v=0, col="red")
+dev.off()
+
+
+bt      = read.table('bowtie_tails')
+bt_mean = tapply(bt$V2, bt$V1, FUN=function(x) {sum(x)/1724})
+bt_mean_x = as.integer(rownames(bt_mean))
+pdf('bowtie_intron.pdf')
+plot(bt_mean_x , bt_mean, type='n', main="Intron leaking (bowtie)", xlab="position", ylab="mean depth of coverage")
+lines(bt_mean_x[bt_mean_x > 0] , bt_mean[bt_mean_x > 0])
+lines(bt_mean_x[bt_mean_x < 0] , bt_mean[bt_mean_x < 0])
+abline(v=0, col="red")
+dev.off()
+
+
+bt      = read.table('bwa_tails')
+bt_mean = tapply(bt$V2, bt$V1, FUN=function(x) {sum(x)/1724})
+bt_mean_x = as.integer(rownames(bt_mean))
+pdf('bwa_intron.pdf')
+plot(bt_mean_x , bt_mean, type='n', main="Intron leaking (bwa)", xlab="position", ylab="mean depth of coverage")
+lines(bt_mean_x[bt_mean_x > 0] , bt_mean[bt_mean_x > 0])
+lines(bt_mean_x[bt_mean_x < 0] , bt_mean[bt_mean_x < 0])
+abline(v=0, col="red")
+dev.off()
+

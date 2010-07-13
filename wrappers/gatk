@@ -1,0 +1,61 @@
+#!/usr/bin/perl 
+# 
+# wrapper to gatk to make things a bit more simple
+# 
+# 
+# Kim Brugger (13 Jul 2010), contact: kim.brugger@easih.ac.uk
+
+use strict;
+use warnings;
+use Data::Dumper;
+
+my $argv_list = "";
+
+my $java = "/usr/local/java/jre1.6.0_19/bin/java";
+my $gatk = "/usr/local/installed/GATK/java/GenomeAnalysisTK.jar";
+
+foreach my $argv ( @ARGV ) {
+  next if ( $argv eq $0);
+  
+  if ( $argv =~ / /) {
+    $argv_list .= qq{ "$argv" };
+  }
+  else {
+    $argv_list .= qq{ $argv };
+  }
+}
+
+
+system "$java -jar $gatk $argv_list\n";
+
+
+
+
+
+
+
+
+
+
+__END__
+
+
+#!/bin/bash
+
+
+i=0
+argv=()
+for arg in "$@"; do
+    if [[ $arg =~ .*\ .* ]]
+    then
+      argv[$i]="\"$arg\"";
+    else
+      argv[$i]="$arg";
+    fi
+    i=$((i + 1))
+done
+
+echo "/usr/local/java/jre1.6.0_19/bin/java -jar /usr/local/installed/GATK/java/GenomeAnalysisTK.jar ${argv[@]} "
+
+/usr/local/java/jre1.6.0_19/bin/java -jar /usr/local/installed/GATK/java/GenomeAnalysisTK.jar "${argv[@]}"
+

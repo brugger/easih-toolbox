@@ -14,27 +14,29 @@ use Getopt::Std;
 use lib '/home/kb468/projects/easih-flow/modules';
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
+use EASIH::JMS::Misc;
+use EASIH::JMS::Samtools;
 
 
 
 our %analysis = ('seq_names'      => { function   => 'fetch_seq_names'},
 		 
-		 'identify_indel'     => { function   => 'identify_indel',
+		 'identify_indel' => { function   => 'identify_indel',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
 		 
 		 'realign_indel'  => { function   => 'realign_indel',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
 		 
-		 'bam-merge'      => { function   => 'bam_merge',
+		 'bam-merge'      => { function   => 'EASIH::JMS::Samtools::merge',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00", 
 				       sync       => 1},
 		 
-		 'samtools-sort'  => { function   => 'samtools_sort',
+		 'samtools-sort'  => { function   => 'EASIH::JMS::Samtools::sort',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=08:00:00"},
 		 
 		 'bam-rename'     => { function   => 'rename'},
 		 
-		 'samtools-index' => { function   => 'samtools_index',
+		 'samtools-index' => { function   => 'EASIH::JMS::Samtools::index',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 
 		 'call_indels'    => { function   => 'call_indels',
@@ -64,18 +66,16 @@ my $new_bam    = $opts{'B'} || usage();
 my $reference  = $opts{'R'} || usage();
 my $report     = $opts{'o'} || usage();
 
-
-#my $samtools  = '/usr/local/bin/samtools';
-my $samtools  = '/home/easih/bin/samtools';
-my $gatk      = '/home/kb468/bin/gatk ';
+my $samtools  = EASIH::JMS::Misc::find_program('samtools');
+my $gatk      = EASIH::JMS::Misc::find_program('gatk ');
 
 EASIH::JMS::hive('Darwin');
 EASIH::JMS::max_retry(0);
+
 &EASIH::JMS::run('identify_indel');
 
 &EASIH::JMS::store_state();
 
-#/home/kb468/scratch/demo/bwa_full/XLMR.Demo_01.bwa.bam 
 
 sub identify_indel {
 
@@ -102,7 +102,6 @@ sub realign_indel {
   my $tmp_file = EASIH::JMS::tmp_file(".bam");
   my $cmd = "$gatk -T IndelRealigner -targetIntervals $input --output $tmp_file -R $reference -I $bam_file";
   EASIH::JMS::submit_job($cmd, $tmp_file);
-
 }
 
 

@@ -1,0 +1,35 @@
+#!/usr/bin/perl 
+# 
+# simpel wrapper for the picard jars
+# 
+# 
+# Kim Brugger (16 Apr 2010), contact: kim.brugger@easih.ac.uk
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Std;
+
+my $picard_dir =  "/usr/local/installed/picard_1.25/";
+my $java       = "/usr/local/java/jre1.6.0_19/bin/java";
+
+my @picard_jars = glob("$picard_dir/*jar");
+map{ $_ =~ s/.*\/// } @picard_jars;
+
+my %opts;
+getopts('hJ:T:', \%opts);
+
+if ( $opts{ h } || (! $opts{J} && ! $opts{T})) {
+
+  $0 =~ /.*\//;
+  print STDERR "USAGE $0 -h[elp] -J[ar file] <jar opts>\n";
+  print STDERR "Jars: " . join("\n      ", @picard_jars) . "\n";
+  exit 1;
+}
+
+my $module = $opts{J} || $opts{T};
+
+$module .= ".jar" if ( $module !~ /.jar/);
+
+
+exit system  "$java -jar $picard_dir/$module @ARGV\n";

@@ -13,6 +13,8 @@ use Getopt::Std;
 
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
+use EASIH::JMS::Misc;
+use EASIH::JMS;
 
 
 
@@ -70,10 +72,15 @@ my $reference = $opts{'f'} || usage();
 my $split     = $opts{'n'} || 30000000;
 my $align_param = "  ";
 
-my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
-my $bwa       = '/home/easih/bin/bwa';
-my $samtools  = '/home/easih/bin/samtools';
-my $fq_split  = '/home/kb468/bin/fastq_split.pl';
+my $bwa       = EASIH::JMS::Misc::find_program('fastq_split.pl');
+my $fq_split  = EASIH::JMS::Misc::find_program('bwa');
+my $samtools  = EASIH::JMS::Misc::find_program('samtools');
+my $solid2fq  = EASIH::JMS::Misc::find_program('solid2fastq.pl');
+
+#my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
+#my $bwa       = '/home/easih/bin/bwa';
+#my $samtools  = '/home/easih/bin/samtools';
+#my $fq_split  = '/home/kb468/bin/fastq_split.pl';
 
 
 #EASIH::JMS::verbosity(10);

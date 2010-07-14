@@ -14,34 +14,39 @@ use Getopt::Std;
 use lib '/home/kb468/projects/easih-flow/modules';
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
-
+use EASIH::JMS::Misc;
 
 
 our %analysis = ('identify_snps' => { function   => 'identify_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=00:12:00"},
 		 
 		 'filter_snps'   => { function   => 'filter_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=00:12:00"},
 		 
-		 'cluster_snps'  => { function   => 'cluster_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00", 
+
+		 'merge_vcfs'    => { function   => 'merge_vcfs',
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=00:20:00", 
 				      sync       => 1},
 		 
+		 'cluster_snps'  => { function   => 'cluster_snps',
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=00:20:00"},
+		 
 		 'rescore_snps'  => { function   => 'rescore_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=08:00:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=00:30:00"},
     );
 		     
 
-our %flow = ( 'identify_snps'  => 'filter_snps',
-	      'filter_snps'    => 'cluster_snps',
-	      'cluster_snps'   => "rescore_snps");
+our %flow = ( 'identify_snps' => 'filter_snps',
+	      'filter_snps'   => 'merge_vcfs',
+	      'merge_vcfs'    => 'cluster_snps',
+	      'cluster_snps'  => 'rescore_snps');
 
 my %opts;
-getopts('b:R:p:f:d:hr:', \%opts);
+getopts('b:R:p:f:d:o:hr:', \%opts);
 
 if ( $opts{ r} ) {
   EASIH::JMS::restore_state($opts{r});
-  getopts('b:R:p:hr:', \%opts);
+  getopts('b:R:p:f:d:o:hr:', \%opts);
 }
 
 
@@ -54,11 +59,12 @@ my $reference  = $opts{'R'} || usage();
 
 my $resources  = " -resources ~/src/gatk/Sting/R/  -Rscript /usr/bin/Rscript ";
 
-my $samtools  = '/usr/local/bin/samtools';
-my $gatk      = '/usr/local/java/jre1.6.0_19/bin/java -jar /usr/local/installed/GATK/java/GenomeAnalysisTK.jar ';
-my $gatk      = '/home/kb468/bin/gatk ';
+my $samtools  = EASIH::JMS::Misc::find_program('samtools');
+my $gatk      = EASIH::JMS::Misc::find_program('gatk ');
 
 EASIH::JMS::hive('Darwin');
+EASIH::JMS::hive('Kluster');
+EASIH::JMS::max_retry(0);
 
 &EASIH::JMS::run('identify_snps');
 
@@ -78,9 +84,10 @@ sub identify_snps {
 
   foreach my $name ( @names ) {
     my $tmp_file = EASIH::JMS::tmp_file(".vcf");
-    my $cmd = "$gatk gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -varout $tmp_file -L $name ";
+    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -varout $tmp_file -L $name ";
     $cmd .= " -pl $platform " if ( $platform);
     EASIH::JMS::submit_job($cmd, "$tmp_file  -L $name");
+    last;
   }
   
 }
@@ -95,19 +102,17 @@ sub filter_snps {
 }		
 
 
-gatk 
 
-
-sub cluster_snps {
+sub merge_vcfs {
   my (@inputs) = @_;
 
   my $merged_file = EASIH::JMS::tmp_file(".merged.vcf");
   
   if ( @inputs == 1 ) {
-    EASIH::JMS::submit_system_job("mv @inputs $tmp_file", $merged_file);
+    EASIH::JMS::submit_system_job("mv @inputs $merged_file", $merged_file);
   }
   else {
-    my $cmd = "$gatk -T CombineVariants -R $reference -o $tmp_file -variantMergeOptions UNION -genotypeMergeOptions UNIQUIFY";
+    my $cmd = "$gatk -T CombineVariants -R $reference -o $merged_file -variantMergeOptions UNION -genotypeMergeOptions UNIQUIFY";
     my $count = 1;
     foreach my $input ( @inputs ) {
       $cmd .= "-B $count,VCF,$input";
@@ -115,10 +120,15 @@ sub cluster_snps {
     }
     EASIH::JMS::submit_job($cmd, $merged_file);
   }
+}
 
+sub cluster_snps {
+  my ($input) = @_;
+
+  
   my $tmp_file = EASIH::JMS::tmp_file(".cluster");
-  my $cmd = "$gatk -T GenerateVariantClusters  -R $reference -B input,VCF,$merged_file --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file $resources ";
-  EASIH::JMS::submit_job($cmd, "$tmp_file -B input,VCF,$merged_file");
+  my $cmd = "$gatk -T GenerateVariantClusters  -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file $resources ";
+  EASIH::JMS::submit_job($cmd, "$tmp_file -B input,VCF,$input");
 }		
 		
 		
@@ -144,8 +154,6 @@ sub rescore_snps {
 # 
 # Kim Brugger (22 Apr 2010)
 sub usage {
-
-  return;
   
   print "Not the right usage, please look at the code\n";
   exit;

@@ -14,31 +14,36 @@ use Getopt::Std;
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 use EASIH::JMS::Misc;
-use EASIH::JMS;
+use EASIH::JMS::Samtools;
+use EASIH::JMS::Picard;
 
 
 
 our %analysis = ('csfasta2fastq'  => { function   => 'csfasta2fastq',
 					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=05:00:00"},
+
 		 'BWA-mapping'    => { function   => 'bwa_aln',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
 		 'BWA-samse'      => { function   => 'bwa_samse',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
+
+		 'tag_sam'        => { function   => 'sam_add_tags',
+				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 		 
-		 'SAM2BAM'        => { function   => 'sam2bam',
+		 'SAM2BAM'        => { function   => 'EASIH::JMS::Samtools::sam2bam',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
-		 'BAM-merge'      => { function   => 'bam_merge',
+		 'bam-merge'      => { function   => 'EASIH::JMS::Picard::merge',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 				       sync       => 1},
 
-		 'samtools-sort'  => { function   => 'samtools_sort',
+		 'bam-sort'       => { function   => 'EASIH::JMS::Picard::sort',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
 		 'bam-rename'     => { function   => 'rename'},
 		 
-		 'samtools-index' =>{ function   => 'samtools_index',
+		 'bam-index'      =>{ function   => 'EASIH::JMS::Samtools::index',
 				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
     );
 		     
@@ -46,36 +51,40 @@ our %analysis = ('csfasta2fastq'  => { function   => 'csfasta2fastq',
 
 our %flow = ( 'csfasta2fastq' => "BWA-mapping",
 	      'BWA-mapping'   => "BWA-samse",
-	      'BWA-samse'     => "SAM2BAM",
-	      'SAM2BAM'       => "BAM-merge",
-	      'BAM-merge'     => "samtools-sort",
-	      'samtools-sort' => "bam-rename",
-	      'bam-rename'    => "samtools-index");
+	      'BWA-samse'     => "tag_sam",
+	      'tag_sam'       => 'SAM2BAM',
+	      'SAM2BAM'       => "bam-merge",
+	      'bam-merge'     => "bam-sort",
+	      'bam-sort     ' => "bam-rename",
+	      'bam-rename'    => "bam-index");
 
 my %opts;
-getopts('i:b:f:n:hlr:g:a:m:', \%opts);
+getopts('i:b:f:n:hlr:g:a:m:a:', \%opts);
 
 if ( $opts{ r} ) {
   EASIH::JMS::restore_state($opts{r});
-#  EASIH::JMS::print_HPC_usage();
-#  exit;
-    getopts('i:b:f:n:hlr:g:', \%opts);
-#  EASIH::JMS::reset();
-#  EASIH::JMS::dry_run('fastq-split');
-#  exit;
+  getopts('i:b:f:n:hlr:g:', \%opts);
 }
 
 
-my $infile    = $opts{'i'} || $opts{'g'} || usage();
-my $outfile   = $opts{'b'} || usage();
-my $reference = $opts{'f'} || usage();
-my $split     = $opts{'n'} || 30000000;
-my $align_param = "  ";
+my $infile      = $opts{'i'} || $opts{'g'} || usage();
+my $outfile     = $opts{'b'} || usage();
+my $reference   = $opts{'f'} || usage();
+my $split       = $opts{'n'} || 10000000;
+my $align_param = $opts{'a'} || " ";
 
-my $bwa       = EASIH::JMS::Misc::find_program('fastq_split.pl');
-my $fq_split  = EASIH::JMS::Misc::find_program('bwa');
-my $samtools  = EASIH::JMS::Misc::find_program('samtools');
-my $solid2fq  = EASIH::JMS::Misc::find_program('solid2fastq.pl');
+my $readgroup = $opts{'r'};
+my $platform  = uc($opts{'p'}) || usage();
+
+$platform = "SOLEXA" if ( $platform eq "ILLUMINA");
+$align_param .= " -c " if ( $platform eq "SOLID");
+
+
+my $bwa          = EASIH::JMS::Misc::find_program('bwa');
+my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
+my $samtools     = EASIH::JMS::Misc::find_program('samtools');
+my $solid2fq     = EASIH::JMS::Misc::find_program('solid2fastq.pl');
+my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
 
 #my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
 #my $bwa       = '/home/easih/bin/bwa';
@@ -102,12 +111,13 @@ else {
 &EASIH::JMS::store_state();
 
 my $extra_report = "infile ==> $infile\n";
+$extra_report .= "outfile ==> $outfile\n";
 $extra_report .= "align_param ==> $align_param\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
 
-EASIH::JMS::mail_report( 'kim.brugger@easih.ac.uk', $outfile, $extra_report);
+EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $outfile, $extra_report);
 
 
 
@@ -137,7 +147,7 @@ sub bwa_aln {
 
   foreach my $input ( @inputs ) {
     my $tmp_file = EASIH::JMS::tmp_file(".sai");
-    my $cmd = "$bwa aln $align_param -c -f $tmp_file $reference $input ";
+    my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $input ";
     EASIH::JMS::submit_job($cmd, "$tmp_file $input");
   }
 }
@@ -150,62 +160,30 @@ sub bwa_samse {
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
-sub sam2bam {
+# 
+# Adds readgroup & aligner tags to the sam-file.
+# 
+# Kim Brugger (22 Jul 2010)
+sub sam_add_tags {
   my ($input) = @_;
 
-
-#   my @inputs = glob "tmp/*.sam";
-#   foreach $input ( @inputs ) {
-#     my $tmp_file = EASIH::JMS::tmp_file(".bam");
-#     my $cmd = "$samtools view -b -S $input > $tmp_file ";
-#     EASIH::JMS::submit_job($cmd, $tmp_file);
-#   }
-
-
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-  my $cmd = "$samtools view -b -S $input > $tmp_file ";
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-sub bam_merge { 
-  my (@inputs) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
-
-  print "MERGE :: @inputs \n";
-
-  if (@inputs == 1 ) {
-    EASIH::JMS::submit_job("mv @inputs $tmp_file", $tmp_file, 1);
+  if ( ! $readgroup ) {
+    $readgroup = $infile;
+    $readgroup =~ s/.fastq//;
+    $readgroup =~ s/.fq//;
+    $readgroup =~ s/.gz//;
   }
-  else {
-    
-    my $cmd = "$samtools merge $tmp_file @inputs ";
-    print "$cmd \n";
-    EASIH::JMS::submit_job($cmd, $tmp_file, 1);
-  }
+
+  my $cmd = "$tag_sam -R $input -p platform -r $readgroup -a bwa -A '$align_param' ";
+  EASIH::JMS::submit_job($cmd, $input);
 }
 
-sub samtools_sort {
-  my ($input) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file(".merged.sorted");
-  my $cmd = "$samtools sort -m 2048000000 $input $tmp_file ";
-    
-  EASIH::JMS::submit_job($cmd, "$tmp_file.bam");
-}
 
 sub rename {
   my ($input) = @_;
 
-  EASIH::JMS::submit_system_job("mv $input $outfile", undef, 1);
+  EASIH::JMS::submit_system_job("mv $input $outfile", $outfile);
 }
-
-sub samtools_index {
-  my ($input) = @_;
-
-  my $cmd = "$samtools index $outfile";
-  EASIH::JMS::submit_job($cmd);
-}		     
 
 # 
 # 

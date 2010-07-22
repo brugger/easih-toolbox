@@ -63,7 +63,7 @@ my $samtools  = EASIH::JMS::Misc::find_program('samtools');
 my $gatk      = EASIH::JMS::Misc::find_program('gatk ');
 
 EASIH::JMS::hive('Darwin');
-EASIH::JMS::hive('Kluster');
+#EASIH::JMS::hive('Kluster');
 EASIH::JMS::max_retry(0);
 
 &EASIH::JMS::run('identify_snps');
@@ -87,7 +87,6 @@ sub identify_snps {
     my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -varout $tmp_file -L $name ";
     $cmd .= " -pl $platform " if ( $platform);
     EASIH::JMS::submit_job($cmd, "$tmp_file  -L $name");
-    last;
   }
   
 }
@@ -97,6 +96,9 @@ sub filter_snps {
 
   my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
+
+  $filters = "--filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
+
   my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filters";
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }		
@@ -115,7 +117,7 @@ sub merge_vcfs {
     my $cmd = "$gatk -T CombineVariants -R $reference -o $merged_file -variantMergeOptions UNION -genotypeMergeOptions UNIQUIFY";
     my $count = 1;
     foreach my $input ( @inputs ) {
-      $cmd .= "-B $count,VCF,$input";
+      $cmd .= " -B variant,VCF,$input ";
       $count++;
     }
     EASIH::JMS::submit_job($cmd, $merged_file);
@@ -127,7 +129,7 @@ sub cluster_snps {
 
   
   my $tmp_file = EASIH::JMS::tmp_file(".cluster");
-  my $cmd = "$gatk -T GenerateVariantClusters  -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file $resources ";
+  my $cmd = "$gatk -T GenerateVariantClusters  -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file  ";
   EASIH::JMS::submit_job($cmd, "$tmp_file -B input,VCF,$input");
 }		
 		
@@ -135,8 +137,6 @@ sub cluster_snps {
 
 sub rescore_snps {
   my ($input) = @_;
-
-
 
   $report =~ s/.vcf\z//;
   my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report --target_titv $resources ";

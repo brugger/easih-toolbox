@@ -1,4 +1,4 @@
-#!/usr/bin/perl 
+#!/usr/bin/perl -w 
 
 # Convert a qseq file to a fastq file. Assumes scores in qseq are
 # phred+64. Optionally output only PF or non-PF reads.
@@ -29,13 +29,18 @@ sub usage {
 
   ## no critic
 
+  $0 =~ s/.*//;
+
   print STDERR "\n";
-  print STDERR "swift_extract.pl version $VERSION\n";
+  print STDERR "$0 version $VERSION\n";
   print STDERR "\n";
   print STDERR "    options:\n";
   print STDERR "\n";
+  print STDERR "    --compress     compress the output with gzip\n";
   print STDERR "    --filter       filter out non-PF reads\n";
   print STDERR "    --no-filter    output only non-PF reads\n";
+  print STDERR "    --outfile      the file to write the result to, otherwise stdout\n";
+  print STDERR "    --report       Where to dump the conversion stats\n";
   print STDERR "    --run          use this run id in read names\n";
   print STDERR "    --verbose      include step-by-step stats\n";
   print STDERR "    --help         print this message and quit\n";
@@ -56,7 +61,13 @@ sub process {
   my $do_filter = exists $opts->{'filter'};
   my $no_filter = exists $opts->{'no-filter'};
 
-  printf STDERR "%s%d qseq2fastq starting...\n", timetag, $PID, $count_in, $count_out;
+  open (STDERR, " >$$opts{report}" ) || die "Could not open '$$opts{report}': $!\n" if ( $$opts{report});
+  printf STDERR "%s%d qseq2fastq starting...\n", timetag(), $PID, $count_in, $count_out;
+  
+  open (STDOUT, " | gzip -c  >$$opts{outfile}" ) || die "Could not open '$$opts{outfile}': $!\n" if ( $$opts{outfile} && $$opts{ compress });
+  open (STDOUT, "   >$$opts{outfile}" ) || die "Could not open '$$opts{outfile}': $!\n" if ( $$opts{outfile} && ! $$opts{ compress });
+  open (STDOUT, " | gzip -c " ) || die "Could not open '$$opts{outfile}': $!\n" if ( !$$opts{outfile} && $$opts{ compress });
+
 
   while (my $line = <>) {    # sets $line
 
@@ -100,9 +111,12 @@ sub process {
 # ----------------------------------------------------------------------
 sub initialise {
 
+
   my %opts;
-  my $rc = GetOptions(\%opts, 'help', 'verbose', 'filter', 'no-filter', 'run=i');
-  if ( ! $rc) {
+  my $rc = GetOptions(\%opts, 'help', 'verbose', 'filter', 'no-filter', 'run=i', "outfile=s", "report=s", "compress");
+
+
+  if ( !$rc ) {
     print {*STDERR} "\nerror in command line parameters\n" or croak 'print failed';
     usage;
     exit 1;

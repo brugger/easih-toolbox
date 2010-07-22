@@ -22,9 +22,11 @@ $/ = ">";
 
 open (my $fasta, " $fasta_file") || die "Could not open '$fasta_file': $!\n";
 while (<$fasta>) {
+  $_ =~ s/\r//g;
   chomp;
   my ($header, @sequence) = split /\n/;
   next if ( ! $header );
+  $header =~ s/^(\w+) .*/$1/;
   $seqs{ $header } = join('', @sequence);
 }
 close( $fasta);
@@ -32,13 +34,14 @@ close( $fasta);
 open (my $qual, "$qual_file") || die "Could not open '$qual_file': $!\n";
 open (my $fastq, "> $fastq_file") || die "Could not open '$fastq_file': $!\n";
 
+
 while (<$qual>) {
   $_ =~ s/\r//g;
   chomp;
   my ($header, @qualities) = split /\n/;
   next if ( ! $header );
   @qualities = split(" ",  join ' ', @qualities);
-  print $fastq "@"."$header\n$seqs{$header}\n+\n";
+  print $fastq "\@"."$header\n$seqs{$header}\n+\n";
   my $fastq_line = "";
   map { $fastq_line .= chr($_ + 33) } @qualities;
   print $fastq "$fastq_line\n";

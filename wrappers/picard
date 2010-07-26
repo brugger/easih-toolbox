@@ -10,8 +10,10 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-my $picard_dir =  "/usr/local/installed/picard_1.25/";
-my $java       = "/usr/local/java/jre1.6.0_19/bin/java";
+#my $picard_dir =  "/usr/local/installed/picard_1.25/";
+#my $java       = "/usr/local/java/jre1.6.0_19/bin/java";
+my $java = "/usr/local/Cluster-Apps/java/jdk1.6.0_18/bin/java";
+my $picard_dir =  "/home/kb468/bin/picard_1.25/";
 
 my @picard_jars = glob("$picard_dir/*jar");
 map{ $_ =~ s/.*\/// } @picard_jars;
@@ -32,4 +34,6 @@ my $module = $opts{J} || $opts{T};
 $module .= ".jar" if ( $module !~ /.jar/);
 
 
-exit system  "$java -jar $picard_dir/$module @ARGV\n";
+system  "$java -jar $picard_dir/$module @ARGV\n";
+my $exit_value = $?>>8;
+exit $exit_value;

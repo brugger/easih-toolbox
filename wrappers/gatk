@@ -11,11 +11,18 @@ use Data::Dumper;
 
 my $argv_list = "";
 
-my $java = "/usr/local/java/jre1.6.0_19/bin/java";
-my $gatk = "/usr/local/installed/GATK/java/GenomeAnalysisTK.jar";
+my $java = "/usr/local/Cluster-Apps/java/jdk1.6.0_18/bin/java";
+my $gatk = "/home/kb468/bin/gatk_live/GenomeAnalysisTK.jar";
+#my $gatk = "/home/kb468/bin/GATK/GenomeAnalysisTK.jar";
+
+#my $resources  = " -resources ~/src/gatk/Sting/R/  -Rscript /usr/bin/Rscript ";
+my $resources  = " -resources ~/bin/gatk_live/resources/R  -Rscript /usr/bin/Rscript ";
+
+
 
 foreach my $argv ( @ARGV ) {
   next if ( $argv eq $0);
+
   
   if ( $argv =~ / /) {
     $argv_list .= qq{ "$argv" };
@@ -23,10 +30,15 @@ foreach my $argv ( @ARGV ) {
   else {
     $argv_list .= qq{ $argv };
   }
+
+  $argv_list .=  $resources if ( $argv eq "GenerateVariantClusters" || $argv eq "VariantRecalibrator" );
+
 }
 
-
-exit system "$java -jar $gatk $argv_list\n";
+#print "$java -jar $gatk $argv_list\n";
+system "$java -jar $gatk $argv_list\n";
+my $exit_value = $?>>8;
+exit $exit_value;
 
 
 

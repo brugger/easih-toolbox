@@ -18,21 +18,21 @@ use EASIH::JMS::Misc;
 
 
 our %analysis = ('identify_snps' => { function   => 'identify_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=00:12:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
 		 
 		 'filter_snps'   => { function   => 'filter_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=00:12:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=01:00:00"},
 		 
 
 		 'merge_vcfs'    => { function   => 'merge_vcfs',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=00:20:00", 
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=02:00:00", 
 				      sync       => 1},
 		 
 		 'cluster_snps'  => { function   => 'cluster_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=00:20:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=01:00:00"},
 		 
 		 'rescore_snps'  => { function   => 'rescore_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=00:30:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=01:00:00"},
     );
 		     
 
@@ -57,7 +57,6 @@ my $platform   = $opts{'p'};
 my $report     = $opts{'o'} || usage();
 my $reference  = $opts{'R'} || usage();
 
-my $resources  = " -resources ~/src/gatk/Sting/R/  -Rscript /usr/bin/Rscript ";
 
 my $samtools  = EASIH::JMS::Misc::find_program('samtools');
 my $gatk      = EASIH::JMS::Misc::find_program('gatk ');
@@ -69,6 +68,16 @@ EASIH::JMS::max_retry(0);
 &EASIH::JMS::run('identify_snps');
 
 &EASIH::JMS::store_state();
+
+
+my $extra_report = "infile ==> $bam_file\n";
+$extra_report .= "report ==> $report\n";
+$extra_report .= "dbsnp ==> $dbsnp\n";
+$extra_report .= "Binaries used..\n";
+$extra_report .= `ls -l $samtools`;
+$extra_report .= `ls -l $gatk` . "\n";
+
+EASIH::JMS::mail_report( 'kim.brugger@easih.ac.uk', "$bam_file / $report", $extra_report);
 
 
 sub identify_snps {
@@ -97,7 +106,7 @@ sub filter_snps {
   my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
 
-  $filters = "--filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
+#  $filters = "--filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
 
   my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filters";
   EASIH::JMS::submit_job($cmd, $tmp_file);
@@ -139,7 +148,7 @@ sub rescore_snps {
   my ($input) = @_;
 
   $report =~ s/.vcf\z//;
-  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report --target_titv $resources ";
+  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report --target_titv 3.0 ";
   EASIH::JMS::submit_job($cmd, $report);
 }		
 

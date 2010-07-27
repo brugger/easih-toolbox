@@ -18,14 +18,14 @@ use EASIH::JMS::Misc;
 
 
 our %analysis = ('identify_snps' => { function   => 'identify_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=05:00:00"},
 		 
 		 'filter_snps'   => { function   => 'filter_snps',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=01:00:00"},
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500b,walltime=01:00:00"},
 		 
 
 		 'merge_vcfs'    => { function   => 'merge_vcfs',
-				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=02:00:00", 
+				      hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00", 
 				      sync       => 1},
 		 
 		 'cluster_snps'  => { function   => 'cluster_snps',
@@ -136,10 +136,9 @@ sub merge_vcfs {
 sub cluster_snps {
   my ($input) = @_;
 
-  
   my $tmp_file = EASIH::JMS::tmp_file(".cluster");
-  my $cmd = "$gatk -T GenerateVariantClusters  -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file  ";
-  EASIH::JMS::submit_job($cmd, "$tmp_file -B input,VCF,$input");
+  my $cmd = "$gatk -T GenerateVariantClusters -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file";
+  EASIH::JMS::submit_system_job($cmd, "$tmp_file -B input,VCF,$input");
 }		
 		
 		
@@ -149,7 +148,7 @@ sub rescore_snps {
 
   $report =~ s/.vcf\z//;
   my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report --target_titv 3.0 ";
-  EASIH::JMS::submit_job($cmd, $report);
+  EASIH::JMS::submit_system_job($cmd, $report);
 }		
 
 

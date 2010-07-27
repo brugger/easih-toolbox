@@ -31,37 +31,37 @@ our %analysis = ('csfasta2fastq'    => { function   => 'csfasta2fastq',
 		 'std-generate'     => { function   => 'bwa_generate',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 
-		 'std-tag_sam'          => { function   => 'sam_add_tags',
+		 'std-tag_sam'      => { function   => 'sam_add_tags',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 		 
-		 'std-sam2bam'          => { function   => 'EASIH::JMS::Samtools::sam2bam',
+		 'std-sam2bam'      => { function   => 'EASIH::JMS::Samtools::sam2bam',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
-		 'std-merge'     => { function   => 'EASIH::JMS::Picard::merge',
+		 'std-merge'        => { function   => 'EASIH::JMS::Picard::merge',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 					 sync       => 1},
 
-		 'get_mapped'   => { function   => 'EASIH::JMS::Samtools::get_mapped',
+		 'get_mapped'       => { function   => 'EASIH::JMS::Samtools::get_mapped',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
-		 'get_unmapped' => { function   => 'EASIH::JMS::Samtools::get_unmapped',
+		 'get_unmapped'     => { function   => 'EASIH::JMS::Samtools::get_unmapped',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
 
-		 're-align'      => { function   => 'bwa_aln',
+		 're-aln'           => { function   => 'bwa_aln',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
-		 're-generate'     => { function   => 'bwa_generate',
+		 're-generate'      => { function   => 'bwa_generate',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 
-		 're-sam2bam'          => { function   => 'EASIH::JMS::Samtools::sam2bam',
+		 're-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
-		 'initial-merge'     => { function   => 'EASIH::JMS::Picard::merge',
+		 'initial_merge'    => { function   => 'EASIH::JMS::Picard::merge',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 					 sync       => 1},
 
-		 'initial-sort'         => { function   => 'EASIH::JMS::Picard::sort',
+		 'initial_sort'         => { function   => 'EASIH::JMS::Picard::sort',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
 
@@ -76,8 +76,6 @@ our %analysis = ('csfasta2fastq'    => { function   => 'csfasta2fastq',
 		 
 		 'get_all_unmapped' => { function   => 'EASIH::JMS::Samtools::get_unmapped',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
-		 
-		 'seq_names'        => { function   => 'fetch_seq_names'},
 		 
 		 'identify_indel'   => { function   => 'identify_indel',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
@@ -133,20 +131,19 @@ our %flow = ( 'csfasta2fastq'    => "std-aln",
 	      'std-generate'     => "std-tag_sam",
 	      'std-tag_sam'      => 'std-sam2bam',
 	      'std-sam2bam'      => "std-merge",
-	      'std-merge'        => ["get-mapped", "get-unmapped"],
+	      'std-merge'        => ["get_mapped", "get_unmapped"],
 
-	      "get-mapped"   => 'initial_merge',
-	      "get-unmapped" => 're-aln',
+	      "get_mapped"       => 'initial_merge',
+	      "get_unmapped"     => 're-aln',
 	      're-aln'           => 're-generate',
 	      're-generate'      => 're-sam2bam',
 	      're-sam2bam'       => 'initial_merge',
-
-	      'initial_sort'         => "initial_index",
+	      'initial_merge'    => 'initial_sort',
+	      'initial_sort'     => "initial_index",
 
 	      "initial_index"    => ['get_all_mapped', 'get_all_unmapped'],
 	      'get_all_unmapped' => 'merge_realigned',
-	      'get_all_mapped'   => 'seq_names',
-	      'seq_names'        => 'identify_indel',
+	      'get_all_mapped'   => 'identify_indel',
 	      'identify_indel'   => 'realign_indel',
 	      'realign_indel'    => 'merge_realigned',
 	      'merge_realigned'  => 'sort_realigned',
@@ -161,6 +158,7 @@ our %flow = ( 'csfasta2fastq'    => "std-aln",
 	      'cluster_snps'     => 'rescore_snps'
 	      );
 
+EASIH::JMS::no_store();
 EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
@@ -173,10 +171,14 @@ if ( $opts{ r} ) {
 
 
 my $infile      = $opts{'i'} || $opts{'g'} || usage();
-my $outfile     = $opts{'b'} || usage();
+my $bam_file    = $opts{'b'} || usage();
 my $reference   = $opts{'f'} || usage();
 my $split       = $opts{'n'} || 10000000;
 my $align_param = $opts{'a'} || " ";
+my $dbsnp      = $opts{'d'} || usage();
+my $filters    = $opts{'f'} || usage();
+my $platform   = $opts{'p'};
+my $report     = $opts{'o'} || usage();
 
 my $readgroup = $opts{'r'};
 my $platform  = uc($opts{'p'}) || usage();
@@ -191,6 +193,7 @@ my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $solid2fq     = EASIH::JMS::Misc::find_program('solid2fastq.pl');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
+my $gatk        = EASIH::JMS::Misc::find_program('gatk ');
 
 #my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
 #my $bwa       = '/home/easih/bin/bwa';
@@ -217,13 +220,13 @@ else {
 &EASIH::JMS::store_state();
 
 my $extra_report = "infile ==> $infile\n";
-$extra_report .= "outfile ==> $outfile\n";
+$extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "align_param ==> $align_param\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
 
-EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $outfile, $extra_report);
+EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
 
 
 
@@ -271,6 +274,8 @@ sub bwa_aln {
   }
 }
 
+
+
 sub bwa_generate {
   my ($input) = @_;
 
@@ -301,8 +306,157 @@ sub sam_add_tags {
 sub rename {
   my ($input) = @_;
 
-  EASIH::JMS::submit_system_job("mv $input $outfile", $outfile);
+  EASIH::JMS::submit_system_job("mv $input $bam_file", $bam_file);
 }
+
+
+sub identify_indel {
+  my ( $input ) = @_;
+
+  my @names = ();
+  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+    foreach my $field ( split("\t") ) {
+      push @names, $1 if ( $field =~ /SN:(.*)/);
+    }
+  }
+
+  foreach my $name ( @names ) {
+    my $tmp_file = EASIH::JMS::tmp_file(".intervals");
+    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -I $input -L $name";
+    EASIH::JMS::submit_job($cmd, "$tmp_file $name");
+  }
+  
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (21 Jul 2010)
+sub merge_indels {
+  my (@inputs) = @_;
+
+
+  print "MERGE :: @inputs \n";
+
+  my $cmd = "cat  @inputs > $report";
+  EASIH::JMS::submit_system_job("cat  @inputs > $report");
+  
+}
+
+sub realign_indel {
+  my ($input) = @_;
+
+  my ($interval_file, $region) = split(" ", $input);
+
+  my $tmp_file = EASIH::JMS::tmp_file(".bam");
+  my $cmd;
+  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
+  if (  -z $interval_file ) {
+    $cmd = "$samtools view -b $input $region > $tmp_file";
+  }
+  else {
+    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region --output $tmp_file -R $reference -I $input";
+  }
+
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+}
+
+
+sub call_indels {
+  my ($input) = @_;
+
+  my @names = ();
+  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$input': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+    foreach my $field ( split("\t") ) {
+      push @names, $1 if ( $field =~ /SN:(.*)/);
+    }
+  }
+
+  foreach my $name ( @names ) {
+
+    my $tmp_file = EASIH::JMS::tmp_file(".indels");
+    my $cmd = "$gatk -T IndelGenotyperV2 -R $reference -O $tmp_file -I $bam_file -L $name ";
+    EASIH::JMS::submit_job($cmd, $tmp_file);
+  }
+}		     
+
+
+sub identify_snps {
+
+  my @names = ();
+  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+    foreach my $field ( split("\t") ) {
+      push @names, $1 if ( $field =~ /SN:(.*)/);
+    }
+  }
+
+  foreach my $name ( @names ) {
+    my $tmp_file = EASIH::JMS::tmp_file(".vcf");
+    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -varout $tmp_file -L $name ";
+    $cmd .= " -pl $platform " if ( $platform);
+    EASIH::JMS::submit_job($cmd, "$tmp_file  -L $name");
+  }
+  
+}
+
+sub filter_snps {
+  my ($input) = @_;
+
+  my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
+  $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
+
+#  $filters = "--filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
+
+  my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filters";
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+}		
+
+
+
+sub merge_vcfs {
+  my (@inputs) = @_;
+
+  my $merged_file = EASIH::JMS::tmp_file(".merged.vcf");
+  
+  if ( @inputs == 1 ) {
+    EASIH::JMS::submit_system_job("mv @inputs $merged_file", $merged_file);
+  }
+  else {
+    my $cmd = "$gatk -T CombineVariants -R $reference -o $merged_file -variantMergeOptions UNION -genotypeMergeOptions UNIQUIFY";
+    my $count = 1;
+    foreach my $input ( @inputs ) {
+      $cmd .= " -B variant,VCF,$input ";
+      $count++;
+    }
+    EASIH::JMS::submit_job($cmd, $merged_file);
+  }
+}
+
+sub cluster_snps {
+  my ($input) = @_;
+
+  my $tmp_file = EASIH::JMS::tmp_file(".cluster");
+  my $cmd = "$gatk -T GenerateVariantClusters -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file";
+  EASIH::JMS::submit_system_job($cmd, "$tmp_file -B input,VCF,$input");
+}		
+		
+		
+
+sub rescore_snps {
+  my ($input) = @_;
+
+  $report =~ s/.vcf\z//;
+  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report --target_titv 3.0 ";
+  EASIH::JMS::submit_system_job($cmd, $report);
+}		
+
 
 # 
 # 

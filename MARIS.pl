@@ -131,7 +131,7 @@ our %flow = ( 'csfasta2fastq'    => "std-aln",
 	      'std-generate'     => "std-tag_sam",
 	      'std-tag_sam'      => 'std-sam2bam',
 	      'std-sam2bam'      => "std-merge",
-	      'std-merge'        => ["get_mapped", "get_unmapped"],
+	      'std-merge'        => ["get_unmapped", "get_mapped"],
 
 	      "get_mapped"       => 'initial_merge',
 	      "get_unmapped"     => 're-aln',
@@ -175,10 +175,9 @@ my $bam_file    = $opts{'b'} || usage();
 my $reference   = $opts{'f'} || usage();
 my $split       = $opts{'n'} || 10000000;
 my $align_param = $opts{'a'} || " ";
-my $dbsnp      = $opts{'d'} || usage();
-my $filters    = $opts{'f'} || usage();
-my $platform   = $opts{'p'};
-my $report     = $opts{'o'} || usage();
+my $dbsnp       = $opts{'d'} || usage();
+my $filters     = $opts{'f'} || usage();
+my $report      = $opts{'o'} || usage();
 
 my $readgroup = $opts{'r'};
 my $platform  = uc($opts{'p'}) || usage();

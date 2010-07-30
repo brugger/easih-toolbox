@@ -26,13 +26,6 @@ my $bwa       = '/home/easih/bin/bwa';
 my $samtools  = '/home/easih/bin/samtools';
 my $fq_split  = '/home/kb468/bin/fastq_split.pl';
 
-my $extra_report = "";
-$extra_report .= " Binaries used..\n";
-$extra_report .= `ls -l $samtools`;
-$extra_report .= `ls -l $bwa` . "\n";
-
-print "$extra_report";
-
 print EASIH::JMS::full_report();    
 
 

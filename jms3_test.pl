@@ -96,7 +96,7 @@ our %analysis = ('csfasta2fastq'    => { function   => 'multiple',
 		 'index_realigned'   =>{ function   => 'single',
 					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
-		 'call_indels'      => { function   => 'single',
+		 'call_indels'      => { function   => 'multiple',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=12:00:00"},
 
 		 'merge_indels'     => { function   => 'single',
@@ -161,9 +161,9 @@ our %flow = ( 'csfasta2fastq'    => "std-aln",
 	      );
 
 #EASIH::JMS::no_store();
-EASIH::JMS::print_flow('fastq-split');
+#EASIH::JMS::print_flow('fastq-split');
 
-EASIH::JMS::hive('Darwin');
+#EASIH::JMS::hive('Darwin');
 EASIH::JMS::hive('Kluster');
 
 EASIH::JMS::run('fastq-split');
@@ -176,7 +176,7 @@ sub multiple {
 
   my $cmd = "$executer";
   
-  for ( my $i=0; $i< 20; $i++ ) {
+  for ( my $i=0; $i< 3; $i++ ) {
     my $tmp_file = 'tyt';
     EASIH::JMS::submit_job("$cmd ", $tmp_file);
   }

@@ -160,13 +160,14 @@ our %flow = ( 'csfasta2fastq'    => "std-aln",
 	      'cluster_snps'     => 'rescore_snps'
 	      );
 
-EASIH::JMS::no_store();
+#EASIH::JMS::no_store();
 EASIH::JMS::print_flow('fastq-split');
 
 EASIH::JMS::hive('Darwin');
 EASIH::JMS::hive('Kluster');
 
 EASIH::JMS::run('fastq-split');
+EASIH::JMS::store_state();
 
 
 

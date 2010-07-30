@@ -205,6 +205,8 @@ my $gatk        = EASIH::JMS::Misc::find_program('gatk ');
 #EASIH::JMS::dry_run('csfasta2fastq');
 #exit;
 EASIH::JMS::hive('Darwin');
+EASIH::JMS::hive('DetachedDummy');
+
 
 if ( $opts{'g'} ) {
   

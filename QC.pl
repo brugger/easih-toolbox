@@ -34,6 +34,7 @@ my $UNMAPPED_READ  =  4;
 my ( %base_qual_dist, @base_dist, @base_qual);
 my ( %mapped_base_qual_dist, @mapped_base_dist, @mapped_base_qual);
 my ( %unmapped_base_qual_dist, @unmapped_base_dist, @unmapped_base_qual);
+my ( %GC );
 
 my ($reads, $mapped_reads, $unmapped_reads) = (0,0,0);
 
@@ -43,6 +44,8 @@ read_fq($fq_file) if ( $fq_file );
 read_bam($bam_file) if ( $bam_file );
 
 die "no input, read the code\n" if ( ! $fq_file && ! $bam_file );
+
+
 
 report();
 
@@ -59,7 +62,7 @@ sub report {
 
   $out_file ||= $infile;
 
-  my ($GC,  $AT, $Q_min_count) = (0,0);
+  my ($Q_min_count) = (0,0);
 
   my ($out, $R);
   
@@ -94,7 +97,7 @@ sub report {
   $max_qual += 5;
 
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-  print $R "meanQual = read.table('$out_file.MeanQual')\n";
+  print $R "meanQual = read.table('$out_file.MeanQual', check.names=FALSE)\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
   print $R "png('$out_file.MeanQual.png')\n";
   print $R "plot(meanQual[,2], main='$infile: Quality By Cycle', type='h', xlab='Cycle', ylab='Mean Quality', ylim=c(0,$max_qual))\n";
@@ -124,7 +127,7 @@ sub report {
   close( $out );
 
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-  print $R  "qualHist = read.table('$out_file.QualHist', header=TRUE)\n";
+  print $R  "qualHist = read.table('$out_file.QualHist', header=TRUE, check.names=FALSE)\n";
   print $R "png('$out_file.QualHist.png')\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
   print $R "barplot(as.matrix(qualHist), col=c('grey', 'blue', 'red'), axis.lty=1, main='$infile: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n";
@@ -148,9 +151,6 @@ sub report {
     push @Ts, ($base_dist[ $i ]{T} || 0)/$reads*100;
     push @Ns, ($Ns || 0)/$reads*100;
 
-    $GC = ($base_dist[ $i ]{G} || 0) + ($base_dist[ $i ]{C} || 0);
-    $AT = ($base_dist[ $i ]{A} || 0) + ($base_dist[ $i ]{T} || 0);
-
   }
 
   print $out "\t" . join("\t", @pos) . "\n";
@@ -166,18 +166,31 @@ sub report {
 
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R "png('$out_file.BaseDist.png')\n";
-  print $R "baseDist = read.table('$out_file.BaseDist')\n";
+  print $R "baseDist = read.table('$out_file.BaseDist', check.names=FALSE)\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
   print $R "barplot(as.matrix(baseDist), col=c('green', 'blue', 'black','red', 'grey'), axis.lty=1, main='$infile: Base distribution', xlab='Cycle', ylab='Distribution')\n";
 #  print $R "legend(45, 90, rev(rownames(baseDist)), fill=rev(c('green', 'blue', 'black','red', 'grey')))\n";
+  print $R "dev.off()\n";
   close ($R);
-
 
   open ($out, " > $infile.report ") || die "Could not open '$infile.report': $!\n";
 
-  printf $out ("GC: %.2f\n", 100*$GC/($GC+$AT));
   printf $out ("Density: %.2f\n", $reads/120);
   close($out);
+
+  open ( $out, "> $out_file.GC ") || die "Could not open '$out_file.GC': $!\n";
+  foreach my $key ( sort {$a <=> $b} keys %GC ) {
+    print $out "$key\t$GC{$key}\n";
+  }
+  close( $out );
+
+  open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
+  print $R "png('$out_file.GC.png')\n";
+  print $R "GC = read.table('$out_file.GC')\n";
+  print $R "a = hist(GC[,1], breaks=10, plot=FALSE)\n";
+  print $R "plot(spline(a\$mids, a\$intensities*1000), type='b', xlab='%GC', ylab='fraction')\n";
+  print $R "dev.off()\n";
+  close ($R);
 
 }
 
@@ -261,11 +274,16 @@ sub analyse {
   my @seq = split("", $seq);
   my @qual = split("", $qual);
 
+  my ( $GC, $AT) = (0,0);
+
   for(my $i = 0; $i < @seq; $i++) {
     my $base = uc($seq[$i]);
     my $base_qual = ord($qual[$i]) - 33;
 
     $base_dist[$i]{$base}++ if (!$solid || defined $mapped && $mapped ==  $MAPPED_READ );
+
+    $GC++ if ( $base eq 'G' || $base eq 'C');
+    $AT++ if ( $base eq 'A' || $base eq 'T');
 
     $base_qual[$i] += $base_qual;
     $base_qual_dist{$base_qual}++;
@@ -280,9 +298,9 @@ sub analyse {
       $unmapped_base_qual[$i] += $base_qual;
       $unmapped_base_qual_dist{$base_qual}++;
     }
-
-
   }
+
+  $GC{ int( $GC*100/($GC+$AT))}++;
 
 }
 

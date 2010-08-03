@@ -393,7 +393,7 @@ sub identify_indel {
 
   foreach my $name ( @names ) {
     my $tmp_file = EASIH::JMS::tmp_file(".intervals");
-    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -I $bam_file -L $name";
+    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -I $input -L $name";
     EASIH::JMS::submit_job($cmd, "$tmp_file $name $input");
   }
   
@@ -488,6 +488,12 @@ sub filter_snps {
   my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
+
+  my $entries = `egrep -cv \# $input`;
+  chomp( $entries );
+
+  return if ( $entries == 0 );
+
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
 
 #  $filters = "--filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";

@@ -19,7 +19,8 @@ my $freeze_file = shift || usage();
 
 EASIH::JMS::restore_state($freeze_file);
 print EASIH::JMS::report();    
-print EASIH::JMS::total_runtime() . "\n";
+print EASIH::JMS::total_runtime();
+print EASIH::JMS::real_runtime(). "\n";
 
 my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
 my $bwa       = '/home/easih/bin/bwa';

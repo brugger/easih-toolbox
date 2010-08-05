@@ -307,7 +307,6 @@ sub map_and_qc {
   chomp( $samtools);
   my $command .= "$bwa aln $reference $infile | $bwa samse $reference - $infile | $samtools view -S - |  ";
   print "$command \n";
-  
   open ( my $pipe, "$command " ) || die "Could not open '$command': $!\n";
   while(<$pipe>) {
     chomp;
@@ -435,13 +434,13 @@ sub sample {
 
   $limit ||= 1;
 
-  my $compressed = 0;
   if ( $infile =~ /gz\z/) {
-    $infile =~ s/.gz//;
     print "infile --> $infile\n";
-    print STDERR "Un-compressing the fq file\n";
-    $compressed++;
-    system "gunzip $infile";
+    my $outfile = $infile;
+    $outfile =~ s/.gz//;
+    print STDERR "Un-compressing the fq file $infile -> tmp/$outfile\n";
+    system "gunzip -c $infile > tmp/$outfile";
+    $infile = $outfile;
   }
 
   open (my $out, "> $outfile") || die "Could not open '$outfile' for writing: $!\n";
@@ -479,12 +478,6 @@ sub sample {
     }
     
     
-  }
-  
-  
-  if ($compressed) {
-    print STDERR "Recompressing the fq file\n";
-#    system "gunzip $infile";
   }
 
 }

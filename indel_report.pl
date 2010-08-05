@@ -14,11 +14,15 @@ use lib '/home/kb468/projects/e57/ensembl/modules/';
 use lib '/home/kb468/projects/e57/bioperl-live/';
 
 use strict;
-use Getopt::Long;
+use Getopt::Std;
 use FileHandle;
 use Bio::EnsEMBL::Registry;
 use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
+
+my %opts;
+getopts('b:d:TfHh', \%opts);
+usage() if ( $opts{h});
 
 my $species     = "human";
 my $buffer_size = 500;
@@ -34,11 +38,11 @@ my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa = $reg->get_adaptor($species, 'core', 'slice');
 my $ga = $reg->get_adaptor($species, 'core', 'gene');
 
-my $bed         = shift;
-my $from_36     = 0;
-my $links       = 0;
-my $full_report = 0;
-my $html_out    = 0;
+my $bed         = $opts{b} || usage();
+my $min_depth   = $opts{d} || 0;
+my $from_36     = $opts{T} || 0;
+my $full_report = $opts{f} || 0;
+my $html_out    = $opts{H} || 0;
 
 my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
@@ -71,15 +75,39 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
     my $end   = $$indel{end};
     my $position = "$chr:$start-$end";
 
-    print Dumper( $indel );
+#    print Dumper( $indel );
+
+    next if ( $$indel{depth} < 20);
+
+    my @line;
+    push @line, $position;
+    push @line, $$indel{type};
+    push @line, $$indel{variation};
+    push @line, $$indel{support} . "/". $$indel{depth};
     
-    my $res = indel_effect($chr, $start, $end, "$$indel{variation}/$$indel{type}");
-
-#    print_oneliner( $position, @$res);
-
+    my $effects = indel_effect($chr, $start, $end, "$$indel{variation}/$$indel{type}");
+    
+    if ( $effects ) {
+      
+      foreach my $effect ( @$effects ) {
+	
+	my @effect_line;
+	push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+	push @effect_line, ($$effect{ position } || "");
+	push @effect_line, ($$effect{ cpos } || "");
+	push @effect_line, ($$effect{ ppos } || "");
+	
+	print join("\t", @line, @effect_line) . "\n";
+      }
+    }
+    else {
+      print join("\t", @line) . "\n";
+    }
+    
   }
 
-  last;
+
+#  last;
 }
 
 
@@ -113,8 +141,8 @@ sub indel_effect {
   }
 
   my @res;
-  $allele_string = "C/GGGG";
-  print "AS :: $allele_string\n";
+#  $allele_string = "C/GGGG";
+#  print "AS :: $allele_string\n";
 
   my $slice;
   # first try to get a chromosome
@@ -207,10 +235,12 @@ sub indel_effect {
 	  $gene_res{ position } = $string;
 	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
 
-	  if ( $con->translation_start) {
+	  if ( $con->translation_start && $con->pep_allele_string) {
 	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
 	    
-	    $new = $old if ( $string eq "SYNONYMOUS_CODING");
+	    print " --> " . $con->pep_allele_string . "\n";
+
+	    $new ||= $old;
 
 	    $old = one2three( $old );
 	    $new = one2three( $new );
@@ -219,56 +249,19 @@ sub indel_effect {
 	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
 	  }
 
-	  $gene_res{ rs_number } = $existing_vf || "";
 	  push @res, \%gene_res;
 	} 
       }
     }
   }
 
-  print Dumper( \@res );
+#  print Dumper( \@res );
   
   return \@res;
 }
 
 
 
-
-# 
-# 
-# 
-# Kim Brugger (04 Jun 2010)
-sub print_oneliner {
-  my ( $pos, $res ) = @_;
-  
-  my @line;
-  push @line, "$pos", "$$res{ref_base}>$$res{alt_base}";
-  push @line, $$res{base_dist}{score};
-  push @line, $$res{base_dist}{total};      
-
-      map { push @line, $$res{base_dist}{$_} if ($$res{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      push @line, $$res{callers};
-
-      if ($$res{snp_effect} ) {
-      
-	foreach my $snp_effect ( @{$$res{snp_effect}} ) {
-	  my @effect_line;
-	  push @effect_line, "$$snp_effect{ external_name }/$$snp_effect{ stable_id }", "$$snp_effect{ transcript_id }";
-	  push @effect_line, $$snp_effect{ position };
-	  push @effect_line, $$snp_effect{ cpos };
-	  push @effect_line, $$snp_effect{ ppos };
-	  push @effect_line, $$snp_effect{ rs_number } if ( $$snp_effect{ rs_number });
-
-	  print join("\t", @line, @effect_line) . "\n";
-	}
-      }
-      else {
-	print join("\t", @line) . "\n";
-      }
-
-
-
-}
 
 
 # 
@@ -304,6 +297,9 @@ sub one2three {
 }
 
 
+
+
+
 # 
 # 
 # 
@@ -326,6 +322,7 @@ sub readin_bed {
     $indels{ $chr }{ $start } = { end       => $end,
 				  type      => $type,
 				  variation => $variation,
+				  depth     => $depth,
 				  support   => $support,
 				  change    => $change };
     
@@ -335,3 +332,53 @@ sub readin_bed {
 
   return \%indels;
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (09 Jul 2010)
+sub usage {
+
+  system "perldoc $0";
+  exit;
+}
+
+
+=pod
+
+=head1 SYNOPSIS
+
+indel_report turns a vcf file into a nice report, annotated with Ensembl gene information 
+
+=head1 OPTIONS
+
+
+=over
+
+=item B<-b F<bed file>>: 
+
+The bedfile that the SNP calling was based on.
+
+=item B<-f>: 
+
+Prints out a multi-line report, otherwise it is done on a oneline basis (good for excel)
+
+=item B<-H>: 
+
+Prints a HTML report, default is a tab-separated one.
+
+=item B<-d>: 
+
+Minumum depth required when reporting an indel
+
+=item B<-T>: 
+
+The mapping was done on NCBI36/hg18 and the coordinates should be transformed to GRCh37/hg19.
+
+=back
+
+
+
+=cut

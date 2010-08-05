@@ -14,34 +14,55 @@ use strict;
 use Getopt::Long;
 
 my %opts;
-getopts('f:b:o:hmusp:', \%opts);
+getopts('1:2:b:o:hmusp:R:r:f:', \%opts);
 
 my $fq_file       = $opts{f};
 my $bam_file      = $opts{b};
 my $out_file      = $opts{o};
-my $mapped_only   = $opts{m} || 0;
-my $prefix        = $opts{p} || "";
-my $unmapped_only = $opts{u} || 0;
-my $solid         = $opts{s} || 0;
+my $report        = $opts{r} || "";
+my $reference     = $opts{R} || die "no reference given (-R)\n";
+my $platform      = uc($opts{p}) || die "no platform given (-p[ SOLEXA, SOLID])\n"; 
+$platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
 
 my $limit         = 10000;
 
 my $samtools  = '/usr/local/bin/samtools';
 
-my $MAPPED_READ    =  0;
-my $UNMAPPED_READ  =  4;
+my $ALL_READS     = 0;
+my $UNMAPPED_READ = 1;
+my $MAPPED_READ   = 2;
+my $FIRST_READ    = 3;
+my $SECOND_READ   = 4;
+
+my @read_cat = ($ALL_READS, $UNMAPPED_READ, $MAPPED_READ, $FIRST_READ, $SECOND_READ);
+
+
 
 my ( %base_qual_dist, @base_dist, @base_qual);
-my ( %mapped_base_qual_dist, @mapped_base_dist, @mapped_base_qual);
-my ( %unmapped_base_qual_dist, @unmapped_base_dist, @unmapped_base_qual);
-my ( %GC );
+#my ( %mapped_base_qual_dist, @mapped_base_dist, @mapped_base_qual);
+#my ( %unmapped_base_qual_dist, @unmapped_base_dist, @unmapped_base_qual);
+my ( %GC, %bwa );
 
-my ($reads, $mapped_reads, $unmapped_reads) = (0,0,0);
 
 my $Q_min = 20;
 
-read_fq($fq_file) if ( $fq_file );
-read_bam($bam_file) if ( $bam_file );
+validate_reference();
+
+#random sample $limit MB out of the fastq file
+
+use File::Temp;
+system "mkdir tmp" if ( ! -d './tmp');
+my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "./tmp" );
+
+sample( $fq_file, $tmp_file, 20);
+map_and_qc( $tmp_file );
+
+map_and_qc("tmp/PSCn6dr0TF");
+
+
+
+
+#read_bam($bam_file) if ( $bam_file );
 
 die "no input, read the code\n" if ( ! $fq_file && ! $bam_file );
 
@@ -49,16 +70,18 @@ die "no input, read the code\n" if ( ! $fq_file && ! $bam_file );
 
 report();
 
+#system "rm -rf tmp";
+
 # 
 # 
 # 
 # Kim Brugger (16 Jul 2010)
 sub report {
 
-  my $infile = $bam_file || $fq_file;
+  my $infile = $fq_file;
   $infile =~ s/.*\///;
 
-  $infile = $prefix . $infile;
+  $infile = $report . $infile;
 
   $out_file ||= $infile;
 
@@ -67,29 +90,28 @@ sub report {
   my ($out, $R);
   
   my $max_qual = 0;
-  
+
   open ( $out, "> $out_file.MeanQual ") || die "Could not open '$out_file.MeanQual': $!\n";
-  for(my $i = 0; $i < @base_qual; $i++ ) {
-    my @values = ($i+1, $base_qual[ $i ] / $reads);
-    $max_qual = $base_qual[ $i ] / $reads if ( $max_qual < $base_qual[ $i ] / $reads);
+  for(my $i = 0; $i < @{$base_qual[$ALL_READS]}; $i++ ) {
 
-    if ( ! $mapped_reads ) {
-      push @values, 0;
-    }
-    else {
-      push @values, ($mapped_base_qual[ $i ] || 0)/ $mapped_reads;
-      $max_qual = $mapped_base_qual[ $i ] / $mapped_reads if ( $max_qual < $mapped_base_qual[ $i ] / $mapped_reads);
+    my @values = ($i+1);
+    foreach my $category ( @read_cat ) {
+      
+      if ( ! $bwa{ $category }) {
+	push @values, 0;
+	next;
+      }
+      
+      if ( $base_qual[$category][ $i ] ) {
+	push @values, $base_qual[$category][ $i ] / $bwa{$category};
+	$max_qual = $base_qual[$category][ $i ] / $bwa{$category} if ( $max_qual < $base_qual[$category][ $i ] / $bwa{$category});
+      }
+      else {
+	push @values, 0;
+      }
     }
 
-    if ( ! $unmapped_reads ) {
-      push @values, 0;
-    }
-    else {
-      push @values, ($unmapped_base_qual[ $i ] || 0)/ $unmapped_reads;
-      $max_qual = $unmapped_base_qual[ $i ] / $reads if ( $max_qual < $unmapped_base_qual[ $i ] / $unmapped_reads);
-    }
-
-
+    print  join("\t", @values) . "\n";
     print $out join("\t", @values) . "\n";
   }
   close( $out );
@@ -101,36 +123,50 @@ sub report {
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
   print $R "png('$out_file.MeanQual.png')\n";
   print $R "plot(meanQual[,2], main='$infile: Quality By Cycle', type='h', xlab='Cycle', ylab='Mean Quality', ylim=c(0,$max_qual))\n";
-  print $R "lines(meanQual[,3], type='l', col='blue')\n";
-  print $R "lines(meanQual[,4], type='l', col='red')\n";
+  print $R "lines(meanQual[,3], type='l', col='red')\n";
+  print $R "lines(meanQual[,4], type='l', col='blue')\n";
+  print $R "lines(meanQual[,5], type='l', col='green')\n" if ( $bwa{ $SECOND_READ});
+  print $R "lines(meanQual[,6], type='l', col='darkgreen')\n" if ( $bwa{ $SECOND_READ});
   print $R "abline(h=15, col='red')\n";
   print $R "dev.off()\n";
   close ($R);
 
-      
-  open ($out, "> $out_file.QualHist ") || die "Could not open '$out_file.QualHist': $!\n";
-  my (@values, @combined, @mapped, @unmapped, %saw);
-  foreach my $value ( sort { $a <=> $b } grep(!$saw{$_}++,  keys %base_qual_dist, keys %unmapped_base_qual_dist, keys %mapped_base_qual_dist )) {
-    push @values, $value;
-    push @combined, ($base_qual_dist{ $value } || 0);
-    push @mapped,   ($mapped_base_qual_dist{ $value } || 0);
-    push @unmapped, ($unmapped_base_qual_dist{ $value } || 0);
 
-    $Q_min_count += $base_qual_dist{ $value } if ( $Q_min <= $value);
+  open ($out, "> $out_file.QualHist ") || die "Could not open '$out_file.QualHist': $!\n";
+  my (@values, @positions);
+  foreach my $value ( sort { $a <=> $b } keys %{$base_qual_dist{ $ALL_READS}}) {
+    push @positions, $value;
+
+    foreach my $category ( @read_cat ) {
+      
+      if ( ! $bwa{ $category }) {
+	push @{$values[ $category ]}, 0;
+	next;
+      }
+      
+      if ( $base_qual_dist{$category}{ $value } ) {
+	push @{$values[ $category ]}, $base_qual_dist{$category}{ $value };
+      }
+      else {
+	push @{$values[ $category ]}, 0;
+      }
+      $Q_min_count++ if ( $base_qual_dist{$category}{ $value } < $Q_min );
+
+    }
   }
 
-  print $out "\t" . join("\t", @values) . "\n";
-  print $out "\t" . join("\t", @combined) . "\n";
-  print $out "\t" . join("\t", @mapped) . "\n";
-  print $out "\t" . join("\t", @unmapped) . "\n";
 
-  close( $out );
+  print $out "\t" . join("\t", @positions) . "\n";
+  foreach my $category ( @read_cat ) {
+    print $out "\t" . join("\t", @{$values[$category]}) . "\n";
+  }
+  close( $out );  
 
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R  "qualHist = read.table('$out_file.QualHist', header=TRUE, check.names=FALSE)\n";
   print $R "png('$out_file.QualHist.png')\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
-  print $R "barplot(as.matrix(qualHist), col=c('grey', 'blue', 'red'), axis.lty=1, main='$infile: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n";
+  print $R "barplot(as.matrix(qualHist), col=c('black', 'red', 'blue', 'green', 'darkgreen'), axis.lty=1, main='$infile: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n";
 #  print $R "legend(45, 90, c('All', 'Mapped', 'Unmapped', fill=c('grey', 'blue', 'red')))\n";
 
 #  print $R "plot(qualHist, main='$infile:  Quality Score Distribution', type='h', xlab='Quality score', ylab='Observations')\n";
@@ -141,15 +177,15 @@ sub report {
 
   my (@As, @Cs, @Gs, @Ts, @Ns, @pos);
 
-  for(my $i = 0; $i < @base_dist; $i++ ) {
-    my $Ns = $reads - ($base_dist[ $i ]{A} || 0) - ($base_dist[ $i ]{C} || 0) - ($base_dist[ $i ]{G} || 0) - ($base_dist[ $i ]{T} || 0);
+  for(my $i = 0; $i < @{$base_dist[$MAPPED_READ]}; $i++ ) {
+    my $Ns = $bwa{$MAPPED_READ} - ($base_dist[$MAPPED_READ][ $i ]{A} || 0) - ($base_dist[$MAPPED_READ][ $i ]{C} || 0) - ($base_dist[$MAPPED_READ][ $i ]{G} || 0) - ($base_dist[$MAPPED_READ][ $i ]{T} || 0);
 
     push @pos, $i + 1;
-    push @As, ($base_dist[ $i ]{A} || 0)/$reads*100;
-    push @Cs, ($base_dist[ $i ]{C} || 0)/$reads*100;
-    push @Gs, ($base_dist[ $i ]{G} || 0)/$reads*100;
-    push @Ts, ($base_dist[ $i ]{T} || 0)/$reads*100;
-    push @Ns, ($Ns || 0)/$reads*100;
+    push @As, ($base_dist[$MAPPED_READ][ $i ]{A} || 0)/$bwa{$MAPPED_READ}*100;
+    push @Cs, ($base_dist[$MAPPED_READ][ $i ]{C} || 0)/$bwa{$MAPPED_READ}*100;
+    push @Gs, ($base_dist[$MAPPED_READ][ $i ]{G} || 0)/$bwa{$MAPPED_READ}*100;
+    push @Ts, ($base_dist[$MAPPED_READ][ $i ]{T} || 0)/$bwa{$MAPPED_READ}*100;
+    push @Ns, ($Ns || 0)/$bwa{$MAPPED_READ}*100;
 
   }
 
@@ -162,8 +198,6 @@ sub report {
 
   close ($out);
 
-
-
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R "png('$out_file.BaseDist.png')\n";
   print $R "baseDist = read.table('$out_file.BaseDist', check.names=FALSE)\n";
@@ -173,87 +207,144 @@ sub report {
   print $R "dev.off()\n";
   close ($R);
 
-  open ($out, " > $infile.report ") || die "Could not open '$infile.report': $!\n";
-
-  printf $out ("Density: %.2f\n", $reads/120);
-  close($out);
+  my $max_gc = 0;
 
   open ( $out, "> $out_file.GC ") || die "Could not open '$out_file.GC': $!\n";
-  foreach my $key ( sort {$a <=> $b} keys %GC ) {
-    print $out "$key\t$GC{$key}\n";
+  foreach my $value ( sort {$a <=> $b} keys %{$GC{ $ALL_READS}} ) {
+
+    my @values;
+    if ($value - 2.5 < 0 ) {
+      push @values, "0";
+    }
+    else {
+      push @values, ($value - 2.5);
+    }
+
+    foreach my $category ( @read_cat ) {
+      
+      if ( ! $bwa{ $category }) {
+	push @values, 0;
+	next;
+      }
+      
+      if ( $GC{$category}{ $value } ) {
+#	print "$GC{$category}{ $value }*100 / $bwa{ $category}); ==> " . ($GC{$category}{ $value }*100 / $bwa{ $category}) . "\n";
+	push @values, $GC{$category}{ $value }*100 / $bwa{ $category};
+	$max_gc = $GC{$category}{ $value }*100/$bwa{ $category} if ( $max_gc < $GC{$category}{ $value }*100/$bwa{ $category});
+      }
+      else {
+	push @values, 0;
+      }
+    }
+
+    print  join("\t", @values) . "\n";
+    print $out join("\t", @values) . "\n";
   }
   close( $out );
 
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R "png('$out_file.GC.png')\n";
   print $R "GC = read.table('$out_file.GC')\n";
-  print $R "a = hist(GC[,1], breaks=10, plot=FALSE)\n";
-  print $R "plot(spline(a\$mids, a\$intensities*1000), type='b', xlab='%GC', ylab='fraction')\n";
+  print $R "plot(spline(GC[c(1,2)]),      type='b',  xlab='%GC', ylab='fraction', col='black' ylim=c(0,$max_gc))\n";
+  print $R "lines(spline(GC[c(1,3)]),      type='b',  xlab='%GC', ylab='fraction', col='red')\n";
+  print $R "lines(spline(GC[c(1,4)]),      type='b',  xlab='%GC', ylab='fraction', col='blue')\n";
+  print $R "lines(spline(GC[c(1,5)]),      type='b',  xlab='%GC', ylab='fraction', col='green')\n" if ( $bwa{ $SECOND_READ});
+  print $R "lines(spline(GC[c(1,6)]),      type='b',  xlab='%GC', ylab='fraction', col='darkgreen')\n" if ( $bwa{ $SECOND_READ});
   print $R "dev.off()\n";
   close ($R);
 
+  open ( $out, "> $out_file.MapQual ") || die "Could not open '$out_file.MapQual': $!\n";
+  foreach my $mapq ( sort {$a <=> $b} keys %{$bwa{mapq}}) {
+    print $out "$mapq\t$bwa{mapq}{$mapq}\n";
+  }
+  close( $out );
+    
+  open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
+  print $R "png('$out_file.MapQual.png')\n";
+  print $R "mapQual = read.table('$out_file.MapQual')\n";
+  print $R "plot(spline(mapQual),        type='h',  xlab='Mapping Quality', ylab='Fraction', col='black')\n";
+  print $R "dev.off()\n";
+  close ($R);
+
+  
+  if ( $bwa{is} ) {
+    
+    open ( $out, "> $out_file.IS ") || die "Could not open '$out_file.IS': $!\n";
+    print $out join("\n", @{$bwa{is}}) ."\n";
+    close( $out );
+    
+    open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
+    print $R "png('$out_file.IS.png')\n";
+    print $R "IS = read.table('$out_file.IS')\n";
+    print $R "hist(IS,  main='Insert size distribution', xlab='size', ylab='Fraction', col='black')\n";
+    print $R "dev.off()\n";
+    close ($R);
+  }
+
+  open ($out, " > $infile.report ") || die "Could not open '$infile.report': $!\n";
+  print $out "$bwa{$ALL_READS} reads\n";;
+  print $out "$bwa{ $MAPPED_READ } (".(sprintf("%.2f",$bwa{ $MAPPED_READ }*100/$bwa{$ALL_READS}))."%) mapped\n";
+  print $out "$bwa{paired} paired\n"       if ($bwa{paired});
+  print $out "$bwa{$FIRST_READ} read1\n"  if ($bwa{$SECOND_READ});
+  print $out "$bwa{$SECOND_READ} read2\n" if ($bwa{$SECOND_READ});
+  print $out "$bwa{properly_paired} properly paired\n" if ($bwa{properly_paired});
+  
+  close($out);
 }
 
 
 
-
 # 
 # 
 # 
-# Kim Brugger (16 Jul 2010)
-sub read_bam {
-  my ($infile) = @_;
+# Kim Brugger (03 Aug 2010)
+sub map_and_qc {
+  my ( $infile ) = @_;
 
-  open (my $st_pipe, "$samtools view $infile  | ") || die "Could not open samtools pipe: $!";
-
-  while(<$st_pipe>) {
+  my $bwa      = `which bwa`;
+  chomp($bwa);
+  my $samtools = `which samtools`;
+  chomp( $samtools);
+  my $command .= "$bwa aln $reference $infile | $bwa samse $reference - $infile | $samtools view -S - |  ";
+  print "$command \n";
+  
+  open ( my $pipe, "$command " ) || die "Could not open '$command': $!\n";
+  while(<$pipe>) {
     chomp;
     my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");    
 
+    $bwa{$ALL_READS}++;
 
-    next if ( $flags & 0x0004 && $mapped_only );
+    $bwa{paired}++                 if ($flags & 0x0001);
+    $bwa{properly_paired}++        if ($flags & 0x0002 );
+    $bwa{mate_unmapped}++          if ($flags & 0x0008 );
+    $bwa{not_primary_alignment}++  if ($flags & 0x0100 );
+    $bwa{dupliacate}++             if ($flags & 0x0400 );
 
-    analyse( $sequence, $quality, $insert_size, ($flags & 0x0004));
+    if ( $flags & 0x0004 ){
+      analyse( $sequence, $quality, $UNMAPPED_READ);
+      $bwa{$UNMAPPED_READ}++;
+      next;
+    }
+
+    $bwa{ $MAPPED_READ }++;
+    $bwa{mapq}{$mapq}++      if ( $mapq );
+    push @{$bwa{is}}, $insert_size if ( $insert_size ) ;
+    
+    if ($flags & 0x0080 ) {
+      $bwa{$SECOND_READ}++;
+      analyse( $sequence, $quality, $SECOND_READ);
+    }
+    else {
+      $bwa{$FIRST_READ}++;
+      analyse( $sequence, $quality, $FIRST_READ);
+    }
   }
-  close( $st_pipe );
-}
-
-
-
-
-
-
-
-# 
-# 
-# 
-# Kim Brugger (16 Jul 2010)
-sub read_fq {
-  my ( $infile ) = @_;
+  close( $pipe );
   
-  open (my $fastq, " $infile") || die "Could not open '$infile': $!\n";
-
-  while (<$fastq>) {
-
-    my $name   = $_;
-    chomp( $name );
-    my $seq    = <$fastq>;
-    chomp( $seq );
-    my $strand = <$fastq>;
-    chomp( $strand );
-    my $qual   = <$fastq>;
-    chomp( $qual );
-    
-    analyse($seq, $qual);
-    
-
-#    last if (--$limit <=0 );
-    
-  }
-  close( $fastq);
-
-
 }
+
+
 
 
 
@@ -262,48 +353,140 @@ sub read_fq {
 # 
 # Kim Brugger (16 Jul 2010)
 sub analyse {
-  my ( $seq, $qual, $isize, $mapped) = @_;
+  my ( $seq, $qual, $read_type) = @_;
 
-  $reads++;
+  $read_type ||= 0;
 
-  $mapped_reads++   if ( defined $mapped && $mapped ==  $MAPPED_READ );
-  $unmapped_reads++ if ( defined $mapped &&  $mapped ==  $UNMAPPED_READ );
-      
-
-  
-  my @seq = split("", $seq);
+  my @seq  = split("", $seq);
   my @qual = split("", $qual);
 
-  my ( $GC, $AT) = (0,0);
+  my ( $GC, $AT);
 
   for(my $i = 0; $i < @seq; $i++) {
     my $base = uc($seq[$i]);
     my $base_qual = ord($qual[$i]) - 33;
 
-    $base_dist[$i]{$base}++ if (!$solid || defined $mapped && $mapped ==  $MAPPED_READ );
-
     $GC++ if ( $base eq 'G' || $base eq 'C');
     $AT++ if ( $base eq 'A' || $base eq 'T');
 
-    $base_qual[$i] += $base_qual;
-    $base_qual_dist{$base_qual}++;
+    $base_qual[ $read_type   ][$i] += $base_qual;
+    $base_qual[ $ALL_READS   ][$i] += $base_qual;
+    $base_qual[ $MAPPED_READ ][$i] += $base_qual if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
 
-    if ( defined $mapped && $mapped == $MAPPED_READ ) {
-      $mapped_base_dist[$i]{$base}++;
-      $mapped_base_qual[$i] += $base_qual;
-      $mapped_base_qual_dist{$base_qual}++;
-    }
-    elsif ( defined $mapped &&  $mapped ==  $UNMAPPED_READ ) {
-      $unmapped_base_dist[$i]{$base}++ if ( ! $solid );
-      $unmapped_base_qual[$i] += $base_qual;
-      $unmapped_base_qual_dist{$base_qual}++;
-    }
+    $base_qual_dist{ $read_type   }{$base_qual}++;
+    $base_qual_dist{ $ALL_READS   }{$base_qual}++;
+    $base_qual_dist{ $MAPPED_READ }{$base_qual}++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
+
+    $base_dist[ $read_type ][$i]{$base}++;
+    $base_dist[ $ALL_READS ][$i]{$base}++;
+    $base_dist[ $MAPPED_READ ][$i]{$base}++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
   }
 
-  $GC{ int( $GC*100/($GC+$AT))}++;
+  if ( $AT && $GC  ) {
+    
+    my $perc_GC = int( $GC*100/($GC+$AT));
+    
+    $perc_GC = int($perc_GC/5) * 5;
 
+    $GC{ $read_type }{ $perc_GC }++ if ( $AT+$GC > 0 );
+    $GC{ $ALL_READS }{ $perc_GC }++;
+    $GC{ $MAPPED_READ }{ $perc_GC }++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
+  }
 }
 
 
+
+
+
+sub validate_reference {
+
+  my @errors;
+
+  my @bwa_postfixes = ('amb', 'ann', 'bwt', 'pac', 'rbwt', 'rpac', 'rsa', 'sa');
+
+  push @bwa_postfixes, ( 'nt.amb', 'nt.ann', 'nt.pac')  if ( $platform eq "SOLID");
+
+
+  # Things related to the reference sequence being used.
+  
+  my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
+  foreach my $bwa_postfix ( @bwa_postfixes ) {
+    push @errors, "$reference.$bwa_postfix does not exists. Did you run bwa index on $reference?"
+	if ( ! -e "$reference.$bwa_postfix");
+  }
+
+
+  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
+
+  # print the messages and die if critical ones.
+  die join("\n", @errors) . "\n"   if ( @errors );
+}
+
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (03 Aug 2010)
+sub sample {
+  my ($infile, $outfile, $limit) = @_;
+
+  $limit ||= 1;
+
+  my $compressed = 0;
+  if ( $infile =~ /gz\z/) {
+    $infile =~ s/.gz//;
+    print "infile --> $infile\n";
+    print STDERR "Un-compressing the fq file\n";
+    $compressed++;
+    system "gunzip $infile";
+  }
+
+  open (my $out, "> $outfile") || die "Could not open '$outfile' for writing: $!\n";
+
+  my %used;
+
+  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile);
+
+  open (my $file, $infile) || die "Could not open '$infile': $!\n";
+  my $read = 0;
+  my $goal = $limit*1048576;
+  if ( $goal >= $size ) {
+    system "cp $infile $outfile";
+    return;
+  }
+
+  while( $goal > $read ) {
+    
+    my $random_pos = int(rand($size));
+#    print "going to $random_pos\n";
+    seek( $file, $random_pos, 0);
+    while ( <$file> ) {
+      last if ( $_ =~ /^\@/);
+    }
+    
+    if ($_ &&  $_ =~ /^\@\w+:/ && !$used{ $_ }) {
+      my $name = $_;
+      my $seq  = <$file>;
+      my $str  = <$file>;
+      my $qual = <$file>;
+      
+      print $out join("", $name, $seq, $str, $qual);
+      $read += length("$name$seq$str$qual");
+      $used{$file}++;
+    }
+    
+    
+  }
+  
+  
+  if ($compressed) {
+    print STDERR "Recompressing the fq file\n";
+#    system "gunzip $infile";
+  }
+
+}
 
 

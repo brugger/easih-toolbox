@@ -48,6 +48,8 @@ our %analysis = ('csfasta2fastq'    => { function   => 'csfasta2fastq',
 		 'get_unmapped'      => { function   => 'EASIH::JMS::Samtools::get_unmapped',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
+		 'unmapped_bam2fq'   => { function   => 'bam2fq',
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=01:00:00"},
 
 		 '2nd-aln'           => { function   => 'bwa_aln_loose',
 				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
@@ -138,7 +140,8 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 	      'std-merge'        => ['get_unmapped', 'get_mapped'],
 
 	      'get_mapped'       => 'mapped_merge',
-	      'get_unmapped'     => '2nd-aln',
+	      'get_unmapped'     => 'unmapped_bam2fq',
+	      'unmapped_bam2fq'  => '2nd-aln',
 	      '2nd-aln'          => '2nd-generate',
 	      '2nd-generate'     => '2nd-sam2bam',
 	      '2nd-sam2bam'      => 'mapped_merge',
@@ -166,7 +169,7 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('i:b:f:n:hlr:g:a:m:a:d:o:p:', \%opts);
+getopts('i:b:f:n:hlr:g:a:m:a:d:o:p:R:', \%opts);
 
 # if ( $opts{ r} ) {
 #   EASIH::JMS::restore_state($opts{r});
@@ -176,11 +179,11 @@ getopts('i:b:f:n:hlr:g:a:m:a:d:o:p:', \%opts);
 
 my $infile      = $opts{'i'} || $opts{'g'} || usage();
 my $bam_file    = $opts{'b'} || usage();
-my $reference   = $opts{'f'} || usage();
+my $reference   = $opts{'R'} || usage();
 my $split       = $opts{'n'} || 10000000;
 my $align_param = $opts{'a'} || ' ';
 my $dbsnp       = $opts{'d'} || usage();
-my $filters     = $opts{'f'} || usage();
+my $filters     = $opts{'f'} || "";
 my $report      = $opts{'o'} || usage();
 
 my $readgroup = $opts{'r'};
@@ -196,8 +199,8 @@ my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $solid2fq     = EASIH::JMS::Misc::find_program('solid2fastq.pl');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk        = EASIH::JMS::Misc::find_program('gatk ');
-
+my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
+my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
 
@@ -246,6 +249,8 @@ sub validate_input {
 
   push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
   push @errors, "'$dbsnp' does end with .rod as expected\n" if ($dbsnp !~ /.rod\z/);
+
+  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
 
 
   # print the messages and die if critical ones.
@@ -331,24 +336,6 @@ sub bwa_aln {
   }
 }
 
-sub bwa_aln_loose {
-  my ($input) = @_;
-  
-  $input = $opts{'g'} if ($opts{'g'});
-  $input =~ s/\.\z//;
-
-  my @inputs = glob "$input";
-
-  return if ( ! @inputs );
-
-  foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".sai");
-    my $cmd = "$bwa aln $align_param -e5 -t5  -f $tmp_file $reference $input ";
-    EASIH::JMS::submit_job($cmd, "$tmp_file $input");
-  }
-}
-
-
 
 sub bwa_generate {
   my ($input) = @_;
@@ -357,6 +344,30 @@ sub bwa_generate {
   my $cmd = "$bwa samse -f $tmp_file $reference $input  ";
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
+
+# 
+# 
+# 
+# Kim Brugger (04 Aug 2010)
+sub bam2fq {
+  my ($input) = @_;
+
+  my $tmp_file = EASIH::JMS::tmp_file(".fq");
+  my $cmd = "$samtools view $input | $sam2fq > $tmp_file ";
+  EASIH::JMS::submit_job($cmd,  $tmp_file);
+}
+
+
+
+sub bwa_aln_loose {
+  my ($input) = @_;
+  
+  my $tmp_file = EASIH::JMS::tmp_file(".sai");
+  my $cmd = "$bwa aln $align_param -e5 -t5  -f $tmp_file $reference $input ";
+  EASIH::JMS::submit_job($cmd, "$tmp_file $input");
+}
+
+
 
 # 
 # Adds readgroup & aligner tags to the sam-file.
@@ -487,11 +498,13 @@ sub identify_snps {
 sub filter_snps {
   my ($input) = @_;
 
+  my ($input_file, $region) = split(" ", $input);
+
   my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
 
-  my $entries = `egrep -cv \# $input`;
+  my $entries = `egrep -cv \# $input_file`;
   chomp( $entries );
-
+  print "snp entries: $entries\n";
   return if ( $entries == 0 );
 
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
@@ -537,7 +550,7 @@ sub rescore_snps {
   my ($input) = @_;
 
   $report =~ s/.vcf\z//;
-  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report.snps.vcf --target_titv 3.0 ";
+  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report.snps --target_titv 3.0 ";
   EASIH::JMS::submit_system_job($cmd, $report);
 }		
 

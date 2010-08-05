@@ -86,23 +86,9 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
     push @line, $$indel{support} . "/". $$indel{depth};
     
     my $effects = indel_effect($chr, $start, $end, "$$indel{variation}/$$indel{type}");
-    
-    if ( $effects ) {
-      
-      foreach my $effect ( @$effects ) {
-	
-	my @effect_line;
-	push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
-	push @effect_line, ($$effect{ position } || "");
-	push @effect_line, ($$effect{ cpos } || "");
-	push @effect_line, ($$effect{ ppos } || "");
-	
-	print join("\t", @line, @effect_line) . "\n";
-      }
-    }
-    else {
-      print join("\t", @line) . "\n";
-    }
+
+
+    print_results( \@line, $effects );
     
   }
 
@@ -110,6 +96,179 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
 #  last;
 }
 
+
+# 
+# 
+# 
+# Kim Brugger (08 Jul 2010)
+sub print_results {
+  my ( $mapping, $effects ) = @_;
+
+  if ( $full_report ) {
+    print_fullreport($mapping, $effects );
+  }    
+  else { #if ( !$full_report ) {
+    print_oneliner($mapping, $effects );
+  }
+}
+
+my ($printed_header) = (0);
+
+
+# 
+# 
+# 
+# Kim Brugger (05 Aug 2010)
+sub print_fullreport {
+  my ( $mapping, $effects ) = @_;
+
+  if ( ! $printed_header++ ) {
+    print table_start(1) if ( $html_out);
+  }
+  
+  my @res;
+
+  push @res, [@$mapping]; 
+
+  if ( @$effects ) {
+      
+    foreach my $effect ( @$effects ) {
+      
+      my @effect_line;
+      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+      push @effect_line, ($$effect{ position } || "");
+      push @effect_line, ($$effect{ cpos } || "");
+      push @effect_line, ($$effect{ ppos } || "");
+      
+      push @res, ["","", @effect_line];
+    }
+  }
+
+  if (  $html_out ) {
+    print html_table(\@res, 1);
+  }
+  else {
+    print text_table(\@res, 1);
+  }
+
+}
+
+
+
+
+sub print_oneliner {
+  my ( $mapping, $effects ) = @_;
+
+  my @res;
+  if ( ! $printed_header++ ) {
+    print table_start(1) if ( $html_out);
+    
+    push @res, ['position', 'change', 'base(s)', 'evidence/depth','gene', 'transcript', 'region', 'codon pos', 'protein pos' ];
+
+  }
+
+  if ( @$effects ) {
+      
+    foreach my $effect ( @$effects ) {
+      
+      my @effect_line;
+      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+      push @effect_line, ($$effect{ position } || "");
+      push @effect_line, ($$effect{ cpos } || "");
+      push @effect_line, ($$effect{ ppos } || "");
+      
+      push @res, [ @$mapping, @effect_line];
+    }
+  }
+  else {
+    push @res, [ @$mapping];
+  }
+
+
+  if (  $html_out ) {
+    print html_table(\@res, 1);
+  }
+  else {
+    print text_table(\@res, 1);
+  }
+
+}
+
+
+#
+# Creates a simple table, the function expects an array of arrays, and a border or not flag.
+# 
+# Kim Brugger (20 Oct 2003)
+sub text_table {
+  my ($cells) = @_;
+
+
+  my $return_string = "";
+  foreach my $line ( @$cells ) {
+    $return_string .= join("\t", @$line) . "\n";
+  }
+
+  return $return_string;
+}
+
+
+sub table_start {
+  my ($border, $padding, $spacing, $bgcolour, $width, $class) = @_;
+  
+  my $return_string .= "<TABLE";
+  $return_string .= " border='$border'"        if $border;
+  $return_string .= " cellspacing='$spacing'"  if $spacing;
+  $return_string .= " cellpadding='$padding'"  if $padding;
+  $return_string .= " bgcolor='$bgcolour'"     if $bgcolour;
+  $return_string .= " width='$width'"          if $width;
+  $return_string .= " class='$class'"          if $class;
+  $return_string .= " >\n";
+
+  return $return_string;
+}
+
+sub table_end {
+  return "</TABLE>\n";
+
+}
+
+
+#
+# Creates a simple table, the function expects an array of arrays, and a border or not flag.
+# 
+# Kim Brugger (20 Oct 2003)
+sub html_table {
+  my ($cells,     # the cells as an array of arrays of values.
+      $border,    # border or not.
+      $padding,   # how big the cells are (padded around the text).
+      $spacing,   # how the cells should be spaced
+      $bgcolour,  # the colour of the table.
+      $tablewidth, # how wide the table should be, this is a string, so we can handle both pixel width and percentages
+      ) = @_;
+
+
+  my $width = 0;
+  foreach my $row (@$cells) {
+    $width = @$row if ($width < @$row);
+  }
+
+#  my $return_string = table_start($border, $padding, $spacing, $bgcolour, $tablewidth);
+
+  my $return_string = "";
+
+  foreach my $row (@$cells) {
+    
+    $return_string .= "  <TR>";
+    for (my $i=0; $i<$width;$i++) {
+      $$row[$i] = "&nbsp;" if (!$$row[$i]);
+      $return_string .= "<TD>$$row[$i]</TD>" 
+    }
+    $return_string .= "</TR>\n";
+  }
+
+
+  return $return_string;
+}
 
 
 

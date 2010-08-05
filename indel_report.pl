@@ -44,8 +44,8 @@ my $from_36     = $opts{T} || 0;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
 
-my $dbsnp_link    = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
+my $ens_trans_link = 'http://www.ensembl.org/Homo_sapiens/Transcript/Summary?db=core;t=';
 
 my ($mapper, $asma, $csa, $cs_from, $cs_to);
 if ( $from_36 ) {
@@ -135,7 +135,31 @@ sub print_fullreport {
     foreach my $effect ( @$effects ) {
       
       my @effect_line;
-      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+      my $gene_id;
+      $gene_id = "$$effect{ external_name }/$$effect{ stable_id }" if ($$effect{ external_name } && 
+								       $$effect{ stable_id } );
+
+      $gene_id = "$$effect{ stable_id }" if (!$$effect{ external_name } && 
+					     $$effect{ stable_id } );
+	
+      $gene_id = "<a href='$ens_gene_link$$effect{ stable_id }'>$gene_id</a>"
+	  if ( $gene_id && $html_out && $$effect{ stable_id });
+	
+      push @effect_line, $gene_id;
+
+      my $trans_id = "";
+	
+      $trans_id = "$$effect{ xref }/$$effect{ transcript_id }" if ($$effect{ xref } && 
+								   $$effect{ transcript_id } );
+      
+      $trans_id = "$$effect{ transcript_id }" if (!$$effect{ xref } && 
+						  $$effect{ transcript_id } );
+      
+      $trans_id = "<a href='$ens_trans_link$$effect{ transcript_id }'>$trans_id</a>"
+	  if ( $trans_id && $html_out && $$effect{ transcript_id });
+	
+	
+      push @effect_line, $trans_id;
       push @effect_line, ($$effect{ position } || "");
       push @effect_line, ($$effect{ cpos } || "");
       push @effect_line, ($$effect{ ppos } || "");
@@ -381,11 +405,8 @@ sub indel_effect {
 	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
 
 	  
-	  if ( $$xref[0] ) {
-	  
-	    $gene_res{ xref } = $$xref[0]->display_id;
-	    $gene_res{ transcript_id} = join("/",$gene_res{ xref },$gene_res{ transcript_id});
-	  }
+	  $gene_res{ xref } = $$xref[0]->display_id
+	      if ( $$xref[0] );
 
 	  $gene_res{ cpos } = "";
 	  $gene_res{ ppos } = "";

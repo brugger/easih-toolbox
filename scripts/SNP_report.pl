@@ -46,7 +46,7 @@ my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 my %slice_hash = ();
 
 
-my $gatk        = $opts{v};
+my $vcf         = $vcf{v};
 #my $pileup      = $opts{p};
 my $bam         = $opts{b};
 my $regulation  = $opts{r} || 0;
@@ -86,7 +86,7 @@ my $samtools = `which samtools`;
 chomp( $samtools);
 
 #readin_pileup( $pileup ) if ( $pileup);
-readin_cvf( $gatk )      if ( $gatk);
+readin_cvf( $vcf )      if ( $vcf);
 
 my %reports;
 
@@ -956,6 +956,8 @@ sub readin_cvf {
     my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
 
     next if ( defined $min_qual && $min_qual > $qual);
+
+    next if ( $filter ne "PASS" );
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);

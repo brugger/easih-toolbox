@@ -89,9 +89,8 @@ our %analysis = ('csfasta2fastq'    => { function   => 'csfasta2fastq',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 					 sync       => 1},
 
-
 		 'realigned_rename'     => { function   => 'rename'},
-		 
+
 		 
 		 'realigned_sort'    => { function   => 'EASIH::JMS::Picard::sort',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
@@ -177,113 +176,52 @@ getopts('i:b:f:n:hlr:g:a:m:a:d:o:p:R:', \%opts);
 # }
 
 
-my $infile      = $opts{'i'} || $opts{'g'} || usage();
-my $bam_file    = $opts{'b'} || usage();
+my $first       = $opts{'1'} || usage();
+my $second      = $opts{'2'} || usage();
+my $no_split    = $opts{'n'} || 0;
+my $split       = $opts{'m'} || 5000000;
+
 my $reference   = $opts{'R'} || usage();
-my $split       = $opts{'n'} || 10000000;
-my $align_param = $opts{'a'} || ' ';
+my $align_param = ' ';
 my $dbsnp       = $opts{'d'} || usage();
-my $filters     = $opts{'f'} || "";
+my $filters     = $opts{'f'} || "default";
 my $report      = $opts{'o'} || usage();
+my $bam_file    = "$report.bam" || usage();
 
-my $readgroup = $opts{'r'};
-my $platform  = uc($opts{'p'}) || usage();
+my $readgroup   = $opts{'r'} || $report;
+my $platform    = uc($opts{'p'}) || usage();
+$platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 
-
-$platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
-$align_param .= " -c " if ( $platform eq "SOLID");
-
+# set platform specific bwa aln parameters
+$align_param .= " -c "    if ( $platform eq "SOLID");
+$align_param .= " -q 15 " if ( $platform eq "SOLEXA");
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
-my $solid2fq     = EASIH::JMS::Misc::find_program('solid2fastq.pl');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
 my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
 
-#my $solid2fq  = '/home/kb468/bin/solid2fastq.pl';
-#my $bwa       = '/home/easih/bin/bwa';
-#my $samtools  = '/home/easih/bin/samtools';
-#my $fq_split  = '/home/kb468/bin/fastq_split.pl';
-
-
-# 
-# Ensure that the reference and it auxiliary files are all present.
-# 
-# Kim Brugger (02 Aug 2010)
-sub validate_input {
-  
-  my @errors;
-  my @info;
-
-  # Things related to the reference sequence being used.
-  
-  push @errors, "GATK expects references to end with 'fasta'." 
-      if ( $reference !~ /fasta\z/);
-
-  my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
-  
-  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
-      if ( ! -e "$dir/$basename.dict");
-  
-  my @bwa_postfixes = ('amb', 'ann', 'bwt', 'fai','pac', 'rbwt', 'rpac', 'rsa', 'sa');
-
-  push @bwa_postfixes, ( 'nt.amb', 'nt.ann', 'nt.pac')  if ( $platform eq "SOLID");
-  
-  foreach my $bwa_postfix ( @bwa_postfixes ) {
-    push @errors, "$reference.$bwa_postfix does not exists. Did you run bwa index on $reference?"
-	if ( ! -e "$reference.$bwa_postfix");
-  }
-
-
-  # Check that the bam_file ends with bam, or add it
-
-  if ( $bam_file !~ /bam\z/) {
-    push @info, "Added bam postfix so '$bam_file' becomes '$bam_file.bam'";
-    $bam_file .= ".bam";
-  }
-
-
-  push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
-  push @errors, "'$dbsnp' does end with .rod as expected\n" if ($dbsnp !~ /.rod\z/);
-
-  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
-
-
-  # print the messages and die if critical ones.
-  die join("\n", @errors) . "\n"   if ( @errors );
-  print  join("\n", @info) . "\n"   if ( @info );
-}
-
-
-
-
-
 #EASIH::JMS::verbosity(10);
-
-#EASIH::JMS::dry_run('csfasta2fastq');
-#exit;
 EASIH::JMS::hive('Darwin');
 
 
-if ( $opts{'g'} ) {
-  
+if ( $no_split ) {
   &EASIH::JMS::run('std-aln');
-#  &EASIH::JMS::run('SAM2BAM');
-  
 }
 else {
-  &EASIH::JMS::run('csfasta2fastq');
+  &EASIH::JMS::run('fastq_split');
 }
 
 &EASIH::JMS::store_state();
 
-my $extra_report = "infile ==> $infile\n";
+my $extra_report = "1 ==> $first\n";
+$extra_report .= "2 ==> $second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
-$extra_report .= "align_param ==> $align_param\n";
+$extra_report .= "align_param ==> $align_param + -e5 -t5 for second round aligning\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
@@ -291,28 +229,17 @@ $extra_report .= `ls -l $bwa` . "\n";
 EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
 
 
-
-sub csfasta2fastq {
-  my ($input) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file();
- 
-  my $cmd = "$solid2fq";
-  $cmd .= " -n $split " if ( $split );
-  $cmd .= "$infile $tmp_file";
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-
 sub fastq_split {
   my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file();
  
-  my $cmd = "$solid2fq";
-  $cmd .= " -n $split " if ( $split );
-  $cmd .= "$infile $tmp_file";
+  my $cmd = "$fq_split -n $split ";
+
+  $cmd .= " $first $second"  if ( $first && $second);
+  $cmd .= " $first "  if ( $first && !$second);
+
+  $cmd .= " > $tmp_file";
 
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
@@ -321,18 +248,42 @@ sub fastq_split {
 
 sub bwa_aln {
   my ($input) = @_;
+
   
-  $input = $opts{'g'} if ($opts{'g'});
-  $input =~ s/\.\z//;
+  if ( $no_split ) {
+    
+    if ( $first && $second ) {
+      my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+      my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+      my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $first ;";
+      $cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $second ";
+      EASIH::JMS::submit_job($cmd, "$first_tmp_file $second_tmp_file $first $second");
+    }
+    else {
+      my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+      my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $input ";
+      EASIH::JMS::submit_job($cmd, "$tmp_file $input");
+    }
+  }
+  else {
 
-  my @inputs = glob "$input";
-
-  return if ( ! @inputs );
-
-  foreach my $input ( @inputs ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".sai");
-    my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $input ";
-    EASIH::JMS::submit_job($cmd, "$tmp_file $input");
+    open (my $files, $input) || die "Could not open '$input': $!\n";
+    while (<$files>) {
+      my ($file1, $file2) = split("\t", $_);
+      
+      if ( $file1 && $file1 ) {
+	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $file1 ;";
+	$cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $file2 ";
+	EASIH::JMS::submit_job($cmd, "$first_tmp_file $second_tmp_file $file1 $file2");
+      }
+      else {
+	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $file1 ";
+	EASIH::JMS::submit_job($cmd, "$tmp_file $file1");
+      }
+    }
   }
 }
 
@@ -341,7 +292,17 @@ sub bwa_generate {
   my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file(".sam");
-  my $cmd = "$bwa samse -f $tmp_file $reference $input  ";
+  
+  my @params = split(" ", $input);
+  my $cmd;
+  if ( @params == 4 ) {
+    $cmd = "$bwa sampe -f $tmp_file $reference $input  ";
+  
+  }
+  else {
+    $cmd = "$bwa samse -f $tmp_file $reference $input  ";
+  }
+
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
@@ -377,7 +338,7 @@ sub sam_add_tags {
   my ($input) = @_;
 
   if ( ! $readgroup ) {
-    $readgroup = $infile;
+    $readgroup = $first;
     $readgroup =~ s/.fastq//;
     $readgroup =~ s/.fq//;
     $readgroup =~ s/.gz//;
@@ -555,13 +516,64 @@ sub rescore_snps {
 }		
 
 
+
+
+# 
+# Ensure that the reference and it auxiliary files are all present.
+# 
+# Kim Brugger (02 Aug 2010)
+sub validate_input {
+  
+  my @errors;
+  my @info;
+
+  # Things related to the reference sequence being used.
+  
+  push @errors, "GATK expects references to end with 'fasta'." 
+      if ( $reference !~ /fasta\z/);
+
+  my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
+  
+  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
+      if ( ! -e "$dir/$basename.dict");
+  
+  my @bwa_postfixes = ('amb', 'ann', 'bwt', 'fai','pac', 'rbwt', 'rpac', 'rsa', 'sa');
+
+  push @bwa_postfixes, ( 'nt.amb', 'nt.ann', 'nt.pac')  if ( $platform eq "SOLID");
+  
+  foreach my $bwa_postfix ( @bwa_postfixes ) {
+    push @errors, "$reference.$bwa_postfix does not exists. Did you run bwa index on $reference?"
+	if ( ! -e "$reference.$bwa_postfix");
+  }
+
+
+  # Check that the bam_file ends with bam, or add it
+  if ( $bam_file !~ /bam\z/) {
+    push @info, "Added bam postfix so '$bam_file' becomes '$bam_file.bam'";
+    $bam_file .= ".bam";
+  }
+
+
+  push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
+  push @errors, "'$dbsnp' does end with .rod as expected\n" if ($dbsnp !~ /.rod\z/);
+
+  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
+
+
+  # print the messages and die if critical ones.
+  die join("\n", @errors) . "\n"   if ( @errors );
+  print  join("\n", @info) . "\n"   if ( @info );
+}
+
+
 # 
 # 
 # 
 # Kim Brugger (22 Apr 2010)
 sub usage {
-  
-  print "Not the right usage, please look at the code\n";
+
+  $0 =~ s/.*\///;
+  print "USAGE: $0 -1 [fastq file]  -2 [fastq file]  -n[o splitting of fastq file(s)] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n";
   exit;
 
 }

@@ -16,9 +16,12 @@
 use strict;
 use warnings;
 use Getopt::Std;
+use Data::Dumper;
 
 my %opts;
-getopts('p:o:n:h');
+getopts('p:o:nh', \%opts);
+
+usage() if ($opts{h});
 
 my $prefix   = $opts{p} || usage();
 my $out      = $opts{o} || usage();
@@ -26,25 +29,29 @@ my $out      = $opts{o} || usage();
 my $compress = $opts{n} ? 0 : 1;
 
 # strip away the (F3/R3).* postfixes so we are sure to have the correct basename
-$prefix[0] =~ s/F3.*//;
-$prefix[0] =~ s/R3.*//;
+$prefix =~ s/F3.*//;
+$prefix =~ s/R3.*//;
 
-usage() if ($opts{h} || (!$opts);
-my ($title, $pre) = @ARGV;
 my (@fhr, @fhw);
 my @fn_suff = ('F3.csfasta', 'F3_QV.qual', 'R3.csfasta', 'R3_QV.qual');
-my $is_paired = (-f "$title$fn_suff[2]" || -f "$title$fn_suff[2].gz")? 1 : 0;
+my $is_paired = (-f "$prefix$fn_suff[2]" || -f "$prefix$fn_suff[2].gz")? 1 : 0;
 if ($is_paired) { # paired end
   for (0 .. 3) {
-	my $fn = "$title$fn_suff[$_]";
+	my $fn = "$prefix$fn_suff[$_]";
 	$fn = "gzip -dc $fn.gz |" if (!-f $fn && -f "$fn.gz");
 	open($fhr[$_], $fn) || die("** Fail to open '$fn'.\n");
   }
   
   # for bwa to work with csfasta files, the R3 should be read1 and F3 read2. This is 
   # counter intuitive, but that is Chinese logic for you!
-  open($fhw[0], "|gzip >$pre.2.fastq.gz")  || die; # this is NOT a typo
-  open($fhw[1], "|gzip >$pre.1.fastq.gz")  || die;
+  if ( $compress ) {
+    open($fhw[0], "|gzip >$out.2.fastq.gz")  || die; # this is NOT a typo
+    open($fhw[1], "|gzip >$out.1.fastq.gz")  || die;
+  }
+  else {
+    open($fhw[0], " >$out.2.fastq")  || die; # this is NOT a typo
+    open($fhw[1], " >$out.1.fastq")  || die;
+  }
   
   my (@df, @dr);
   @df = &read1(1); 
@@ -75,12 +82,16 @@ if ($is_paired) { # paired end
 } else { # single end
 
   for (0 .. 1) {
-    my $fn = "$title$fn_suff[$_]";
+    my $fn = "$prefix$fn_suff[$_]";
     $fn = "gzip -dc $fn.gz |" if (!-f $fn && -f "$fn.gz");
     open($fhr[$_], $fn) || die("** Fail to open '$fn'.\n");
   }
-  open($fhw[2], "| gzip >$pre.1.fastq.gz") || die;
-
+  if ( $compress ) {
+    open($fhw[2], "| gzip >$out.1.fastq.gz") || die;
+  }
+  else {
+    open($fhw[2], " >$out.1.fastq") || die;
+  }
 
   my @df;
   while (@df = read1(1, $fhr[0], $fhr[1])) {
@@ -92,7 +103,7 @@ if ($is_paired) { # paired end
 }
 
 #
-# uptimized ky kb468
+# optimized ky kb468
 #
 sub read1 {
   my $i = shift(@_);
@@ -104,7 +115,7 @@ sub read1 {
 	if (/^>(\d+)_(\d+)_(\d+)_[FR]3/) {
 	  $key = sprintf("%.4d_%.4d_%.4d", $1, $2, $3); # this line could be improved on 64-bit machines
 	  die(qq/** unmatched read name: '$_' != '$t'\n/) unless ($_ eq $t);
-	  my $name = "$pre:$1_$2_$3/$i";	  
+	  my $name = "$out:$1_$2_$3/$i";	  
 	  $_ = substr(<$fhs>, 2);
 	  tr/0123./ACGTN/;
 	  my $s = $_;

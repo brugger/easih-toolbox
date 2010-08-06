@@ -28,7 +28,7 @@ getopts('s:v:pb:Tq:m:Hfrh', \%opts);
 usage() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 5;
+my $buffer_size = 100;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -46,8 +46,7 @@ my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 my %slice_hash = ();
 
 
-my $vcf         = $vcf{v};
-#my $pileup      = $opts{p};
+my $vcf         = $opts{v} || usage();
 my $bam         = $opts{b};
 my $regulation  = $opts{r} || 0;
 my $pfam        = $opts{p} || 0;
@@ -86,7 +85,8 @@ my $samtools = `which samtools`;
 chomp( $samtools);
 
 #readin_pileup( $pileup ) if ( $pileup);
-readin_cvf( $vcf )      if ( $vcf);
+readin_vcf( $vcf )      if ( $vcf);
+
 
 my %reports;
 
@@ -95,18 +95,13 @@ my @vfs;
 
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
-  # Hack so we only look at chrX for develop purposes
-  $chr = 'chrX';
-
-
   my %res;
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
- 
+        
     
     my $position = "$chr:$pos";
     
-
     my @keys = keys %{$SNPs{$chr}{$pos}};
 
     @keys = grep(!/ref_base/, @keys);
@@ -123,7 +118,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
       my $Echr = $chr;
       $Echr =~ s/chr//;
-      my $Epos;
+      my $Epos = $pos;
       ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
       
       next if ( ! $Echr );
@@ -151,7 +146,6 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	print_results( \%res, $effects);
 	@vfs = ();
 	%res = ();
-#	last;
       }
       
 
@@ -168,7 +162,6 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
   }
 
 
-  last;
 }
 
 
@@ -545,6 +538,7 @@ sub variation_effects {
   # get consequences
   # results are stored attached to reference VF objects
   # so no need to capture return value here
+#  print Dumper( $var_features );
   $tva->fetch_all_by_VariationFeatures( $var_features );
   foreach my $vf (@$var_features) {    
 
@@ -945,7 +939,7 @@ sub subtract_reference {
 # 
 # 
 # Kim Brugger (28 Apr 2010)
-sub readin_cvf {
+sub readin_vcf {
   my ($file) = @_;
   open (my $in, $file) || die "Could not open '$file': $!";
 
@@ -955,9 +949,9 @@ sub readin_cvf {
     
     my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
 
-    next if ( defined $min_qual && $min_qual > $qual);
+#    next if ( defined $min_qual && $min_qual > $qual);
 
-    next if ( $filter ne "PASS" );
+    next if ( $filter ne "PASS" && $filter ne "." );
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);

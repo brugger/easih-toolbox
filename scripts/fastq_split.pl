@@ -8,30 +8,39 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
+use Getopt::Std;
 
 
-my $entries = 10000000; # 10 mill.
+my %opts;
+getopts('1:2:e:p:h');
+
+my $entries     = $opts{'e'} || 10000000; # 10 mill.
+my $first_file  = $opts{'1'} || usage();
+my $second_file = $opts{'2'} || usage();
 my $prefix;
+usage() if ( $opts{h});
 
-my $hm = GetOptions('entries:n'   => \$entries,
+my $hm = GetOptions('e:n'   => \$entries,
 		    'prefix:s'    => \$prefix);
 
-my $infile = shift || usage();
-$prefix = $infile . "_split" if ( ! $prefix);
+
+
+
+$prefix = $first_file . ".split" if ( ! $prefix);
 my $file_counter  = 1;
 my $entry_counter = 0;
 
 
-open (my $fastq, " $infile") || die "Could not open '$infile': $!\n";
+open (my $first,  " $first_file") || die "Could not open '$first_file': $!\n";
+open (my $second, " $second_file") || die "Could not open '$second_file': $!\n" if ( $second_file );
 open (my $outfile, "> $prefix." . $file_counter) || die "could not open '$prefix$file_counter': $!\n";
 print "$prefix.$file_counter\n";
 $file_counter++;
-while (<$fastq>) {
+while (<$first>) {
   
-  $_ .= <$fastq>;
-  $_ .= <$fastq>;
-  $_ .= <$fastq>;
+  $_ .= <$first>;
+  $_ .= <$first>;
+  $_ .= <$first>;
 
   print $outfile $_;
   
@@ -43,12 +52,13 @@ while (<$fastq>) {
     $entry_counter = 0;
   }
 }
-close( $fastq);
+close( $first);
+close( $second) if ( $second_file);
 close $outfile;
 
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 --entries <number, def=10mill> --prefix <name, def = [infile]_split.XX] fastq-file\n";
+  print "USAGE: $0 --entries <number, def=10mill> --prefix <name, def = [infile]_split.XX] -1 fq-file -2 fq-file\n";
   exit;
 }

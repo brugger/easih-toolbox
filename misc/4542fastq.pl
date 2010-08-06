@@ -26,11 +26,9 @@ while (<$fasta>) {
   chomp;
   my ($header, @sequence) = split /\n/;
   next if ( ! $header );
-  $header =~ s/^(\w+) .*/$1/;
+  $header =~ s/(\w+) .*/$1/;
   $seqs{ $header } = join('', @sequence);
 }
-close( $fasta);
-
 open (my $qual, "$qual_file") || die "Could not open '$qual_file': $!\n";
 open (my $fastq, "> $fastq_file") || die "Could not open '$fastq_file': $!\n";
 
@@ -40,6 +38,7 @@ while (<$qual>) {
   chomp;
   my ($header, @qualities) = split /\n/;
   next if ( ! $header );
+  $header =~ s/(\w+) .*/$1/;
   @qualities = split(" ",  join ' ', @qualities);
   print $fastq "\@"."$header\n$seqs{$header}\n+\n";
   my $fastq_line = "";

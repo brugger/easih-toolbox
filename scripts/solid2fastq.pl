@@ -180,7 +180,7 @@ sub read1 {
 	  s/-1/0/g;
 	  my $qual;
 	  map { $qual .= chr($_+33)} split(/\s+/);
-	  $seq = qq/\@$name\n$s+\n$qual/;
+	  $seq = qq/\@$name\n$s+\n$qual\n/;
 	  last;
 	}
   }

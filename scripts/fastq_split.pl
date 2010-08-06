@@ -12,53 +12,159 @@ use Getopt::Std;
 
 
 my %opts;
-getopts('1:2:e:p:h');
+getopts('1:2:e:nh', \%opts);
 
 my $entries     = $opts{'e'} || 10000000; # 10 mill.
 my $first_file  = $opts{'1'} || usage();
-my $second_file = $opts{'2'} || usage();
-my $prefix;
+my $second_file = $opts{'2'};
+my $compress = $opts{n} ? 0 : 1;
 usage() if ( $opts{h});
 
-my $hm = GetOptions('e:n'   => \$entries,
-		    'prefix:s'    => \$prefix);
-
-
-
-
-$prefix = $first_file . ".split" if ( ! $prefix);
 my $file_counter  = 1;
 my $entry_counter = 0;
+my (@rfh, @wfh);
 
+my $printed = 0;
 
-open (my $first,  " $first_file") || die "Could not open '$first_file': $!\n";
-open (my $second, " $second_file") || die "Could not open '$second_file': $!\n" if ( $second_file );
-open (my $outfile, "> $prefix." . $file_counter) || die "could not open '$prefix$file_counter': $!\n";
-print "$prefix.$file_counter\n";
-$file_counter++;
-while (<$first>) {
+if ( $first_file && $second_file ) {
+
+  open ($rfh[1], "gzip -dc $first_file |" )  || die "Could not open '$first_file': $!\n"  if ( $first_file =~ /gz/);
+  open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
+  open ($rfh[2], "gzip -dc $second_file |" ) || die "Could not open '$second_file': $!\n" if ( $second_file =~ /gz/);
+  open ($rfh[2], "$second_file" )            || die "Could not open '$second_file': $!\n" if ( $second_file !~ /gz/);
   
-  $_ .= <$first>;
-  $_ .= <$first>;
-  $_ .= <$first>;
+  if ( $compress ) {
+    open ($wfh[1], "| gzip -c  > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
+    open ($wfh[2], "| gzip -c  > $second_file.$file_counter.gz") || die "could not open '$second_file.$file_counter.gz': $!\n";
+    print "$first_file.$file_counter.gz\t$second_file.$file_counter.gz\n";
+  }
+  else {
+    open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
+    open ($wfh[2], "> $second_file.$file_counter") || die "could not open '$second_file.$file_counter': $!\n";
+    print "$first_file.$file_counter\t$second_file.$file_counter\n";
+  }  
+  $file_counter++;
 
-  print $outfile $_;
-  
-  if ( ++$entry_counter >= $entries ) {
-    close $outfile;
-    open ( $outfile, "> $prefix." . $file_counter) || die "could not open '$prefix.$file_counter': $!\n";
-    print "$prefix.$file_counter\n";
-    $file_counter++;
-    $entry_counter = 0;
+  my (@first, @second);
+  @first  = &read1($rfh[1]); 
+  @second = &read1($rfh[2]);
+  while (@first && @second) {
+
+    if ($first[0] eq $second[0]) { # mate pair
+      print {$wfh[1]} $first[1]; 
+      print {$wfh[2]} $second[1];
+      
+      @first = &read1($rfh[1]); 
+      @second = &read1($rfh[2]);
+    } 
+    else {
+      if ($first[0] le $second[0]) {
+	print {$wfh[1]} $first[1];
+	@first = &read1($rfh[1]);
+      } 
+      else {
+	print {$wfh[2]} $second[1];
+	@second = &read1($rfh[2]);
+      }
+    }
+
+    $printed++;
+
+    if ($printed >= $entries) {
+      close($wfh[1]);
+      close($wfh[2]);
+      
+      if ( $compress ) {
+	open ($wfh[1], "| gzip -c > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
+	open ($wfh[2], "| gzip -c > $second_file.$file_counter.gz") || die "could not open '$second_file.$file_counter.gz': $!\n";
+	print "$first_file.$file_counter.gz\t$second_file.$file_counter.gz\n";
+      }
+      else {
+	open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
+	open ($wfh[2], "> $second_file.$file_counter") || die "could not open '$second_file.$file_counter': $!\n";
+	print "$first_file.$file_counter\t$second_file.$file_counter\n";
+      }  
+      
+      $file_counter++;
+      $printed = 0;
+    }
+  }
+    
+
+  if (@first) {
+    print {$wfh[1]} $first[1];
+    while (@first = &read1($rfh[1])) {
+      print {$wfh[1]} $first[1];
+    }
+  }
+
+  if (@second) {
+    print {$wfh[2]} $second[1];
+    while (@second = &read1($rfh[2])) {
+      print {$wfh[2]} $second[1];
+    }
   }
 }
-close( $first);
-close( $second) if ( $second_file);
-close $outfile;
+else {
+
+  open ($rfh[1], "gzip -dc $first_file |" )  || die "Could not open '$first_file': $!\n"  if ( $first_file =~ /gz/);
+  open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
+
+  if ( $compress ) {
+    open ($wfh[1], "| gzip -c > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
+    print "$first_file.$file_counter.gz\n";
+  }
+  else {
+    open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
+    print "$first_file.$file_counter\n";
+  }  
+  $file_counter++;
+
+  while ( my @first  = &read1($rfh[1])) {
+
+    print {$wfh[1]} $first[1];
+    $printed++;
+
+
+    if ($printed >= $entries) {
+      close($wfh[1]);
+      
+      if ( $compress ) {
+	open ($wfh[1], "| gzip -c > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
+	print "$first_file.$file_counter.gz\n";
+      }
+      else {
+	open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
+	print "$first_file.$file_counter\n";
+      }  
+      
+      $file_counter++;
+      $printed = 0;
+    }
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Aug 2010)
+sub read1 {
+  my ( $read_handle, $match) = @_;
+
+  my $key = <$read_handle>;
+  return () if ( ! $key );
+  my $entry = $key . <$read_handle> . <$read_handle>. <$read_handle>;
+  chomp($key);
+  #chomp off /1|/2 id from the solid names
+  $key =~ s/\/[1|2]//;
+  return $key ? ($key, $entry) : ();
+}
+
 
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 --entries <number, def=10mill> --prefix <name, def = [infile]_split.XX] -1 fq-file -2 fq-file\n";
+  print "USAGE: $0 --entries <number, def=10mill>  -1 fq-file -2 fq-file\n";
   exit;
 }

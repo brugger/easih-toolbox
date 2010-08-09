@@ -177,7 +177,7 @@ getopts('i:b:f:n:hlr:g:a:m:a:d:o:p:R:', \%opts);
 
 
 my $first       = $opts{'1'} || usage();
-my $second      = $opts{'2'} || usage();
+my $second      = $opts{'2'};
 my $no_split    = $opts{'n'} || 0;
 my $split       = $opts{'m'} || 5000000;
 

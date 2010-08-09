@@ -325,8 +325,6 @@ sub bwa_generate {
 sub bam2fq {
   my ($input) = @_;
 
-  exit;
-
   my $tmp_file = EASIH::JMS::tmp_file(".fq");
   my $cmd = "$samtools view $input | $sam2fq > $tmp_file ";
   EASIH::JMS::submit_job($cmd,  $tmp_file);

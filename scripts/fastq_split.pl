@@ -12,12 +12,13 @@ use Getopt::Std;
 
 
 my %opts;
-getopts('1:2:e:nh', \%opts);
+getopts('1:2:e:nho:', \%opts);
 
 my $entries     = $opts{'e'} || 10000000; # 10 mill.
 my $first_file  = $opts{'1'} || usage();
 my $second_file = $opts{'2'};
 my $compress = $opts{n} ? 0 : 1;
+my $output_dir  = $opts{o} || "./";
 usage() if ( $opts{h});
 
 my $file_counter  = 1;
@@ -32,16 +33,18 @@ if ( $first_file && $second_file ) {
   open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
   open ($rfh[2], "gzip -dc $second_file |" ) || die "Could not open '$second_file': $!\n" if ( $second_file =~ /gz/);
   open ($rfh[2], "$second_file" )            || die "Could not open '$second_file': $!\n" if ( $second_file !~ /gz/);
+
+  system "mkdir $output_dir" if ( ! -d $output_dir);
   
   if ( $compress ) {
-    open ($wfh[1], "| gzip -c  > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
-    open ($wfh[2], "| gzip -c  > $second_file.$file_counter.gz") || die "could not open '$second_file.$file_counter.gz': $!\n";
-    print "$first_file.$file_counter.gz\t$second_file.$file_counter.gz\n";
+    open ($wfh[1], "| gzip -c  > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
+    open ($wfh[2], "| gzip -c  > $output_dir/$second_file.$file_counter.gz") || die "could not open '$output_dir/$second_file.$file_counter.gz': $!\n";
+    print "$output_dir/$first_file.$file_counter.gz\t$output_dir/$second_file.$file_counter.gz\n";
   }
   else {
-    open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
-    open ($wfh[2], "> $second_file.$file_counter") || die "could not open '$second_file.$file_counter': $!\n";
-    print "$first_file.$file_counter\t$second_file.$file_counter\n";
+    open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
+    open ($wfh[2], "> $output_dir/$second_file.$file_counter") || die "could not open '$output_dir/$second_file.$file_counter': $!\n";
+    print "$output_dir/$first_file.$file_counter\t$output_dir/$second_file.$file_counter\n";
   }  
   $file_counter++;
 
@@ -111,12 +114,12 @@ else {
   open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
 
   if ( $compress ) {
-    open ($wfh[1], "| gzip -c > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
-    print "$first_file.$file_counter.gz\n";
+    open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
+    print "$output_dir/$first_file.$file_counter.gz\n";
   }
   else {
-    open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
-    print "$first_file.$file_counter\n";
+    open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
+    print "$output_dir/$first_file.$file_counter\n";
   }  
   $file_counter++;
 
@@ -130,12 +133,12 @@ else {
       close($wfh[1]);
       
       if ( $compress ) {
-	open ($wfh[1], "| gzip -c > $first_file.$file_counter.gz")  || die "could not open '$first_file.$file_counter.gz': $!\n";
-	print "$first_file.$file_counter.gz\n";
+	open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
+	print "$output_dir/$first_file.$file_counter.gz\n";
       }
       else {
-	open ($wfh[1], "> $first_file.$file_counter")  || die "could not open '$first_file.$file_counter': $!\n";
-	print "$first_file.$file_counter\n";
+	open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
+	print "$output_dir/$first_file.$file_counter\n";
       }  
       
       $file_counter++;
@@ -165,6 +168,6 @@ sub read1 {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 --entries <number, def=10mill>  -1 fq-file -2 fq-file\n";
+  print "USAGE: $0 --entries <number, def=10mill>  -o[ut dir, ./ is default] -1 fq-file -2 fq-file\n";
   exit;
 }

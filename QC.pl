@@ -44,8 +44,8 @@ my ( %GC, %bwa );
 
 my $Q_min = 20;
 
-sample("tmp/tyt_1.1.fq", "tmp/tyt_1.2.fq", "tmp/1", "tmp/2");
-exit;
+#sample("tmp/tyt_1.2.fq", "tmp/tyt_1.1.fq", "tmp/1", "tmp/2");
+#exit;
 
 
 validate_reference();
@@ -542,12 +542,13 @@ sub sample {
     return;
   }
 
-  my ($name1, $name2);
 
   while( $goal > $read ) {
+
+    my ($name1, $name2);
     
     my $random_pos = int(rand($size));
-    print "going to $random_pos\n";
+#    print "going to $random_pos\n";
     seek( $file1, $random_pos, 0);
     while ( <$file1> ) {
       last if ( $_ =~ /^\@\w+:\d+:/);
@@ -565,9 +566,11 @@ sub sample {
       $name1 = $name;
     }
 
-    if ( $infile2 ) {
+    if ( $infile2 && $name1) {
       
       $name1 =~ s/\/\d\n//;
+      
+      my %seen;
       
     REREAD:
       
@@ -581,6 +584,9 @@ sub sample {
 	$name2 = $name;
 	$name2 =~ s/\/\d\n//;
 
+	next if ($seen{$name2} && $seen{$name2} > 10);
+
+
 	if ( $name1 eq $name2 ) {
 #	  print "$name1 eq $name2\n";
 	  my $seq  = <$file2>;
@@ -593,11 +599,13 @@ sub sample {
 	elsif ($name1 lt $name2 ) {
 #	  print "$name1 lt $name2\n";
 	  $random_pos -= 100;
+	  $seen{ $name2 }++;
 	  goto REREAD;
 	}
 	else {
 #	  print "$name1 gt $name2\n";
 	  $random_pos = tell($file2);
+	  $seen{ $name2 }++;
 	  goto REREAD;
 	}
       }

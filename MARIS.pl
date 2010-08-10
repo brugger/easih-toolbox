@@ -202,9 +202,9 @@ my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
 
-EASIH::JMS::verbosity(10);
+#EASIH::JMS::verbosity(10);
 EASIH::JMS::hive('Darwin');
-EASIH::JMS::hive('Kluster');
+#EASIH::JMS::hive('Kluster');
 EASIH::JMS::max_retry(0);
 
 
@@ -220,6 +220,9 @@ else {
 my $extra_report = "1 ==> $first\n";
 $extra_report .= "2 ==> $second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
+$extra_report .= "snp_file ==> $report.snps\n";
+$extra_report .= "indel_file ==> $report.indel\n";
+
 $extra_report .= "align_param ==> $align_param + -e5 -t5 for second round aligning\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
@@ -326,18 +329,68 @@ sub bam2fq {
   my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file(".fq");
-  my $cmd = "$samtools view $input | $sam2fq > $tmp_file ";
-  EASIH::JMS::submit_job($cmd,  $tmp_file);
+  my $list_tmp_file = EASIH::JMS::tmp_file(".list");
+  my $cmd = "$samtools view $input | $sam2fq -2 $tmp_file > $list_tmp_file";  
+  EASIH::JMS::submit_job($cmd,  $list_tmp_file);
 }
 
 
 
 sub bwa_aln_loose {
   my ($input) = @_;
-  
-  my $tmp_file = EASIH::JMS::tmp_file(".sai");
-  my $cmd = "$bwa aln $align_param -e5 -t5  -f $tmp_file $reference $input ";
-  EASIH::JMS::submit_job($cmd, "$tmp_file $input");
+
+  if ( $no_split ) {
+    
+    if ( $first && $second ) {
+      my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+      my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $first ;";
+      $cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $second ";
+
+      my $output = { "first_fq"   => $first,
+		     "first_sai"  => $first_tmp_file,
+		     "second_fq"  => $second,
+		     "second_sai" => $second_tmp_file};
+		     
+      EASIH::JMS::submit_job($cmd, $output);
+    }
+    else {
+      my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $input ";
+      my $output = { "first_fq"   => $first,
+		     "first_sai"  => $tmp_file};
+      EASIH::JMS::submit_job($cmd, $output);
+    }
+  }
+  else {
+
+    open (my $files, $input) || die "Could not open '$input': $!\n";
+    while (<$files>) {
+      chomp;
+      my ($file1, $file2) = split("\t", $_);
+      
+      if ( $file1 && $file2 ) {
+	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $file1 ;";
+	$cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $file2 ";
+	my $output = { "first_fq"   => $file1,
+		       "first_sai"  => $first_tmp_file,
+		       "second_fq"  => $file2,
+		       "second_sai" => $second_tmp_file};
+		     
+	EASIH::JMS::submit_job($cmd, $output);
+      }
+      else {
+	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $file1 ";
+	my $output = { "first_fq"   => $file1,
+		       "first_sai"  => $tmp_file};
+	EASIH::JMS::submit_job($cmd, $output);
+      }
+    }
+  }
+
 }
 
 

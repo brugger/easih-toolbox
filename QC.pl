@@ -44,6 +44,10 @@ my ( %GC, %bwa );
 
 my $Q_min = 20;
 
+sample("tmp/tyt_1.1.fq", "tmp/tyt_1.2.fq", "tmp/1", "tmp/2");
+exit;
+
+
 validate_reference();
 
 #random sample $limit MB out of the fastq file
@@ -51,6 +55,9 @@ validate_reference();
 use File::Temp;
 system "mkdir tmp" if ( ! -d './tmp');
 my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "./tmp" );
+
+
+
 
 if ( $bam_file ) {
   qc_premapped( $bam_file );
@@ -145,8 +152,8 @@ sub report {
       else {
 	push @{$values[ $category ]}, 0;
       }
-      $Q_min_count++ if ( $base_qual_dist{$category}{ $value } < $Q_min );
 
+      $Q_min_count++ if ( $base_qual_dist{$category}{ $value } && $base_qual_dist{$category}{ $value } < $Q_min );
     }
   }
 
@@ -290,6 +297,62 @@ sub report {
   close($out);
 }
 
+
+
+# 
+# 
+# 
+# Kim Brugger (10 Aug 2010)
+sub qc_premapped {
+  my ( $bam_file, $limit ) = @_; 
+
+  my $samtools = `which samtools`;
+  chomp( $samtools);
+  
+  my $command .= "$samtools view $bam_file |  ";
+
+  my $goal = $limit*1048576;
+  my $size = 0;
+   
+  open ( my $pipe, "$command " ) || die "Could not open '$command': $!\n";
+  while(<$pipe>) {
+    chomp;
+    my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");    
+
+    $size += length($sequence);
+    last if ( $size >= $goal);
+
+    $bwa{$ALL_READS}++;
+
+    $bwa{paired}++                 if ($flags & 0x0001);
+    $bwa{properly_paired}++        if ($flags & 0x0002 );
+    $bwa{mate_unmapped}++          if ($flags & 0x0008 );
+    $bwa{not_primary_alignment}++  if ($flags & 0x0100 );
+    $bwa{dupliacate}++             if ($flags & 0x0400 );
+
+    if ( $flags & 0x0004 ){
+      analyse( $sequence, $quality, $UNMAPPED_READ);
+      $bwa{$UNMAPPED_READ}++;
+      next;
+    }
+
+    $bwa{ $MAPPED_READ }++;
+    $bwa{mapq}{$mapq}++      if ( $mapq );
+    push @{$bwa{is}}, $insert_size if ( $insert_size ) ;
+    
+    if ($flags & 0x0080 ) {
+      $bwa{$SECOND_READ}++;
+      analyse( $sequence, $quality, $SECOND_READ);
+    }
+    else {
+      $bwa{$FIRST_READ}++;
+      analyse( $sequence, $quality, $FIRST_READ);
+    }
+  }
+  close( $pipe );
+
+  
+}
 
 
 # 
@@ -484,10 +547,10 @@ sub sample {
   while( $goal > $read ) {
     
     my $random_pos = int(rand($size));
-#    print "going to $random_pos\n";
+    print "going to $random_pos\n";
     seek( $file1, $random_pos, 0);
     while ( <$file1> ) {
-      last if ( $_ =~ /^\@/);
+      last if ( $_ =~ /^\@\w+:\d+:/);
     }
     
     if ($_ &&  $_ =~ /^\@\w+:\d+:/ && !$used{ $_ }) {
@@ -510,15 +573,16 @@ sub sample {
       
       seek( $file2, $random_pos, 0);
       while ( <$file2> ) {
-	last if ( $_ =~ /^\@/);
+	last if ( $_ =~ /^\@\w+:\d+:/);
       }
 
-      if ($_ &&  $_ =~ /^\@\w+:/ && !$used{ $_ }) {
+      if ($_ &&  $_ =~ /^\@\w+:\d+:/ && !$used{ $_ }) {
 	my $name = $_;
 	$name2 = $name;
 	$name2 =~ s/\/\d\n//;
 
 	if ( $name1 eq $name2 ) {
+#	  print "$name1 eq $name2\n";
 	  my $seq  = <$file2>;
 	  my $str  = <$file2>;
 	  my $qual = <$file2>;
@@ -526,13 +590,13 @@ sub sample {
 	  print $out2 join("", $name, $seq, $str, $qual);
 	  $read += length("$name$seq$str$qual");
 	}
-	elsif ($platform eq "SOLID" && $name1 lt $name2 ) {
-	  print "$name1 lt $name2\n";
+	elsif ($name1 lt $name2 ) {
+#	  print "$name1 lt $name2\n";
 	  $random_pos -= 100;
 	  goto REREAD;
 	}
-	elsif( $platform eq "SOLID") {
-	  print "$name1 gt $name2\n";
+	else {
+#	  print "$name1 gt $name2\n";
 	  $random_pos = tell($file2);
 	  goto REREAD;
 	}

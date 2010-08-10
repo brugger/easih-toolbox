@@ -70,7 +70,7 @@ sub analyse_files {
 
   my ($count_in, $count_out) = (0,0);
 
-  foreach my $file ( sort @files) {
+  foreach my $file (  @files) {
     open (my $in, "$file") || die "Could not open '$file': $!\n";
 
     my @reads;

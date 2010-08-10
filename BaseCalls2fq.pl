@@ -46,18 +46,17 @@ for(my $i = 1; $i<=8; $i++) {
 
   my @files = glob("$indir/s_$i\_1_*_qseq.txt");
   if ( @files ) {
-    open (my $out, "| gzip -c > $out_dir/$lane_name.1.fq.gz") || die "Could not open '$out_dir/$lane_name.1.fq.gz': $!\n";
+    open (my $out, "| gzip -c > $outdir/$lane_name.1.fq.gz") || die "Could not open '$outdir/$lane_name.1.fq.gz': $!\n";
     my ($count_in, $count_out) = analyse_files($out, @files);
     printf ("lane $i.1\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile\n", $count_out*100/$count_in, $count_out/120) ;
   }
 
   @files = glob("$indir/s_$i\_2_*_qseq.txt");
   if ( @files ) {
-    open (my $out, "| gzip -c > $out_dir/$lane_name.2.fq.gz") || die "Could not open '$out_dir/$lane_name.2.fq.gz': $!\n";
+    open (my $out, "| gzip -c > $outdir/$lane_name.2.fq.gz") || die "Could not open '$outdir/$lane_name.2.fq.gz': $!\n";
     my ($count_in, $count_out) = analyse_files($out, @files);
     printf ("lane $i.2\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile\n", $count_out*100/$count_in, $count_out/120) ;
   }
-  last;
 }
 
 
@@ -71,11 +70,14 @@ sub analyse_files {
 
   my ($count_in, $count_out) = (0,0);
 
-  foreach my $file ( @files) {
+  foreach my $file ( sort @files) {
     open (my $in, "$file") || die "Could not open '$file': $!\n";
+
+    my @reads;
     
     while (my $line = <$in>) {
-      
+
+      my @read;
       chomp $line;
       $count_in++;
 
@@ -89,16 +91,22 @@ sub analyse_files {
       $q_line =~ tr/!-\175/!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-\136/;
       
       if ($index ne '0') {
-        print $fhw "\@${instr}_$run_id:$lane:$tile:$x:$y\#$index/$read\n";
+
+        push @read, "\@${instr}_$run_id:$lane:$tile:$x:$y\#$index/$read\n";
       } else {
-        print $fhw "\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n";
+        push @read, "\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n";
       }
-      print $fhw $bases, "\n";
-      print $fhw "+\n";
-      print $fhw $q_line, "\n";
+      push @read, "$bases\n";
+      push @read, "+\n";
+      push @read, "$q_line\n";
       $count_out++;
-      
+      push @reads, \@read;
     }
+    
+    foreach my $read (sort {$$a[0] cmp $$b[0]} @reads) {
+      print $fhw join("", @$read);
+    }
+    
   }
 
   return ($count_in, $count_out);

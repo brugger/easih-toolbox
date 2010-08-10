@@ -1,5 +1,4 @@
-#!/usr/local/bin/perl
-
+#!/usr/bin/perl
 # Produce a fastq file from a SAM file
 
 use strict;
@@ -37,4 +36,3 @@ sub process {
   return;
 
 }
-

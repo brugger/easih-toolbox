@@ -417,7 +417,8 @@ sub region_effects {
 	    $new = one2three( $new );
 	    
 
-	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	    $gene_res{ ppos } = "p.$old".$con->translation_start;
+	    $gene_res{ position } = "WITHIN_CODING_REGION";
 	  }
 
 	  push @res, \%gene_res;
@@ -440,7 +441,7 @@ sub region_effects {
 # 
 # Kim Brugger (02 Jun 2010)
 sub one2three {
-  my ( $aminoacid) = @_;
+  my ( $aminoacids) = @_;
   
   my %trans = (A => 'Ala',
 	       R => 'Arg',
@@ -463,8 +464,10 @@ sub one2three {
 	       Y => 'Tyr',
 	       V => 'Val');
 
-  return $trans{ $aminoacid } if ($trans{ $aminoacid });
-  return $aminoacid;
+  return join(",", map{ $trans{ $_ }} split("", $aminoacids));
+
+#  return $trans{ $aminoacid } if ($trans{ $aminoacid });
+#  return $aminoacid;
 }
 
 

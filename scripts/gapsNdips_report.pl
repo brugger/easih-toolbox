@@ -75,7 +75,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %$dips_n_gaps ) {
     my $position = "$chr:$start-$end";
 
     my @line;
-    push @line, $position;
+    push @line, $position, $$dip{depth};
     my $effects = region_effects($chr, $start, $end);
 
 
@@ -178,7 +178,7 @@ sub print_oneliner {
   if ( ! $printed_header++ ) {
     print table_start(1) if ( $html_out);
     
-    push @res, ['position', 'change', 'base(s)', 'evidence/depth','gene', 'transcript', 'region', 'codon pos', 'protein pos' ];
+    push @res, ['position', 'depth', 'gene', 'transcript', 'region', 'codon pos', 'protein pos' ];
 
   }
 
@@ -292,7 +292,7 @@ sub html_table {
 # 
 # 
 # Kim Brugger (28 May 2010)
-sub region_effect {
+sub region_effects {
   my ( $chr, $start, $end ) = @_;
 
   $chr =~ s/chr//;
@@ -331,20 +331,22 @@ sub region_effect {
   }	
 
   my @vfs;
+
   
   # create a new VariationFeature object
   my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
     -start => $start,
     -end => $end,
     -slice => $slice,           # the variation must be attached to a slice
-    -allele_string => $allele_string,
+    -allele_string => "",
     -strand => $strand,
     -map_weight => 1,
     -adaptor => $vfa,           # we must attach a variation feature adaptor
-    -variation_name => $chr.'_'.$start.'_'.$allele_string,
+    -variation_name => $chr.'_'.$start.'_'.$end,
   );
   push @vfs, $new_vf; 
   
+
   $tva->fetch_all_by_VariationFeatures( \@vfs );
   foreach my $vf (@vfs) {
 
@@ -407,7 +409,7 @@ sub region_effect {
 	  if ( $con->translation_start && $con->pep_allele_string) {
 	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
 	    
-	    print " --> " . $con->pep_allele_string . "\n";
+#	    print " --> " . $con->pep_allele_string . "\n";
 
 	    $new ||= $old;
 

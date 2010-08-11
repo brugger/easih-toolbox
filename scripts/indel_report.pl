@@ -418,7 +418,7 @@ sub indel_effect {
 	  if ( $con->translation_start && $con->pep_allele_string) {
 	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
 	    
-	    print " --> " . $con->pep_allele_string . "\n";
+#	    print " --> " . $con->pep_allele_string . "\n";
 
 	    $new ||= $old;
 

@@ -22,7 +22,7 @@ my $bam_file      = $opts{b};
 my $sample_size   = $opts{s} || 10; # This is in MB
 my $out_file      = $opts{o};
 my $report        = $opts{r} || "";
-my $reference     = $opts{R} || die "no reference given (-R)\n";
+my $reference     = $opts{R} || die "no reference given (-R)\n" if ( ! $bam_file);
 my $platform      = uc($opts{p}) || die "no platform given (-p[ SOLEXA, SOLID])\n"; 
 $platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
 
@@ -48,7 +48,7 @@ my $Q_min = 20;
 #exit;
 
 
-validate_reference();
+validate_input();
 
 #random sample $limit MB out of the fastq file
 
@@ -60,7 +60,7 @@ my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "./tmp" );
 
 
 if ( $bam_file ) {
-  qc_premapped( $bam_file );
+  qc_premapped( $bam_file, $sample_size );
 }
 elsif ( $first_file )  {
   sample( $first_file, $second_file, "$tmp_file.1", "$tmp_file.2", $sample_size);
@@ -81,7 +81,7 @@ report();
 # Kim Brugger (16 Jul 2010)
 sub report {
 
-  my $infile = $first_file;
+  my $infile = $first_file || $bam_file;
   $infile =~ s/.*\///;
 
   $infile = $report . $infile;
@@ -246,6 +246,8 @@ sub report {
   }
   close( $out );
 
+  $max_gc += 5;
+
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R "png('$out_file.GC.png')\n";
   print $R "GC = read.table('$out_file.GC')\n";
@@ -311,6 +313,7 @@ sub qc_premapped {
   
   my $command .= "$samtools view $bam_file |  ";
 
+  $limit ||= 1;
   my $goal = $limit*1048576;
   my $size = 0;
    
@@ -470,7 +473,7 @@ sub analyse {
 
 
 
-sub validate_reference {
+sub validate_input {
 
   my @errors;
 
@@ -480,11 +483,12 @@ sub validate_reference {
 
 
   # Things related to the reference sequence being used.
-  
-  my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
-  foreach my $bwa_postfix ( @bwa_postfixes ) {
-    push @errors, "$reference.$bwa_postfix does not exists. Did you run bwa index on $reference?"
-	if ( ! -e "$reference.$bwa_postfix");
+  if ( $reference ) {
+    my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
+    foreach my $bwa_postfix ( @bwa_postfixes ) {
+      push @errors, "$reference.$bwa_postfix does not exists. Did you run bwa index on $reference?"
+	  if ( ! -e "$reference.$bwa_postfix");
+    }
   }
 
 

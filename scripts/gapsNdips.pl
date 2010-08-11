@@ -10,13 +10,15 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
+
 my %opts;
 getopts('b:m:hg:l:L:', \%opts);
 
 usage() if ( $opts{h});
 
 my $bam_file  = $opts{b} || usage();
-my $min_depth = $opts{m} || 200;
+my $min_depth = 200;
+$min_depth = $opts{m} if ( defined $opts{m});
 my $gap_file  = $opts{g};
 my $low_file  = $opts{l};
 my $region    = $opts{L};
@@ -28,8 +30,8 @@ $gap_file = undef if ( $gap_file && $low_file &&  $gap_file eq $low_file);
 open ( $gout, "> $gap_file" ) || die "Could not open file '$gap_file': $!\n" if ( $gap_file);
 open ( $lout, "> $low_file" ) || die "Could not open file '$low_file': $!\n" if ( $low_file);
 
-my $samtools  = '/usr/local/bin/samtools';
-my $bam2depth = '/usr/local/bin/bam2depth';
+my $samtools  = find_program('samtools');
+my $bam2depth = find_program('bam2depth');
 
 my $seqs = names_n_lengths( $bam_file );
 
@@ -109,6 +111,7 @@ sub print_report {
   foreach my $entry ( @$entries ) {
     $$entry[3] ||= 0;
     print $stream "$$entry[0]:$$entry[1]-$$entry[2]\t$$entry[3]\n";
+#    print $stream join("\t",@$entry)."\n";
   }
 }
 
@@ -148,5 +151,35 @@ sub names_n_lengths {
 # 
 # Kim Brugger (21 Jul 2010)
 sub usage {
-  die "What ever, read the code...\n";
+  
+  $0 =~ s/.*\///;
+  die "USAGE: $0 -b[am file] -m[in depth, default 200] -g[ap out file, default stdout] -l[ow regions file, default stdout] -L[ only look at this region (name:start-end)\n";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jul 2010)
+sub find_program {
+  my ($program) = @_;
+
+
+  my @paths = ("/home/easih/bin/",
+	       "/home/kb468/bin/",
+	       "/home/kb468/easih-toolbox/scripts/",
+	       "/usr/local/bin");
+  
+  foreach my $path ( @paths ) {
+    
+    return "$path/$program" if ( -e "$path/$program" );
+  }
+
+  my $location = `which $program`;
+  chomp( $location);
+  
+  return $location if ( $location );
+
+  return undef;
 }

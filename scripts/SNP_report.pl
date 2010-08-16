@@ -24,7 +24,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
 my %opts;
-getopts('s:v:pb:Tq:m:Hfrh', \%opts);
+getopts('s:v:pb:Tq:m:Hfrhn', \%opts);
 usage() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
@@ -52,6 +52,7 @@ my $regulation  = $opts{r} || 0;
 my $pfam        = $opts{p} || 0;
 my $from_36     = $opts{T} || 0;
 my $min_mapq    = $opts{m} || undef;
+my $no_ensembl  = $opts{n} || 0;
 my $min_qual    = $opts{q} || undef;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
@@ -116,46 +117,45 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       $res{$position}{qual}      = $SNPs{$chr}{$pos}{$key}{qual};
       $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
 
-      my $Echr = $chr;
-      $Echr =~ s/chr//;
-      my $Epos = $pos;
-      ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
-      
-      next if ( ! $Echr );
+      if ( ! $no_ensembl ) {
 
-      my $slice = fetch_slice($Echr);
-      my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
-
-      # create a new VariationFeature object
-      my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
-	-start          => $Epos,
-	-end            => $Epos,
-	-slice          => $slice,           # the variation must be attached to a slice
-	-allele_string  => $allele_string,
-	-strand         => 1,
-	-map_weight     => 1,
-	-adaptor        => $vfa,           # we must attach a variation feature adaptor
-	-variation_name => $position, # original position is used as the key!
-	  );
-
-      push @vfs, $new_vf; 
-
-
-      if ( @vfs >= $buffer_size) {
-	my $effects = variation_effects(\@vfs);
-	print_results( \%res, $effects);
-	@vfs = ();
-	%res = ();
+	my $Echr = $chr;
+	$Echr =~ s/chr//;
+	my $Epos = $pos;
+	($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
+	
+	next if ( ! $Echr );
+	
+	my $slice = fetch_slice($Echr);
+	my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
+	
+	# create a new VariationFeature object
+	my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
+	  -start          => $Epos,
+	  -end            => $Epos,
+	  -slice          => $slice,           # the variation must be attached to a slice
+	  -allele_string  => $allele_string,
+	  -strand         => 1,
+	  -map_weight     => 1,
+	  -adaptor        => $vfa,           # we must attach a variation feature adaptor
+	  -variation_name => $position, # original position is used as the key!
+	    );
+	
+	push @vfs, $new_vf; 
+	
+	
+	if ( @vfs >= $buffer_size) {
+	  my $effects = variation_effects(\@vfs);
+	  print_results( \%res, $effects);
+	  @vfs = ();
+	  %res = ();
+	}
       }
-      
-
     }
-
-
   }
 
-  if ( @vfs ) {
-    my $effects = variation_effects(\@vfs);
+  if ( @vfs || keys %res ) {
+    my $effects = variation_effects(\@vfs) if ( ! $no_ensembl);
     print_results( \%res, $effects);
     @vfs = ();
     %res = ();
@@ -335,7 +335,7 @@ sub print_oneliner {
     my @annotations = ('position', 'change', 'score');
     push @annotations, ('depth', '', '', '', '', '') if ( $bam );
       
-    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref');
+    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref') if ( ! $no_ensembl);
 
     push @annotations, 'regulation' if ( $regulation );
 
@@ -344,28 +344,46 @@ sub print_oneliner {
     push @res, [@annotations];
   }
 
-  foreach my $effect ( @$effects ) {
+  if ( ! $effects ) {
 
-    my $name = $$effect[0]{ name };
-
-    my @line;
-    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
-    push @line, $$mapping{$name}{qual};
-    if ( $$mapping{$name}{base_dist} ) {
-      push @line, $$mapping{$name}{base_dist}{total};      
-    
-      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+    foreach my $name (sort keys %$mapping) {
+      
+      my @line;
+      push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{qual};
+      if ( $$mapping{$name}{base_dist} ) {
+	push @line, $$mapping{$name}{base_dist}{total};      
+	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      }
+      
+      push @res, \@line;
     }
-    
-    foreach my $snp_effect (@$effect) {
 
-      my @effect_line;
+  }
+  else {
 
+    foreach my $effect ( @$effects ) {
+      
+      my $name = $$effect[0]{ name };
+      
+      my @line;
+      push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{qual};
+      if ( $$mapping{$name}{base_dist} ) {
+	push @line, $$mapping{$name}{base_dist}{total};      
+	
+	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
+      }
+      
+      foreach my $snp_effect (@$effect) {
+	
+	my @effect_line;
+	
 	my $gene_id = "";
-
+	
 	$gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
 										 $$snp_effect{ stable_id } );
-
+	
 	$gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
 						   $$snp_effect{ stable_id } );
 	
@@ -374,7 +392,7 @@ sub print_oneliner {
 	
 	push @effect_line, $gene_id;
 	
-
+	
 	my $trans_id = "";
 	
 	$trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
@@ -404,10 +422,10 @@ sub print_oneliner {
       push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
       push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
 
-      push @res, [@line, @effect_line];
+	push @res, [@line, @effect_line];
+      }
     }
   }
-    
 
   if (  $html_out ) {
     print html_table(\@res, 1);

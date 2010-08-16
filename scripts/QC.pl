@@ -124,9 +124,9 @@ sub report {
   print $R "meanQual = read.table('$out_file.MeanQual', check.names=FALSE)\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
   print $R "png('$out_file.MeanQual.png')\n";
-  print $R "plot(meanQual[,2], main='$infile: Quality By Cycle', type='h', xlab='Cycle', ylab='Mean Quality', ylim=c(0,$max_qual))\n";
-  print $R "lines(meanQual[,3], type='l', col='red')\n";
-  print $R "lines(meanQual[,4], type='l', col='blue')\n";
+  print $R "plot(meanQual[,2], main='$out_file: Quality By Cycle', type='h', xlab='Cycle', ylab='Mean Quality', ylim=c(0,$max_qual))\n";
+  print $R "lines(meanQual[,3], type='l', col='red')\n" if ( $bwa{ $UNMAPPED_READ});
+  print $R "lines(meanQual[,4], type='l', col='blue')\n"if ( $bwa{ $UNMAPPED_READ} && ! $bwa{ $SECOND_READ});
   print $R "lines(meanQual[,5], type='l', col='green')\n" if ( $bwa{ $SECOND_READ});
   print $R "lines(meanQual[,6], type='l', col='darkgreen')\n" if ( $bwa{ $SECOND_READ});
   print $R "abline(h=15, col='red')\n";
@@ -160,6 +160,7 @@ sub report {
 
   print $out "\t" . join("\t", @positions) . "\n";
   foreach my $category ( @read_cat ) {
+    next if ( ! $bwa{ $category });
     print $out "\t" . join("\t", @{$values[$category]}) . "\n";
   }
   close( $out );  
@@ -168,10 +169,12 @@ sub report {
   print $R  "qualHist = read.table('$out_file.QualHist', header=TRUE, check.names=FALSE)\n";
   print $R "png('$out_file.QualHist.png')\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
-  print $R "barplot(as.matrix(qualHist), col=c('black', 'red', 'blue', 'green', 'darkgreen'), axis.lty=1, main='$infile: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n";
+  print $R "barplot(as.matrix(qualHist), col=c('black', 'red', 'blue', 'green', 'darkgreen'), axis.lty=1, main='$out_file: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n" if ( $bwa{ $UNMAPPED_READ} && $bwa{ $SECOND_READ});
+  print $R "barplot(as.matrix(qualHist), col=c('black', 'green', 'darkgreen'), axis.lty=1, main='$out_file: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n" if ( !$bwa{ $UNMAPPED_READ} && $bwa{ $SECOND_READ});
+  print $R "barplot(as.matrix(qualHist), col=c('black'), axis.lty=1, main='$out_file: Quality distribution', xlab='Quality', ylab='Observations', beside=TRUE)\n" if ( !$bwa{ $UNMAPPED_READ} && ! $bwa{ $SECOND_READ});
 #  print $R "legend(45, 90, c('All', 'Mapped', 'Unmapped', fill=c('grey', 'blue', 'red')))\n";
 
-#  print $R "plot(qualHist, main='$infile:  Quality Score Distribution', type='h', xlab='Quality score', ylab='Observations')\n";
+#  print $R "plot(qualHist, main='$out_file:  Quality Score Distribution', type='h', xlab='Quality score', ylab='Observations')\n";
   print $R "dev.off()\n";
   close ($R);
   
@@ -206,7 +209,7 @@ sub report {
   print $R "png('$out_file.BaseDist.png')\n";
   print $R "baseDist = read.table('$out_file.BaseDist', check.names=FALSE)\n";
 #  print $R "par(xpd=T, mar=par()\$mar+c(0,0,0,4))\n";
-  print $R "barplot(as.matrix(baseDist), col=c('green', 'blue', 'black','red', 'grey'), axis.lty=1, main='$infile: Base distribution', xlab='Cycle', ylab='Distribution')\n";
+  print $R "barplot(as.matrix(baseDist), col=c('green', 'blue', 'black','red', 'grey'), axis.lty=1, main='$out_file: Base distribution', xlab='Cycle', ylab='Distribution')\n";
 #  print $R "legend(45, 90, rev(rownames(baseDist)), fill=rev(c('green', 'blue', 'black','red', 'grey')))\n";
   print $R "dev.off()\n";
   close ($R);
@@ -251,9 +254,9 @@ sub report {
   open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
   print $R "png('$out_file.GC.png')\n";
   print $R "GC = read.table('$out_file.GC')\n";
-  print $R "plot(spline(GC[c(1,2)]),      type='b',  xlab='%GC', ylab='fraction', col='black', ylim=c(0,$max_gc))\n";
-  print $R "lines(spline(GC[c(1,3)]),      type='b',  xlab='%GC', ylab='fraction', col='red')\n";
-  print $R "lines(spline(GC[c(1,4)]),      type='b',  xlab='%GC', ylab='fraction', col='blue')\n";
+  print $R "plot(spline(GC[c(1,2)]),      type='b',  main='$out_file: %GC', xlab='%GC distribution', ylab='fraction', col='black', ylim=c(0,$max_gc))\n";
+  print $R "lines(spline(GC[c(1,3)]),      type='b',  xlab='%GC', ylab='fraction', col='red')\n" if ( $bwa{ $UNMAPPED_READ});
+  print $R "lines(spline(GC[c(1,4)]),      type='b',  xlab='%GC', ylab='fraction', col='blue')\n" if ( $bwa{ $UNMAPPED_READ} && ! $bwa{ $SECOND_READ});
   print $R "lines(spline(GC[c(1,5)]),      type='b',  xlab='%GC', ylab='fraction', col='green')\n" if ( $bwa{ $SECOND_READ});
   print $R "lines(spline(GC[c(1,6)]),      type='b',  xlab='%GC', ylab='fraction', col='darkgreen')\n" if ( $bwa{ $SECOND_READ});
   print $R "dev.off()\n";
@@ -269,7 +272,7 @@ sub report {
     open ( $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
     print $R "png('$out_file.MapQual.png')\n";
     print $R "mapQual = read.table('$out_file.MapQual')\n";
-    print $R "plot(spline(mapQual),        type='h',  xlab='Mapping Quality', ylab='Fraction', col='black')\n";
+    print $R "plot(spline(mapQual),        type='h',  main='$out_file: Mapping quality distribution', xlab='Quality score', ylab='count', col='black')\n";
     print $R "dev.off()\n";
     close ($R);
   }
@@ -288,7 +291,7 @@ sub report {
     close ($R);
   }
 
-  open ($out, " > $infile.report ") || die "Could not open '$infile.report': $!\n";
+  open ($out, " > $out_file.report ") || die "Could not open '$out_file.report': $!\n";
   print $out "$bwa{$ALL_READS} reads\n";;
   print $out "$bwa{ $MAPPED_READ } (".(sprintf("%.2f",$bwa{ $MAPPED_READ }*100/$bwa{$ALL_READS}))."%) mapped\n" if ($bwa{ $MAPPED_READ });
   print $out "$bwa{paired} paired\n"       if ($bwa{paired});

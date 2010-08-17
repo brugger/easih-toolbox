@@ -19,6 +19,7 @@ my $first_file  = $opts{'1'} || usage();
 my $second_file = $opts{'2'};
 my $compress = $opts{n} ? 0 : 1;
 my $output_dir  = $opts{o} || "./";
+system "mkdir $output_dir" if ( ! -d $output_dir);
 usage() if ( $opts{h});
 
 my $file_counter  = 1;
@@ -33,6 +34,11 @@ if ( $first_file && $second_file ) {
   open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
   open ($rfh[2], "gzip -dc $second_file |" ) || die "Could not open '$second_file': $!\n" if ( $second_file =~ /gz/);
   open ($rfh[2], "$second_file" )            || die "Could not open '$second_file': $!\n" if ( $second_file !~ /gz/);
+
+  # trim off the absolute path so files does not go somewhere odd.
+  $first_file  =~ s/.*\///;
+  print "--> $first_file\n";
+  $second_file =~ s/.*\///;
 
   system "mkdir $output_dir" if ( ! -d $output_dir);
   
@@ -112,6 +118,8 @@ else {
 
   open ($rfh[1], "gzip -dc $first_file |" )  || die "Could not open '$first_file': $!\n"  if ( $first_file =~ /gz/);
   open ($rfh[1], "$first_file" )             || die "Could not open '$first_file': $!\n"  if ( $first_file !~ /gz/);
+
+  $first_file  =~ s/.*\///;
 
   if ( $compress ) {
     open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";

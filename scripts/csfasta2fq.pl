@@ -45,12 +45,12 @@ if ($is_paired) { # paired end
   # for bwa to work with csfasta files, the R3 should be read1 and F3 read2. This is 
   # counter intuitive, but that is Chinese logic for you!
   if ( $compress ) {
-    open($fhw[0], "|gzip >$out.2.fastq.gz")  || die; # this is NOT a typo
-    open($fhw[1], "|gzip >$out.1.fastq.gz")  || die;
+    open($fhw[0], "|gzip >$out.2.fq.gz")  || die; # this is NOT a typo
+    open($fhw[1], "|gzip >$out.1.fq.gz")  || die;
   }
   else {
-    open($fhw[0], " >$out.2.fastq")  || die; # this is NOT a typo
-    open($fhw[1], " >$out.1.fastq")  || die;
+    open($fhw[0], " >$out.2.fq")  || die; # this is NOT a typo
+    open($fhw[1], " >$out.1.fq")  || die;
   }
   
   my (@df, @dr);
@@ -87,10 +87,10 @@ if ($is_paired) { # paired end
     open($fhr[$_], $fn) || die("** Fail to open '$fn'.\n");
   }
   if ( $compress ) {
-    open($fhw[2], "| gzip >$out.1.fastq.gz") || die;
+    open($fhw[2], "| gzip >$out.1.fq.gz") || die;
   }
   else {
-    open($fhw[2], " >$out.1.fastq") || die;
+    open($fhw[2], " >$out.1.fq") || die;
   }
 
   my @df;

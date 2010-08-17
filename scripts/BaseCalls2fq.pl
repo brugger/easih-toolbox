@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 my %opts;
-getopts("a:1:2:3:4:5:6:7:8:hs:d:o:", \%opts);
+getopts("a:1:2:3:4:5:6:7:8:hs:i:o:", \%opts);
 
 my $lane1 = $opts{'1'};
 my $lane2 = $opts{'2'};
@@ -32,7 +32,7 @@ $lane7 = $opts{a} if ($opts{a});
 $lane8 = $opts{a} if ($opts{a});
 
 my @lanes = (undef, $lane1, $lane2, $lane3, $lane4, $lane5, $lane6, $lane7, $lane8);
-my $indir   = $opts{'d'} || "./";
+my $indir   = $opts{'i'} || "./";
 my $outdir  = $opts{'o'} || "./";
 system "mkdir $outdir" if ( ! -d $outdir);
 

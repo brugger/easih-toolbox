@@ -638,7 +638,7 @@ sub validate_input {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 -1 [fastq file]  -2 [fastq file]  -n[o splitting of fastq file(s)] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n";
+  print "USAGE: $0 -1 [fastq file]  -2 [fastq file]  -n[o splitting of fastq file(s)] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid]\n";
   exit;
 
 }

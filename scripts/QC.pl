@@ -22,11 +22,13 @@ my $bam_file      = $opts{b};
 my $sample_size   = $opts{s} || 10; # This is in MB
 my $out_file      = $opts{o};
 my $report        = $opts{r} || "";
-my $reference     = $opts{R} || die "no reference given (-R)\n" if ( ! $bam_file);
+my $reference     = $opts{R} || usage() if ( ! $bam_file);
 my $platform      = uc($opts{p}) || die "no platform given (-p[ SOLEXA, SOLID])\n"; 
 $platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
 
 my $samtools  = '/usr/local/bin/samtools';
+
+usage() if ( ! $first_file && ! $bam_file);
 
 my $ALL_READS     = 0;
 my $UNMAPPED_READ = 1;
@@ -621,3 +623,17 @@ sub sample {
 }
 
 
+
+# 
+# 
+# 
+# Kim Brugger (18 Aug 2010)
+sub usage {
+  
+  $0 =~ s/.*\///;
+  print "There are two running modes, one where the seq is sampled and aligned and the other from a pre aligned file\n";
+  print "USAGE RAW: $0 -1 [first fq file] -2 [second fq] -s[ample size] -o[ut file, otherwise a default will be made] -p[latform]\n";
+  print "USAGE RAW: $0 -b[am file] -R[eference bwa formatted] -s[ample size] -o [ut file, otherwise a default will be made] -p[latform]\n";
+  exit;
+
+}

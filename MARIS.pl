@@ -267,7 +267,7 @@ sub bwa_aln {
     }
     else {
       my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $input ";
+      my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $first ";
       my $output = { "first_fq"   => $first,
 		     "first_sai"  => $tmp_file};
       EASIH::JMS::submit_job($cmd, $output);
@@ -339,57 +339,32 @@ sub bam2fq {
 sub bwa_aln_loose {
   my ($input) = @_;
 
-  if ( $no_split ) {
+  open (my $files, $input) || die "Could not open '$input': $!\n";
+  while (<$files>) {
+    chomp;
+    my ($file1, $file2) = split("\t", $_);
     
-    if ( $first && $second ) {
+    if ( $file1 && $file2 ) {
       my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
       my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $first ;";
-      $cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $second ";
-
-      my $output = { "first_fq"   => $first,
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $file1 ;";
+      $cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $file2 ";
+      my $output = { "first_fq"   => $file1,
 		     "first_sai"  => $first_tmp_file,
-		     "second_fq"  => $second,
+		     "second_fq"  => $file2,
 		     "second_sai" => $second_tmp_file};
-		     
+      
       EASIH::JMS::submit_job($cmd, $output);
     }
     else {
       my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $input ";
-      my $output = { "first_fq"   => $first,
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $file1 ";
+      my $output = { "first_fq"   => $file1,
 		     "first_sai"  => $tmp_file};
       EASIH::JMS::submit_job($cmd, $output);
     }
   }
-  else {
-
-    open (my $files, $input) || die "Could not open '$input': $!\n";
-    while (<$files>) {
-      chomp;
-      my ($file1, $file2) = split("\t", $_);
-      
-      if ( $file1 && $file2 ) {
-	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
-	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $file1 ;";
-	$cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $file2 ";
-	my $output = { "first_fq"   => $file1,
-		       "first_sai"  => $first_tmp_file,
-		       "second_fq"  => $file2,
-		       "second_sai" => $second_tmp_file};
-		     
-	EASIH::JMS::submit_job($cmd, $output);
-      }
-      else {
-	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $file1 ";
-	my $output = { "first_fq"   => $file1,
-		       "first_sai"  => $tmp_file};
-	EASIH::JMS::submit_job($cmd, $output);
-      }
-    }
-  }
+  
 
 }
 

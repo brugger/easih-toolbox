@@ -32,66 +32,22 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 'std-tag_sam'       => { function   => 'sam_add_tags',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 		 
+		 'std-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
+		 
 		 'std-merge'         => { function   => 'EASIH::JMS::Picard::merge',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 					 sync       => 1},
 
-		 'get_mapped'        => { function   => 'EASIH::JMS::Samtools::get_mapped',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
+		 'std-sort'    => { function   => 'EASIH::JMS::Picard::sort',
+				    hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
-		 'get_unmapped'      => { function   => 'EASIH::JMS::Samtools::get_unmapped',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
-		 'unmapped_bam2fq'   => { function   => 'bam2fq',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=01:00:00"},
+		 'std-rename'     => { function   => 'rename'},
 
-		 '2nd-aln'           => { function   => 'bwa_aln_loose',
-				       hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
-		 '2nd-generate'      => { function   => 'bwa_generate',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
-
-		 '2nd-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
-		 
-		 'mapped_merge'      => { function   => 'EASIH::JMS::Picard::merge',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
-					 sync       => 1},
-
-		 'mapped_sort'       => { function   => 'EASIH::JMS::Picard::sort',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
-
-
-		 'mapped_index'    =>{ function   => 'EASIH::JMS::Samtools::index',
-					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
-		 
-
-		 'get_all_mapped'   => { function   => 'EASIH::JMS::Samtools::get_mapped',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
-		 
-		 'get_all_unmapped' => { function   => 'EASIH::JMS::Samtools::get_unmapped',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
-		 
-		 'identify_indel'   => { function   => 'identify_indel',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
-		 
-		 'realign_indel'    => { function   => 'realign_indel',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
-
-		 'realigned_merge'     => { function   => 'EASIH::JMS::Picard::merge',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
-					 sync       => 1},
-
-		 'std-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
-		 
-		 'realigned_rename'     => { function   => 'rename'},
-
-		 'realigned_sort'    => { function   => 'EASIH::JMS::Picard::sort',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
-		 
-		 'realigned_index'   =>{ function   => 'EASIH::JMS::Samtools::index',
-					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
+		 'std-index'   =>{ function   => 'EASIH::JMS::Samtools::index',
+				   hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
 
 		 );
@@ -105,24 +61,9 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 	      'std-generate'     => 'std-tag_sam',
 	      'std-tag_sam'      => 'std-sam2bam',
 	      'std-sam2bam'      => 'std-merge',
-	      'std-merge'        => ['get_unmapped', 'get_mapped'],
-
-	      'get_mapped'       => 'mapped_merge',
-	      'get_unmapped'     => 'unmapped_bam2fq',
-	      'unmapped_bam2fq'  => '2nd-aln',
-	      '2nd-aln'          => '2nd-generate',
-	      '2nd-generate'     => '2nd-sam2bam',
-	      '2nd-sam2bam'      => 'mapped_merge',
-	      'mapped_merge'     => 'mapped_sort',
-	      'mapped_sort'      => 'mapped_index',
-
-	      'mapped_index'     => ['identify_indel', 'get_all_unmapped'],
-	      'get_all_unmapped' => 'realigned_merge',
-	      'identify_indel'   => 'realign_indel',
-	      'realign_indel'    => 'realigned_merge',
-	      'realigned_merge'  => 'realigned_sort',
-	      'realigned_sort'   => 'realigned_rename',
-	      'realigned_rename' => 'realigned_index',
+	      'std-merge'        => 'std-sort',
+	      'std-sort'         => 'std-rename',
+	      'std-rename'       => 'std-index'
 	      );
 
 #EASIH::JMS::no_store();
@@ -302,29 +243,55 @@ sub bam2fq {
 sub bwa_aln_loose {
   my ($input) = @_;
 
-  open (my $files, $input) || die "Could not open '$input': $!\n";
-  while (<$files>) {
-    chomp;
-    my ($file1, $file2) = split("\t", $_);
-      
-    if ( $file1 && $file2 ) {
+  if ( $no_split ) {
+    
+    if ( $first && $second ) {
       my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
       my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $file1 ;";
-      $cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $file2 ";
-      my $output = { "first_fq"   => $file1,
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $first ;";
+      $cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $second ";
+
+      my $output = { "first_fq"   => $first,
 		     "first_sai"  => $first_tmp_file,
-		     "second_fq"  => $file2,
+		     "second_fq"  => $second,
 		     "second_sai" => $second_tmp_file};
-      
+		     
       EASIH::JMS::submit_job($cmd, $output);
     }
     else {
       my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $file1 ";
-      my $output = { "first_fq"   => $file1,
+      my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $input ";
+      my $output = { "first_fq"   => $first,
 		     "first_sai"  => $tmp_file};
       EASIH::JMS::submit_job($cmd, $output);
+    }
+  }
+  else {
+
+    open (my $files, $input) || die "Could not open '$input': $!\n";
+    while (<$files>) {
+      chomp;
+      my ($file1, $file2) = split("\t", $_);
+      
+      if ( $file1 && $file2 ) {
+	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param -e5 -t5 -f $first_tmp_file  $reference $file1 ;";
+	$cmd   .= "$bwa aln $align_param -e5 -t5 -f $second_tmp_file $reference $file2 ";
+	my $output = { "first_fq"   => $file1,
+		       "first_sai"  => $first_tmp_file,
+		       "second_fq"  => $file2,
+		       "second_sai" => $second_tmp_file};
+		     
+	EASIH::JMS::submit_job($cmd, $output);
+      }
+      else {
+	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln $align_param -e5 -t5 -f $tmp_file $reference $file1 ";
+	my $output = { "first_fq"   => $file1,
+		       "first_sai"  => $tmp_file};
+	EASIH::JMS::submit_job($cmd, $output);
+      }
     }
   }
 

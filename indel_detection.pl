@@ -49,12 +49,6 @@ my $filters     = $opts{'f'} || "default";
 my $report      = $opts{'o'} || usage();
 
 my $readgroup   = $opts{'r'} || $report;
-my $platform    = uc($opts{'p'}) || usage();
-$platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
-
-# set platform specific bwa aln parameters
-$align_param .= " -c "    if ( $platform eq "SOLID");
-$align_param .= " -q 15 " if ( $platform eq "SOLEXA");
 
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
@@ -74,85 +68,10 @@ EASIH::JMS::max_retry(0);
 my $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "indel_file ==> $report.indel\n";
 
-$extra_report .= "align_param ==> $align_param + -e5 -t5 for second round aligning\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
-$extra_report .= `ls -l $bwa` . "\n";
 
 EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
-
-
-sub fastq_split {
-  my ($input) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file();
- 
-  my $cmd = "$fq_split -e $split  -1 $first";
-  $cmd .= " -2 $second "  if ( $second);
-  $cmd .= " -o tmp/ > $tmp_file";
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-
-
-sub bwa_aln {
-  my ($input) = @_;
-
-  
-  if ( $no_split ) {
-    
-    if ( $first && $second ) {
-      my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $first ;";
-      $cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $second ";
-
-      my $output = { "first_fq"   => $first,
-		     "first_sai"  => $first_tmp_file,
-		     "second_fq"  => $second,
-		     "second_sai" => $second_tmp_file};
-		     
-#      EASIH::JMS::submit_job($cmd, "$first_tmp_file $second_tmp_file $first $second");
-      EASIH::JMS::submit_job($cmd, $output);
-    }
-    else {
-      my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $input ";
-      my $output = { "first_fq"   => $first,
-		     "first_sai"  => $tmp_file};
-      EASIH::JMS::submit_job($cmd, $output);
-    }
-  }
-  else {
-
-    open (my $files, $input) || die "Could not open '$input': $!\n";
-    while (<$files>) {
-      chomp;
-      my ($file1, $file2) = split("\t", $_);
-      
-      if ( $file1 && $file2 ) {
-	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
-	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $file1 ;";
-	$cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $file2 ";
-	my $output = { "first_fq"   => $file1,
-		       "first_sai"  => $first_tmp_file,
-		       "second_fq"  => $file2,
-		       "second_sai" => $second_tmp_file};
-		     
-	EASIH::JMS::submit_job($cmd, $output);
-      }
-      else {
-	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $file1 ";
-	my $output = { "first_fq"   => $file1,
-		       "first_sai"  => $tmp_file};
-	EASIH::JMS::submit_job($cmd, $output);
-      }
-    }
-  }
-}
 
 sub call_indels {
   my ($input) = @_;
@@ -210,7 +129,6 @@ sub validate_input {
   push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
       if ( ! -e "$dir/$basename.dict");
   
-  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
 
   # print the messages and die if critical ones.
   die join("\n", @errors) . "\n"   if ( @errors );
@@ -225,7 +143,7 @@ sub validate_input {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 -b [am file] -R [eference genome]  -o[ut prefix] -p[latform: illumina or solid]\n";
+  print "USAGE: $0 -b [am file] -R [eference genome]  -o[ut prefix] \n";
   exit;
 
 }

@@ -57,18 +57,15 @@ getopts('b:R:d:f:o:hp:', \%opts);
 # }
 
 
-my $bamfile     = $opts{'b'} || usage();
+my $bam_file    = $opts{'b'} || usage();
 my $reference   = $opts{'R'} || usage();
 my $dbsnp       = $opts{'d'} || usage();
 my $filters     = $opts{'f'} || "default";
 my $report      = $opts{'o'} || usage();
 
-my $platform    = uc($opts{'p'}) || usage();
+my $platform    = uc($opts{'p'});
 $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 
-# set platform specific bwa aln parameters
-$align_param .= " -c "    if ( $platform eq "SOLID");
-$align_param .= " -q 15 " if ( $platform eq "SOLEXA");
 
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk');
@@ -88,10 +85,8 @@ EASIH::JMS::max_retry(0);
 my $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "snp_file ==> $report.snps\n";
 
-$extra_report .= "align_param ==> $align_param + -e5 -t5 for second round aligning\n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
-$extra_report .= `ls -l $bwa` . "\n";
 
 EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
 
@@ -124,7 +119,6 @@ sub filter_snps {
 
   my $entries = `egrep -cv \# $input_file`;
   chomp( $entries );
-  print "snp entries: $entries\n";
   return if ( $entries == 0 );
 
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
@@ -199,7 +193,7 @@ sub validate_input {
   push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
   push @errors, "'$dbsnp' does end with .rod as expected\n" if ($dbsnp !~ /.rod\z/);
 
-  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform ne "SOLEXA" && $platform ne 'SOLID');
+  push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform && $platform ne "SOLEXA" && $platform ne 'SOLID');
 
 
   # print the messages and die if critical ones.
@@ -215,7 +209,7 @@ sub validate_input {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 -b-R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n";
+  print "USAGE: $0 -b[am file] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n";
   exit;
 
 }

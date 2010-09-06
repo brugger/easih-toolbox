@@ -79,26 +79,27 @@ while(<STDIN>) {
       print join("\t", "\@RG", "ID:$readgroup","SM:$sample","LB:$library","PL:$platform", "CN:$center") . "\n";
       $written_readgroup++;
     }
+
   
-    if ( (/RG:Z:(\w+)\t/ || /RG:Z:(\w+)\Z/) && 
-	 (/SM:Z:(\w+)\t/ || /SM:Z:(\w+)\Z/)) {
+    if ( (/\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/) && 
+	 (/\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/)) {
       
-      s/(.*RG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
-      s/(.*SM:Z:)(.*?)(\t.*)/$1$sample$3/;
+      s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
+      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
       
-      s/(.*RG:Z:)(.*?)\Z/$1$readgroup/;
-      s/(.*SM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
+      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
     }
-    elsif ( /RG:Z:(\w+)\t/ || /RG:Z:(\w+)\Z/ ) {
+    elsif ( /\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/ ) {
       chomp($_);
-      s/(.*RG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
-      s/(.*RG:Z:)(.*?)\Z/$1$readgroup/;
+      s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
+      s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
       $_ .= "\tSM:$sample\n";
     }
-    elsif ( /SM:Z:(\w+)\t/ || /SM:Z:(\w+)\Z/ ) {
+    elsif ( /\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/ ) {
       chomp($_);
-      s/(.*SM:Z:)(.*?)(\t.*)/$1$sample$3/;
-      s/(.*SM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
+      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
       $_ .= "\tRG:$readgroup\n";
     }
     else {

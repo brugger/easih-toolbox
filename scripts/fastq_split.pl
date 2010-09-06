@@ -37,7 +37,6 @@ if ( $first_file && $second_file ) {
 
   # trim off the absolute path so files does not go somewhere odd.
   $first_file  =~ s/.*\///;
-  print "--> $first_file\n";
   $second_file =~ s/.*\///;
 
   system "mkdir $output_dir" if ( ! -d $output_dir);

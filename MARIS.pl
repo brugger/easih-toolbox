@@ -54,6 +54,9 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 '2nd-generate'      => { function   => 'bwa_generate',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
 
+		 '2nd-tag_sam'       => { function   => 'sam_add_tags',
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
+		 
 		 '2nd-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
@@ -61,14 +64,17 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
 					 sync       => 1},
 
-		 'mapped_sort'       => { function   => 'EASIH::JMS::Picard::sort',
+		 'mapped_fix_n_sort' => { function   => 'EASIH::JMS::Picard::fixmate_n_sort',
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
+
+
+		 'mapped_sort'      => { function   => 'EASIH::JMS::Picard::sort',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 
 
 		 'mapped_index'    =>{ function   => 'EASIH::JMS::Samtools::index',
 					hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
-
 
 		 'get_all_mapped'   => { function   => 'EASIH::JMS::Samtools::get_mapped',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
@@ -126,23 +132,25 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		     
 
 
-our %flow = ( 'csfasta2fastq'    => 'std-aln',
-	      'fastq-split'      => 'std-aln',
+our %flow = ( 'csfasta2fastq'     => 'std-aln',
+	      'fastq-split'       => 'std-aln',
 
-	      'std-aln'          => 'std-generate',
-	      'std-generate'     => 'std-tag_sam',
-	      'std-tag_sam'      => 'std-sam2bam',
-	      'std-sam2bam'      => 'std-merge',
-	      'std-merge'        => ['get_unmapped', 'get_mapped'],
+	      'std-aln'           => 'std-generate',
+	      'std-generate'      => 'std-tag_sam',
+	      'std-tag_sam'       => 'std-sam2bam',
+	      'std-sam2bam'       => 'std-merge',
+	      'std-merge'         => ['get_unmapped', 'get_mapped'],
 
-	      'get_mapped'       => 'mapped_merge',
-	      'get_unmapped'     => 'unmapped_bam2fq',
-	      'unmapped_bam2fq'  => '2nd-aln',
-	      '2nd-aln'          => '2nd-generate',
-	      '2nd-generate'     => '2nd-sam2bam',
-	      '2nd-sam2bam'      => 'mapped_merge',
-	      'mapped_merge'     => 'mapped_sort',
-	      'mapped_sort'      => 'mapped_index',
+	      'get_mapped'        => 'mapped_merge',
+	      'get_unmapped'      => 'unmapped_bam2fq',
+	      'unmapped_bam2fq'   => '2nd-aln',
+	      '2nd-aln'           => '2nd-generate',
+	      '2nd-generate'      => '2nd-tag_sam', 
+	      '2nd-tag_sam'       => '2nd-sam2bam',
+	      '2nd-sam2bam'       => 'mapped_merge',
+	      'mapped_merge'      => 'mapped_sort',
+	      'mapped_fix_n_sort' => 'mapped_index',
+	      'mapped_sort' => 'mapped_index',
 
 	      'mapped_index'     => ['identify_indel', 'get_all_unmapped'],
 	      'get_all_unmapped' => 'realigned_merge',
@@ -165,33 +173,40 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:nm:R:d:f:o:r:p:h', \%opts);
+getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
 
-# if ( $opts{ r} ) {
-#   EASIH::JMS::restore_state($opts{r});
-#   getopts('i:b:f:n:hlr:g:', \%opts);
-# }
+#if ( $opts{ R} ) {
+#  &EASIH::JMS::restore_state($opts{R});
+#  getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
+#}
 
 
-my $first       = $opts{'1'} || usage();
-my $second      = $opts{'2'};
-my $no_split    = $opts{'n'} || 0;
-my $split       = $opts{'m'} || 5000000;
+my $first         = $opts{'1'}    || usage();
+my $second        = $opts{'2'};
+my $no_split      = $opts{'n'}    || 0;
+my $split         = $opts{'m'}    || 5000000;
 
-my $reference   = $opts{'R'} || usage();
-my $align_param = ' ';
-my $dbsnp       = $opts{'d'} || usage();
-my $filters     = $opts{'f'} || "default";
-my $report      = $opts{'o'} || usage();
-my $bam_file    = "$report.bam" || usage();
+my $reference     = $opts{'R'}    || usage();
+my $align_param   = ' ';
+my $dbsnp         = $opts{'d'}    || usage();
+my $filters       = $opts{'f'}    || "default";
+my $report        = $opts{'o'}    || usage();
+my $bam_file      = "$report.bam";
+my $two_mapping   = $opts{'s'}    || 0;
+my $loose_mapping = $opts{'l'}    || 0 if ( ! $two_mapping);
+
+# This makes the pipeline skip the second (loose) mapping
+$flow{'std-merge'} = 'mapped_fix_n_sort' if ( ! $two_mapping );
 
 my $readgroup   = $opts{'r'} || $report;
 my $platform    = uc($opts{'p'}) || usage();
 $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 
 # set platform specific bwa aln parameters
-$align_param .= " -c "    if ( $platform eq "SOLID");
-$align_param .= " -q 15 " if ( $platform eq "SOLEXA");
+$align_param .= " -c "      if ( $platform eq "SOLID");
+$align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
+# and loose mapping, if skipping the second round of mappings.
+$align_param .= " -e5 -t5 " if ( $loose_mapping);
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
@@ -311,7 +326,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe -f $tmp_file $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq}";
+    $cmd = "$bwa sampe  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} | egrep -v '(null)' > $tmp_file";
   
   }
   else {
@@ -421,7 +436,7 @@ sub realign_indel {
   my $cmd;
   # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
   if (  -z $interval_file ) {
-    $cmd = "$samtools view -b $bam_file $region > $tmp_file";
+    $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
   }
   else {
     $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region --output $tmp_file -R $reference -I $tmp_bam_file";
@@ -505,7 +520,6 @@ sub filter_snps {
 
   my $entries = `egrep -cv \# $input_file`;
   chomp( $entries );
-  print "snp entries: $entries\n";
   return if ( $entries == 0 );
 
   $filters = "--filterExpression 'DP < 20' --filterName shallow --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";
@@ -566,6 +580,10 @@ sub validate_input {
   
   my @errors;
   my @info;
+
+  push @errors, "$first does not exist"  if ( ! -e $first );
+  push @errors, "$second does not exist"  if ( $second &&  ! -e $second );
+
 
   # Things related to the reference sequence being used.
   

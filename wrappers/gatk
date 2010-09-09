@@ -35,8 +35,13 @@ foreach my $argv ( @ARGV ) {
 
 }
 
+
+my $username = scalar getpwuid $<;
+
+mkdir "/home/$username/scratch/tmp" if ( ! -d "/home/$username/scratch/tmp");
+
 #print "$java -jar $gatk $argv_list\n";
-system "$java -jar $gatk $argv_list\n";
+system "$java -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

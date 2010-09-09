@@ -59,7 +59,7 @@ sub process {
     if ( $opts{2} ) {
       # second read
       if ($flag & 0x0080 ) {
-#	print {$fhw[1]} "\@$name\n$read\n+\n$qual\n" ;
+	print {$fhw[1]} "\@$name\n$read\n+\n$qual\n" ;
       }
       else {
 	print {$fhw[0]} "\@$name\n$read\n+\n$qual\n" ;

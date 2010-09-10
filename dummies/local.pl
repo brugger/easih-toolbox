@@ -17,7 +17,7 @@ getopts('S:f:F', \%opts);
 
 
 my $sleep_time = shift || 10;
-my $fail_rate = $opts{f} || 5;
+my $fail_rate = $opts{f} || 1;
 
 srand;
 $sleep_time = int(rand( $sleep_time ));

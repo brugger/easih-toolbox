@@ -590,9 +590,15 @@ sub validate_input {
   push @errors, "GATK expects references to end with 'fasta'." 
       if ( $reference !~ /fasta\z/);
 
-  my ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
+  my ($dir, $basename, $postfix) = (".","","");
+  if ( $reference =~ /\//) {
+    ($dir, $basename, $postfix) = $reference =~ /^(.*)\/(.*?)\.(.*)/;
+  }
+  else {
+    ($basename, $postfix) = $reference =~ /^(.*?)\.(.*)/;
+  }
   
-  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
+  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki $dir/$basename.dict\n" 
       if ( ! -e "$dir/$basename.dict");
   
   my @bwa_postfixes = ('amb', 'ann', 'bwt', 'fai','pac', 'rbwt', 'rpac', 'rsa', 'sa');

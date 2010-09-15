@@ -134,7 +134,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 my %opts;
 getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
 
-#if ( $opts{ R} ) {
+#if ( $opts{R} ) {
 #  &EASIH::JMS::restore_state($opts{R});
 #  getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
 #}

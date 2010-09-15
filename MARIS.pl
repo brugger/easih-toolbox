@@ -109,7 +109,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'std-generate'      => 'std-tag_sam',
 	      'std-tag_sam'       => 'std-sam2bam',
 	      'std-sam2bam'       => 'std-merge',
-	      'std-merge'         => 'std_sort',
+	      'std-merge'         => 'std-sort',
 	      'std-sort'          => 'std-index',
 
 	      'mapped_index'     => ['identify_indel', 'get_all_unmapped'],

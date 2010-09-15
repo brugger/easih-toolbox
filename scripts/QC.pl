@@ -96,7 +96,6 @@ sub report {
   
   my $max_qual = 0;
 
-  print Dumper( \%bwa );
 
   open ( $out, "> $out_file.MeanQual ") || die "Could not open '$out_file.MeanQual': $!\n";
   for(my $i = 0; $i < @{$base_qual[$ALL_READS]}; $i++ ) {

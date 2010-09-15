@@ -14,15 +14,16 @@ use strict;
 use Getopt::Long;
 
 my %opts;
-getopts('1:2:s:o:r:R:p:hb:', \%opts);
+getopts('1:2:s:o:r:R:p:hb:n', \%opts);
 
 my $first_file    = $opts{1};
 my $second_file   = $opts{2};
 my $bam_file      = $opts{b};
+my $no_mapping    = $opts{n} ||  0;
 my $sample_size   = $opts{s} || 10; # This is in MB
 my $out_file      = $opts{o};
 my $report        = $opts{r} || "";
-my $reference     = $opts{R} || usage() if ( ! $bam_file);
+my $reference     = 0; $opts{R} || usage() if ( ! $bam_file && ! $no_mapping);
 my $platform      = uc($opts{p}) || die "no platform given (-p[ SOLEXA, SOLID])\n"; 
 $platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
 
@@ -66,7 +67,8 @@ if ( $bam_file ) {
 }
 elsif ( $first_file )  {
   sample( $first_file, $second_file, "$tmp_file.1", "$tmp_file.2", $sample_size);
-  map_and_qc( "$tmp_file.1", "$tmp_file.2" );
+  qc( "$tmp_file.1", "$tmp_file.2" ) if ( $no_mapping );
+  map_and_qc( "$tmp_file.1", "$tmp_file.2" ) if ( !$no_mapping );;
 }
 else{
   die "no input, read the code\n" if ( ! $first_file  );
@@ -85,9 +87,7 @@ sub report {
 
   my $infile = $first_file || $bam_file;
   $infile =~ s/.*\///;
-
   $infile = $report . $infile;
-
   $out_file ||= $infile;
 
   my ($Q_min_count) = (0,0);
@@ -95,6 +95,8 @@ sub report {
   my ($out, $R);
   
   my $max_qual = 0;
+
+  print Dumper( \%bwa );
 
   open ( $out, "> $out_file.MeanQual ") || die "Could not open '$out_file.MeanQual': $!\n";
   for(my $i = 0; $i < @{$base_qual[$ALL_READS]}; $i++ ) {
@@ -134,7 +136,6 @@ sub report {
   print $R "abline(h=15, col='red')\n";
   print $R "dev.off()\n";
   close ($R);
-
 
   open ($out, "> $out_file.QualHist ") || die "Could not open '$out_file.QualHist': $!\n";
   my (@values, @positions);
@@ -185,7 +186,7 @@ sub report {
   my (@As, @Cs, @Gs, @Ts, @Ns, @pos);
 
 
-  if ( $base_dist[$MAPPED_READ] ) {
+  if ( $bwa{$MAPPED_READ} ) {
     for(my $i = 0; $i < @{$base_dist[$MAPPED_READ]}; $i++ ) {
       my $Ns = $bwa{$MAPPED_READ} - ($base_dist[$MAPPED_READ][ $i ]{A} || 0) - ($base_dist[$MAPPED_READ][ $i ]{C} || 0) - ($base_dist[$MAPPED_READ][ $i ]{G} || 0) - ($base_dist[$MAPPED_READ][ $i ]{T} || 0);
       
@@ -425,6 +426,47 @@ sub map_and_qc {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (03 Aug 2010)
+sub qc {
+  my ( $infile1, $infile2 ) = @_;
+
+  open (my $file1, "$infile1") || die "Could not open '$infile1': $!\n";
+  while (<$file1>) { 
+#    print "-- $_\n";
+    my $sequence = <$file1>;
+    my  $strand  = <$file1>;
+    my $quality  = <$file1>;
+    chomp( $sequence); 
+    chomp( $strand );
+    chomp( $quality);
+#    print "$sequence, $strand, $quality\n";
+    analyse( $sequence, $quality, $FIRST_READ);
+    $bwa{$FIRST_READ}++;
+    $bwa{$ALL_READS}++;
+  }
+
+  if ( -f  $infile2 ) {
+    open (my $file2, "$infile2") || die "Could not open '$infile2': $!\n";
+
+    while (<$file2>) { 
+      my $sequence = <$file2>;
+      my  $strand  = <$file2>;
+      my $quality  = <$file2>;
+      chomp( $sequence); 
+      chomp( $strand );
+      chomp( $quality);
+      analyse( $sequence, $quality, $SECOND_READ);
+      $bwa{$SECOND_READ}++;
+      $bwa{$ALL_READS}++;
+    }
+  }
+}
+
+
+
 
 
 
@@ -631,9 +673,10 @@ sub sample {
 sub usage {
   
   $0 =~ s/.*\///;
-  print "There are two running modes, one where the seq is sampled and aligned and the other from a pre aligned file\n";
-  print "USAGE RAW: $0 -1 [first fq file] -2 [second fq] -s[ample size] -o[ut file, otherwise a default will be made] -p[latform]\n";
-  print "USAGE RAW: $0 -b[am file] -R[eference bwa formatted] -s[ample size] -o [ut file, otherwise a default will be made] -p[latform]\n";
+  print "There are three running modes, one where the seq is sampled and aligned and the other from a pre aligned file, finally just qv and base dist.\n";
+  print "USAGE RAW: $0 -1 [first fq file] -2 [second fq] -R[eference bwa formatted] -s[ample size] -o[ut file, otherwise a default will be made] -p[latform]\n";
+  print "USAGE RAW: $0 -b[am file] -s[ample size] -o[ut file, otherwise a default will be made] -p[latform]\n";
+  print "USAGE RAW: $0 -1 [first fq file] -2 [second fq] -n[o mapping] -s[ample size] -o[ut file, otherwise a default will be made] -p[latform]\n";
   exit;
 
 }

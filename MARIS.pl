@@ -18,7 +18,6 @@ use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
 
 
-
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 

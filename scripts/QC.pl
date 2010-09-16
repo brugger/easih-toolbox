@@ -47,9 +47,6 @@ my ( %GC, %bwa );
 
 my $Q_min = 20;
 
-#sample("tmp/tyt_1.2.fq", "tmp/tyt_1.1.fq", "tmp/1", "tmp/2");
-#exit;
-
 
 validate_input();
 
@@ -66,12 +63,12 @@ if ( $bam_file ) {
   qc_premapped( $bam_file, $sample_size );
 }
 elsif ( $first_file )  {
+  print "Start sampling ..\n";
   sample( $first_file, $second_file, "$tmp_file.1", "$tmp_file.2", $sample_size);
+  print "done.....\n";
+#  qc( "$first_file", "$second_file" ) if ( $no_mapping );
   qc( "$tmp_file.1", "$tmp_file.2" ) if ( $no_mapping );
   map_and_qc( "$tmp_file.1", "$tmp_file.2" ) if ( !$no_mapping );;
-}
-else{
-  die "no input, read the code\n" if ( ! $first_file  );
 }
 
 
@@ -432,6 +429,8 @@ sub map_and_qc {
 sub qc {
   my ( $infile1, $infile2 ) = @_;
 
+  print "starting qc, file one...\n";
+
   open (my $file1, "$infile1") || die "Could not open '$infile1': $!\n";
   while (<$file1>) { 
 #    print "-- $_\n";
@@ -446,6 +445,8 @@ sub qc {
     $bwa{$FIRST_READ}++;
     $bwa{$ALL_READS}++;
   }
+  
+  print "second file...\n";
 
   if ( -f  $infile2 ) {
     open (my $file2, "$infile2") || die "Could not open '$infile2': $!\n";
@@ -601,15 +602,15 @@ sub sample {
 #    print "going to $random_pos\n";
     seek( $file1, $random_pos, 0);
     while ( <$file1> ) {
-      last if ( $_ =~ /^\@\w+:\d+:/);
+      last if ( $_ =~ /^\@\w+:\d+/);
     }
     
-    if ($_ &&  $_ =~ /^\@\w+:\d+:/ && !$used{ $_ }) {
+    if ($_ &&  $_ =~ /^\@\w+:\d+/ && !$used{ $_ }) {
       my $name = $_;
       my $seq  = <$file1>;
       my $str  = <$file1>;
       my $qual = <$file1>;
-      
+            
       print $out1 join("", $name, $seq, $str, $qual);
       $read += length("$name$seq$str$qual");
       $used{$infile1}++;
@@ -626,10 +627,10 @@ sub sample {
       
       seek( $file2, $random_pos, 0);
       while ( <$file2> ) {
-	last if ( $_ =~ /^\@\w+:\d+:/);
+	last if ( $_ =~ /^\@\w+:\d+/);
       }
 
-      if ($_ &&  $_ =~ /^\@\w+:\d+:/ && !$used{ $_ }) {
+      if ($_ &&  $_ =~ /^\@\w+:\d+/ && !$used{ $_ }) {
 	my $name = $_;
 	$name2 = $name;
 	$name2 =~ s/\/\d\n//;
@@ -642,6 +643,7 @@ sub sample {
 	  my $seq  = <$file2>;
 	  my $str  = <$file2>;
 	  my $qual = <$file2>;
+	  
 	
 	  print $out2 join("", $name, $seq, $str, $qual);
 	  $read += length("$name$seq$str$qual");

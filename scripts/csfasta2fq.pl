@@ -31,11 +31,27 @@ my $singletons = $opts{s} || 0
 # strip away the (F3/R3).* postfixes so we are sure to have the correct basename
 $prefix =~ s/F3.*//;
 $prefix =~ s/R3.*//;
+$prefix =~ s/F5.*//;
 
 my (@fhr, @fhw);
 my @fn_suff = ('F3.csfasta', 'F3_QV.qual', 'R3.csfasta', 'R3_QV.qual');
-my $is_paired = (-f "$prefix$fn_suff[2]" || -f "$prefix$fn_suff[2].gz")? 1 : 0;
-if ($is_paired) { # paired end
+my $is_mate_paired = (-f "$prefix$fn_suff[2]" || -f "$prefix$fn_suff[2].gz")? 1 : 0;
+
+my ($is_paired_ends, $F3_cs, $F3_qual, $F5_cs, $F5_qual) = (0);
+if ( ! $is_mate_paired ) {
+  my @files = glob("$prefix*");
+  
+  foreach my $file ( @files ) {
+    $F3_cs   = $file if ( $file =~ /$prefix.*F3.*.csfasta/);
+    $F3_qual = $file if ( $file =~ /$prefix.*F3.*.qual/);
+    $F5_cs   = $file if ( $file =~ /$prefix.*F5.*.csfasta/);
+    $F5_qual = $file if ( $file =~ /$prefix.*F5.*.qual/);
+  }
+
+  $is_paired_ends = 1 if ($F3_cs && $F3_qual && $F5_cs && $F5_qual);
+}
+
+if ($is_mate_paired) { # paired end
   for (0 .. 3) {
 	my $fn = "$prefix$fn_suff[$_]";
 	$fn = "gzip -dc $fn.gz |" if (!-f $fn && -f "$fn.gz");
@@ -50,7 +66,7 @@ if ($is_paired) { # paired end
     open($fhw[2], "|gzip >$pre.single.fq.gz") || die if ( $singletons );
   }
   else {
-    open($fhw[0], " >$out.2.fq")  || die; # this is NOT a typo
+    open($fhw[0], " >$out.2.fq")  || die;  # this is NOT a typo
     open($fhw[1], " >$out.1.fq")  || die;
     open($fhw[2], " >$pre.single.fq") || die if ( $singletons );
   }
@@ -81,7 +97,55 @@ if ($is_paired) { # paired end
   }
   close($fhr[$_]) for (0 .. $#fhr);
   close($fhw[$_]) for (0 .. $#fhw);
-} else { # single end
+} 
+elsif ($is_paired_ends) { # paired ends
+
+#my ($is_paired_ends, $F3_cs, $F3_qual, $F5_cs, $F5_qual) = (0);
+
+  my @files = ($F3_cs, $F3_qual, $F5_cs, $F5_qual);
+  for (0 .. 3) {
+	my $fn = $files[$_];
+	$fn = "gzip -dc $fn.gz |" if ($fn =~ /gz\z/);
+	open($fhr[$_], $fn) || die("** Fail to open '$fn'. (paired_ends)\n");
+  }
+  
+  if ( $compress ) {
+    open($fhw[0], "|gzip >$out.1.fq.gz")  || die;
+    open($fhw[1], "|gzip >$out.2.fq.gz")  || die;
+  }
+  else {
+    open($fhw[0], " >$out.1.fq")  || die;
+    open($fhw[1], " >$out.2.fq")  || die;
+  }
+  
+  my (@df, @dr);
+  @df = &read1(1); 
+  @dr = &read1(2);
+  while (@df && @dr) {
+
+    print {$fhw[0]} $df[1]; 
+    print {$fhw[1]} $dr[1];
+      
+    @df = &read1(1); 
+    @dr = &read1(2);
+  }
+
+  if (@df) {
+    print {$fhw[0]} $df[1];
+    while (@df = &read1(1, $fhr[0], $fhr[1])) {
+      print {$fhw[0]} $df[1];
+    }
+  }
+  if (@dr) {
+    print {$fhw[1]} $dr[1];
+    while (@dr = &read1(2, $fhr[2], $fhr[3])) {
+      print {$fhw[1]} $dr[1];
+    }
+  }
+  close($fhr[$_]) for (0 .. $#fhr);
+  close($fhw[$_]) for (0 .. $#fhw);
+} 
+else { # single end
 
   for (0 .. 1) {
     my $fn = "$prefix$fn_suff[$_]";
@@ -112,16 +176,16 @@ sub read1 {
   my $j = ($i-1)<<1;
   my ($key, $seq);
   my ($fhs, $fhq) = ($fhr[$j], $fhr[$j|1]);
-  while (<$fhs>) {
-	my $t = <$fhq>;
-	if (/^>(\d+)_(\d+)_(\d+)_[FR]3/) {
+  while ($_ = read_line($fhs)) {
+	my $t = read_line($fhq);
+	if (/^>(\d+)_(\d+)_(\d+)_[FR][35].*/) {
 	  $key = sprintf("%.4d_%.4d_%.4d", $1, $2, $3); # this line could be improved on 64-bit machines
 	  die(qq/** unmatched read name: '$_' != '$t'\n/) unless ($_ eq $t);
 	  my $name = "$out:$1_$2_$3/$i";	  
-	  $_ = substr(<$fhs>, 2);
+	  $_ = substr(read_line($fhs), 2);
 	  tr/0123./ACGTN/;
 	  my $s = $_;
-	  $_ = <$fhq>;
+	  $_ = read_line($fhq);
 	  s/^(\d+)\s*//;
 	  s/-1/0/g;
 	  my $qual;
@@ -134,6 +198,19 @@ sub read1 {
 }
 
 
+
+# 
+# 
+# 
+# Kim Brugger (15 Sep 2010)
+sub read_line {
+  my $fh = shift;
+  while (my $line = <$fh>) {
+    return $line if ($line !~ /^\#/);
+  }
+
+  return undef;
+}
 
 
 # 

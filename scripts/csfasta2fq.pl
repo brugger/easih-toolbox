@@ -5,7 +5,6 @@
 # Also note that this script is different from the one contained in MAQ.
 
 # Changes by kb468
-# new flag -n[ax entries] will split the output into multiple gz files.
 #
 # Somewhat optimized the read1 function so the code runs twice as fast
 #
@@ -19,14 +18,15 @@ use Getopt::Std;
 use Data::Dumper;
 
 my %opts;
-getopts('p:o:nh', \%opts);
+getopts('p:o:nhs:', \%opts);
 
 usage() if ($opts{h});
 
-my $prefix   = $opts{p} || usage();
-my $out      = $opts{o} || usage();
+my $prefix     = $opts{p} || usage();
+my $out        = $opts{o} || usage();
 # we compress by default, -n turns that off
-my $compress = $opts{n} ? 0 : 1;
+my $compress   = $opts{n} ? 0 : 1;
+my $singletons = $opts{s} || 0
 
 # strip away the (F3/R3).* postfixes so we are sure to have the correct basename
 $prefix =~ s/F3.*//;
@@ -47,10 +47,12 @@ if ($is_paired) { # paired end
   if ( $compress ) {
     open($fhw[0], "|gzip >$out.2.fq.gz")  || die; # this is NOT a typo
     open($fhw[1], "|gzip >$out.1.fq.gz")  || die;
+    open($fhw[2], "|gzip >$pre.single.fq.gz") || die if ( $singletons );
   }
   else {
     open($fhw[0], " >$out.2.fq")  || die; # this is NOT a typo
     open($fhw[1], " >$out.1.fq")  || die;
+    open($fhw[2], " >$pre.single.fq") || die if ( $singletons );
   }
   
   my (@df, @dr);
@@ -142,7 +144,7 @@ sub usage {
 
   $0 =~ s/.*\///;
   
-  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress]\n";
+  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress] -s[ingletons in their own file]\n";
   exit -1;
 
 }

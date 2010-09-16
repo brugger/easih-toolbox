@@ -4,13 +4,17 @@
 # Note: Ideally, this script should be written in C. It is a bit slow at present.
 # Also note that this script is different from the one contained in MAQ.
 
-# Changes by kb468
+# Changed:  Kim Brugger (kim.brugger@easih.ac.uk)
 #
-# Somewhat optimized the read1 function so the code runs twice as fast
-#
-# The input is now more flexible
+# * The input prefix is now, a lot, more flexible
+# * flags for all options.
+# * a speedup of about 40% of the read1 function.
+# * read1 does not fail if there is a different number of comment lines in the csfasta and qual files
+# * the choice of writing the singletons to a separate file, otherwise everything is put into the other two files.
+# * the option for not compressing the output
+# * Only matepaired reads are flipped, accordingly to the standard BWA way
+# * first part of the id line can be set independent from the output prefix 
 # 
-# kb468: Hacked beyond recognition. Actually an almost rewrite of the program...
 
 use strict;
 use warnings;
@@ -18,12 +22,13 @@ use Getopt::Std;
 use Data::Dumper;
 
 my %opts;
-getopts('p:o:nhs:', \%opts);
+getopts('p:o:nhsi:', \%opts);
 
 usage() if ($opts{h});
 
 my $prefix     = $opts{p} || usage();
 my $out        = $opts{o} || usage();
+my $id         = $opts{i} || $opts{o};
 # we compress by default, -n turns that off
 my $compress   = $opts{n} ? 0 : 1;
 my $singletons = $opts{s} || 0;
@@ -41,22 +46,26 @@ my ($is_paired_ends, $F3_cs, $F3_qual, $F5_cs, $F5_qual) = (0);
 if ( ! $is_mate_paired ) {
   my @files = glob("$prefix*");
 
-  use %libs;
+  my %libs;
   
   foreach my $file ( @files ) {
     $F3_cs   = $file if ( $file =~ /$prefix.*F3.*.csfasta/);
     $F3_qual = $file if ( $file =~ /$prefix.*F3.*.qual/);
     $F5_cs   = $file if ( $file =~ /$prefix.*F5.*.csfasta/);
     $F5_qual = $file if ( $file =~ /$prefix.*F5.*.qual/);
-    $libs{$1}++ if ($file =~ /$prefix.*F5(.*).qual/)
+    $libs{$3}++ if ($file =~ /$prefix.*F(5|3)(-BC|-P2){0,1}_(.*).qual/)
   }
 
-  print Dumper(%libs);
+  if ( keys %libs > 1 ) {
+    print "There are multiple filenames that could be used. Plese place the " .(keys %libs). " library files in separate directories\n";
+    exit 1;
+  }
 
   $is_paired_ends = 1 if ($F3_cs && $F3_qual && $F5_cs && $F5_qual);
 }
 
 if ($is_mate_paired || $is_paired_ends) { 
+
 
   if ( $is_mate_paired ) {
     for (0 .. 3) {
@@ -69,7 +78,7 @@ if ($is_mate_paired || $is_paired_ends) {
     if ( $compress ) {
       open($fhw[0], "|gzip >$out.2.fq.gz")  || die; # this is NOT a typo
       open($fhw[1], "|gzip >$out.1.fq.gz")  || die;
-      open($fhw[2], "|gzip >$out.single.fq.gz") || die if ( $singletons );
+      open($fhw[2], "|gzip >$out.single.fq.gz") || die if ( $singletons ); 
     }
     else {
       open($fhw[0], " >$out.2.fq")  || die;  # this is NOT a typo
@@ -93,7 +102,7 @@ if ($is_mate_paired || $is_paired_ends) {
     else {
       open($fhw[0], " >$out.1.fq")  || die;
       open($fhw[1], " >$out.2.fq")  || die;
-      open($fhw[2], "|gzip >$out.single.fq.gz") || die if ( $singletons );
+      open($fhw[2], " >$out.singles.fq") || die if ( $singletons );
     }
   }
   
@@ -102,8 +111,10 @@ if ($is_mate_paired || $is_paired_ends) {
   @dr = &read1(2);
   while (@df && @dr) {
     if ($df[0] eq $dr[0]) { # paired reads
-      print {$fhw[0]} $df[1]; print {$fhw[1]} $dr[1];
-      @df = &read1(1); @dr = &read1(2);
+      print {$fhw[0]} $df[1]; 
+      print {$fhw[1]} $dr[1];
+      @df = &read1(1); 
+      @dr = &read1(2);
     } else {
       if ($df[0] le $dr[0]) {
 	if ( $singletons ) {
@@ -186,7 +197,7 @@ sub read1 {
 	if (/^>(\d+)_(\d+)_(\d+)_[FR][35].*/) {
 	  $key = sprintf("%.4d_%.4d_%.4d", $1, $2, $3); # this line could be improved on 64-bit machines
 	  die(qq/** unmatched read name: '$_' != '$t'\n/) unless ($_ eq $t);
-	  my $name = "$out:$1_$2_$3/$i";	  
+	  my $name = "$id:$1_$2_$3/$i";	  
 	  $_ = substr(read_line($fhs), 2);
 	  tr/0123./ACGTN/;
 	  my $s = $_;
@@ -226,7 +237,7 @@ sub usage {
 
   $0 =~ s/.*\///;
   
-  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress] -s[ingletons in their own file]\n";
+  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress] -s[ingletons in their own file] -i[d for the first part of the id line]\n";
   exit -1;
 
 }

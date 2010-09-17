@@ -36,7 +36,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
 		 'std-merge'         => { function   => 'EASIH::JMS::Picard::merge',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",
 					 sync       => 1},
 
 		 'std-sort'    => { function   => 'EASIH::JMS::Picard::sort',
@@ -70,7 +70,7 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:nm:R:d:f:o:r:p:h', \%opts);
+getopts('1:2:nm:R:o:r:p:hl', \%opts);
 
 # if ( $opts{ r} ) {
 #   EASIH::JMS::restore_state($opts{r});
@@ -85,9 +85,9 @@ my $split       = $opts{'m'} || 5000000;
 
 my $reference   = $opts{'R'} || usage();
 my $align_param = ' ';
-my $filters     = $opts{'f'} || "default";
 my $report      = $opts{'o'} || usage();
 my $bam_file    = "$report.bam" || usage();
+my $loose_mapping = $opts{'l'}    || 0;
 
 my $readgroup   = $opts{'r'} || $report;
 my $platform    = uc($opts{'p'}) || usage();
@@ -96,6 +96,7 @@ $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 # set platform specific bwa aln parameters
 $align_param .= " -c "    if ( $platform eq "SOLID");
 $align_param .= " -q 15 " if ( $platform eq "SOLEXA");
+$align_param .= " -e5 -t5 " if ( $loose_mapping);
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
@@ -428,7 +429,7 @@ sub validate_input {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 -1 [fastq file]  -2 [fastq file]  -n[o splitting of fastq file(s)] -R [eference genome]  -o[ut prefix] -p[latform: illumina or solid]\n";
+  print "USAGE: $0 -1 [fastq file]  -2 [fastq file] -l[oose mapping] -n[o splitting of fastq file(s)] -R [eference genome]  -o[ut prefix] -p[latform: illumina or solid]\n";
   exit;
 
 }

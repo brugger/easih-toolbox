@@ -9,9 +9,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use lib '/home/kb468/projects/ensembl-variation/modules/';
-use lib '/home/kb468/projects/e57/ensembl/modules/';
-use lib '/home/kb468/projects/e57/bioperl-live/';
+
+use lib '/usr/local/lib/ensembl-variation/modules/';
+use lib '/usr/local/lib/ensembl-functgenomics/modules/';
+use lib '/usr/local/lib/ensembl/modules/';
+use lib '/usr/local/lib/bioperl/';
 
 use strict;
 use Getopt::Std;
@@ -21,7 +23,7 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 
 my %opts;
-getopts('b:d:TfHh', \%opts);
+getopts('b:d:TfHhI', \%opts);
 usage() if ( $opts{h});
 
 my $species     = "human";
@@ -43,6 +45,7 @@ my $min_depth   = $opts{d} || 0;
 my $from_36     = $opts{T} || 0;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
+my $igv_links   = $opts{I} || 0;
 
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
 my $ens_trans_link = 'http://www.ensembl.org/Homo_sapiens/Transcript/Summary?db=core;t=';
@@ -104,6 +107,20 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
 sub print_results {
   my ( $mapping, $effects ) = @_;
 
+  my $name = $$mapping[0];
+  
+  if ( $html_out && $igv_links) {
+    
+    if ($name =~ /^\d+\z/) {
+      $name = "<a href='localhost:60151/locus=chr$name'> $name</a>";
+    }
+    else {
+      $name = "<a href='localhost:60151/locus=$name'> $name</a>";
+    }
+  }
+
+  $$mapping[0] = $name;
+
   if ( $full_report ) {
     print_fullreport($mapping, $effects );
   }    
@@ -141,7 +158,7 @@ sub print_fullreport {
 
       $gene_id = "$$effect{ stable_id }" if (!$$effect{ external_name } && 
 					     $$effect{ stable_id } );
-	
+
       $gene_id = "<a href='$ens_gene_link$$effect{ stable_id }'>$gene_id</a>"
 	  if ( $gene_id && $html_out && $$effect{ stable_id });
 	
@@ -196,7 +213,31 @@ sub print_oneliner {
     foreach my $effect ( @$effects ) {
       
       my @effect_line;
-      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+
+      my $gene_id;
+      $gene_id = "$$effect{ external_name }/$$effect{ stable_id }" if ($$effect{ external_name } && 
+								       $$effect{ stable_id } );
+
+      $gene_id = "$$effect{ stable_id }" if (!$$effect{ external_name } && 
+					     $$effect{ stable_id } );
+
+      $gene_id = "<a href='$ens_gene_link$$effect{ stable_id }'>$gene_id</a>"
+	  if ( $gene_id && $html_out && $$effect{ stable_id });
+	
+      push @effect_line, $gene_id;
+
+      my $trans_id = "";
+	
+      $trans_id = "$$effect{ xref }/$$effect{ transcript_id }" if ($$effect{ xref } && 
+								   $$effect{ transcript_id } );
+      
+      $trans_id = "$$effect{ transcript_id }" if (!$$effect{ xref } && 
+						  $$effect{ transcript_id } );
+      
+      $trans_id = "<a href='$ens_trans_link$$effect{ transcript_id }'>$trans_id</a>"
+	  if ( $trans_id && $html_out && $$effect{ transcript_id });
+	
+      push @effect_line, $trans_id;
       push @effect_line, ($$effect{ position } || "");
       push @effect_line, ($$effect{ cpos } || "");
       push @effect_line, ($$effect{ ppos } || "");
@@ -539,7 +580,7 @@ indel_report turns a vcf file into a nice report, annotated with Ensembl gene in
 
 =item B<-b F<bed file>>: 
 
-The bedfile that the SNP calling was based on.
+The bedfile file containing the indels.
 
 =item B<-f>: 
 
@@ -548,6 +589,10 @@ Prints out a multi-line report, otherwise it is done on a oneline basis (good fo
 =item B<-H>: 
 
 Prints a HTML report, default is a tab-separated one.
+
+=item B<-I>: 
+
+Adds links to IGV to ease navigation.
 
 =item B<-d>: 
 

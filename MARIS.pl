@@ -109,10 +109,10 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'std-generate'      => 'std-tag_sam',
 	      'std-tag_sam'       => 'std-sam2bam',
 	      'std-sam2bam'       => 'std-merge',
-	      'std-merge'         => 'std_sort',
+	      'std-merge'         => 'std-sort',
 	      'std-sort'          => 'std-index',
 
-	      'mapped_index'     => ['identify_indel', 'get_all_unmapped'],
+	      'std-index'        => ['identify_indel', 'get_all_unmapped'],
 	      'get_all_unmapped' => 'realigned_merge',
 	      'identify_indel'   => 'realign_indel',
 	      'realign_indel'    => 'realigned_merge',
@@ -169,7 +169,6 @@ my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
-my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
 

@@ -11,12 +11,11 @@ use Data::Dumper;
 
 use Getopt::Std;
 
-use lib '/home/kb468/easih-pipeline/modules';
+use lib '/home/cjp64/git/easih-pipeline/modules';
 use EASIH::JMS;
 use EASIH::JMS::Misc;
 use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
-
 
 
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',
@@ -135,7 +134,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 my %opts;
 getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
 
-#if ( $opts{ R} ) {
+#if ( $opts{R} ) {
 #  &EASIH::JMS::restore_state($opts{R});
 #  getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
 #}
@@ -198,7 +197,7 @@ $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
 
-EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
+EASIH::JMS::mail_report('chris.penkett@easih.ac.uk', $bam_file, $extra_report);
 
 
 sub fastq_split {

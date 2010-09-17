@@ -41,7 +41,7 @@ my ($is_paired_ends, $F3_cs, $F3_qual, $F5_cs, $F5_qual) = (0);
 if ( ! $is_mate_paired ) {
   my @files = glob("$prefix*");
 
-  use %libs;
+  my %libs;
   
   foreach my $file ( @files ) {
     $F3_cs   = $file if ( $file =~ /$prefix.*F3.*.csfasta/);
@@ -105,6 +105,7 @@ if ($is_mate_paired || $is_paired_ends) {
       print {$fhw[0]} $df[1]; print {$fhw[1]} $dr[1];
       @df = &read1(1); @dr = &read1(2);
     } else {
+      print "s\n";
       if ($df[0] le $dr[0]) {
 	if ( $singletons ) {
 	  print {$fhw[2]} $df[1];

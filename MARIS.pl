@@ -12,11 +12,13 @@ use Data::Dumper;
 use Getopt::Std;
 
 use lib '/home/cjp64/git/easih-pipeline/modules';
+use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 use EASIH::JMS::Misc;
 use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
 
+my $VERSION   = "1.20";
 
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
@@ -237,11 +239,15 @@ else {
 
 &EASIH::JMS::store_state();
 
+
+
 my $extra_report = "1 ==> $first\n";
 $extra_report .= "2 ==> $second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "snp_file ==> $report.snps\n";
 $extra_report .= "indel_file ==> $report.indel\n";
+$extra_report .= "MARIS version: $VERSION\n";
+$extra_report .= "easih-pipeline: " . EASIH::JMS::version() . "\n";
 
 $extra_report .= "align_param ==> $align_param \n";
 $extra_report .= "Binaries used..\n";
@@ -606,6 +612,10 @@ sub usage {
   print "extra flags: -r[ead group]\n"; 
 #  print "extra flags: -S[oft reset of a crashed/failed run, needs a freeze file]\n";
   print "\n";
+
+  print "MARIS version: $VERSION\n";
+  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
+
 
   exit;
 

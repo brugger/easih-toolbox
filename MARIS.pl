@@ -136,7 +136,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:d:e:f:hH:l:m:M:n:No:p:Pr:R:S:', \%opts);
+getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
 
 usage() if ( $opts{h});
 
@@ -156,7 +156,7 @@ my $filter        = $opts{'f'}     || "exon";
 my $hard_reset    = $opts{'H'};
 my $loose_mapping = $opts{'l'}     || 0;
 my $mark_dup      = $opts{'m'};
-my $min_depth     = $opts{'M'};
+my $min_depth     = $opts{'M'}     || 0;
 my $split         = $opts{'n'}     || 10000000;
 my $no_split      = $opts{'N'}     || 0;
 my $report        = $opts{'o'}     || usage();
@@ -177,6 +177,23 @@ $align_param .= " -c "      if ( $platform eq "SOLID");
 $align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
 # and loose mapping, if skipping the second round of mappings.
 $align_param .= " -e5 -t5 " if ( $loose_mapping);
+
+if ( $print_filter ) {
+  print "GATK Filter to be used: $filter\n";
+  exit;
+}
+
+# Only paired ends runs gets marked duplicates.
+$flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
+
+my $bwa          = EASIH::JMS::Misc::find_program('bwa');
+my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
+my $samtools     = EASIH::JMS::Misc::find_program('samtools');
+my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
+my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
+
+validate_input();
+
 
 if ($filter ne "wgs" ) {
   $min_depth ||= 20;
@@ -207,22 +224,6 @@ elsif ( $filter ne "exon-low" ) {
   $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
 }
-
-if ( $print_filter ) {
-  print "GATK Filter to be used: $filter\n";
-  exit;
-}
-
-# Only paired ends runs gets marked duplicates.
-$flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
-
-my $bwa          = EASIH::JMS::Misc::find_program('bwa');
-my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
-my $samtools     = EASIH::JMS::Misc::find_program('samtools');
-my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
-
-validate_input();
 
 #EASIH::JMS::verbosity(10);
 EASIH::JMS::hive('Darwin');
@@ -584,7 +585,7 @@ sub validate_input {
       if ($filter ne "wgs" && $filter ne "wgs-low" && $filter ne "exon" && $filter ne "exon-low");
 
 
-  push @errors, "-M '$min_depth' is <0 or not a number\n" if ($min_depth <0 || $min_depth !~ /^\d+$/);
+  push @errors, "-M '$min_depth' is <0 or not a number\n" if ($min_depth < 0 || $min_depth !~ /^\d+$/);
 
   # print the messages and die if critical ones.
   die join("\n", @errors) . "\n"   if ( @errors );

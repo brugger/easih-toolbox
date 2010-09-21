@@ -10,7 +10,6 @@ use warnings;
 use Data::Dumper;
 
 
-use lib '/home/kb468/projects/easih-flow/modules';
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 

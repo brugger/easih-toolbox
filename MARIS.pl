@@ -5,20 +5,34 @@
 # 
 # Kim Brugger (27 Jul 2010), contact: kim.brugger@easih.ac.uk
 
+BEGIN {
+  use vars qw/$path/; 
+  $path = $0;
+  if ($path =~ /.*\//) {
+    $path =~ s/(.*\/).*/$1/;
+  }
+  else {
+    $path = "./";
+  }
+  print "$path\n";
+  push @INC, $path;
+}
+
 use strict;
 use warnings;
 use Data::Dumper;
 
 use Getopt::Std;
 
-use lib '/home/cjp64/git/easih-pipeline/modules';
+#use lib '/home/cjp64/git/easih-pipeline/modules';
 use lib '/home/kb468/easih-pipeline/modules';
+
 use EASIH::JMS;
 use EASIH::JMS::Misc;
 use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
 
-my $VERSION   = "1.20";
+
 
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
@@ -143,6 +157,7 @@ my $hard_reset    = $opts{'H'};
 my $soft_reset    = $opts{'S'};
 
 if ( $soft_reset ) {
+  print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
   getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
 }
@@ -199,29 +214,29 @@ my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
 validate_input();
 
 
-if ($filter ne "wgs" ) {
+if ($filter eq "wgs" ) {
   $min_depth ||= 20;
 
   $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
-  $filter .= "-clusterWindowSize 10 ";
+#  $filter .= "-clusterWindowSize 10 ";
   $filter .= "--filterExpression 'AB > 0.75 && DP > 40 || DP > 100 || MQ0 > 40 || SB > -0.10'   --filterName StandardFilters ";
   $filter .= "--filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)'  --filterName HARD_TO_VALIDATE ";
   
 }
-elsif ( $filter ne "wgs-low" ) {
+elsif ( $filter eq "wgs-low" ) {
   $min_depth ||= 5;
 
   $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
   $filter .= "--filterExpression 'MQ0 >= 4 && (MQ0 / (1.0 * DP)) > 0.1'  --filterName HARD_TO_VALIDATE";
 }
-elsif ( $filter ne "exon" ) {
+elsif ( $filter eq "exon" ) {
   $min_depth ||= 20;
 
   $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
   $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
 }
-elsif ( $filter ne "exon-low" ) {
+elsif ( $filter eq "exon-low" ) {
   $min_depth ||= 5;
 
   $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
@@ -251,7 +266,6 @@ $extra_report .= "2 ==> $second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "snp_file ==> $report.snps\n";
 $extra_report .= "indel_file ==> $report.indel\n";
-$extra_report .= "MARIS version: $VERSION\n";
 $extra_report .= "easih-pipeline: " . EASIH::JMS::version() . "\n";
 
 $extra_report .= "align_param ==> $align_param \n";
@@ -618,11 +632,7 @@ sub usage {
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
-
-  print "MARIS version: $VERSION\n";
   print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
-
-
   exit;
 
 }

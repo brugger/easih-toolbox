@@ -5,18 +5,18 @@
 # 
 # Kim Brugger (27 Jul 2010), contact: kim.brugger@easih.ac.uk
 
-BEGIN {
-  use vars qw/$path/; 
-  $path = $0;
-  if ($path =~ /.*\//) {
-    $path =~ s/(.*\/).*/$1/;
-  }
-  else {
-    $path = "./";
-  }
-  print "$path\n";
-  push @INC, $path;
-}
+# BEGIN {
+#   use vars qw/$path/; 
+#   $path = $0;
+#   if ($path =~ /.*\//) {
+#     $path =~ s/(.*\/).*/$1/;
+#   }
+#   else {
+#     $path = "./";
+#   }
+#   print "$path\n";
+#   push @INC, $path;
+# }
 
 use strict;
 use warnings;
@@ -31,7 +31,6 @@ use EASIH::JMS;
 use EASIH::JMS::Misc;
 use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
-
 
 
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',

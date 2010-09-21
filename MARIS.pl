@@ -139,11 +139,17 @@ my %opts;
 getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
 
 usage() if ( $opts{h});
+my $hard_reset    = $opts{'H'};
+my $soft_reset    = $opts{'S'};
 
-#if ( $opts{R} ) {
-#  &EASIH::JMS::restore_state($opts{R});
-#  getopts('1:2:nm:R:d:f:o:r:p:hls', \%opts);
-#}
+if ( $soft_reset ) {
+  &EASIH::JMS::reset($soft_reset);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
+}
+elsif ( $hard_reset ) {
+  &EASIH::JMS::hard_reset($hard_reset);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
+}
 
 
 my $username = scalar getpwuid $<;
@@ -153,7 +159,6 @@ my $second        = $opts{'2'};
 my $dbsnp         = $opts{'d'}     || usage();
 my $email         = $opts{'e'}     || "$username\@cam.ac.uk";
 my $filter        = $opts{'f'}     || "exon";
-my $hard_reset    = $opts{'H'};
 my $loose_mapping = $opts{'l'}     || 0;
 my $mark_dup      = $opts{'m'};
 my $min_depth     = $opts{'M'}     || 0;
@@ -165,7 +170,6 @@ $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 my $print_filter  = $opts{'P'};
 my $readgroup     = $opts{'r'} || $report;
 my $reference     = $opts{'R'}     || usage();
-my $soft_reset    = $opts{'S'};
 
 my $align_param   = ' ';
 
@@ -604,15 +608,16 @@ sub usage {
   print "\n";
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
-#  print "extra flags: -H[ard reset of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "extra flags: -m[ark duplicates (always done for paired ends]\n";
   print "extra flags: -M[in depth for snps, defaults: normal=20 low=5]\n";
   print "extra flags: -N[o splitting of fastq file(s)]\n";
   print "extra flags: -n[ entries pr split-file. default: 10000000]\n";
   print "extra flags: -P[rint GATK filter, and exit]\n"; 
   print "extra flags: -r[ead group]\n"; 
-#  print "extra flags: -S[oft reset of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
+
 
   print "MARIS version: $VERSION\n";
   print "easih-pipeline: " . &EASIH::JMS::version() . "\n";

@@ -116,6 +116,7 @@ if ($is_mate_paired || $is_paired_ends) {
       @df = &read1(1); 
       @dr = &read1(2);
     } else {
+      print "s\n";
       if ($df[0] le $dr[0]) {
 	if ( $singletons ) {
 	  print {$fhw[2]} $df[1];

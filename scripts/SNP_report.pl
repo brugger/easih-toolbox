@@ -10,10 +10,10 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/home/kb468/projects/ensembl-variation/modules/';
-use lib '/home/kb468/projects/ensembl-functgenomics/modules/';
-use lib '/home/kb468/projects/e57/ensembl/modules/';
-use lib '/home/kb468/projects/e57/bioperl-live/';
+use lib '/usr/local/lib/ensembl-variation/modules/';
+use lib '/usr/local/lib/ensembl-functgenomics/modules/';
+use lib '/usr/local/lib/ensembl/modules/';
+use lib '/usr/local/lib/bioperl/';
 
 use strict;
 use Getopt::Long;
@@ -23,18 +23,20 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
+use Scalar::Util qw/weaken/;
+
 my %opts;
-getopts('s:v:pb:Tq:m:Hfrhn', \%opts);
+getopts('s:v:pb:Tq:m:HfrhnI', \%opts);
 usage() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 100;
+my $buffer_size = 500;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
-$reg->load_registry_from_db(-host => $host,-user => $user);
+$reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0);
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
@@ -42,6 +44,8 @@ my $sa  = $reg->get_adaptor($species, 'core', 'slice');
 my $ga  = $reg->get_adaptor($species, 'core', 'gene');
 my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 
+
+my $weaken = 0;
 
 my %slice_hash = ();
 
@@ -56,6 +60,7 @@ my $no_ensembl  = $opts{n} || 0;
 my $min_qual    = $opts{q} || undef;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
+my $igv_links   = $opts{I} || 0;
 
 my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
@@ -88,15 +93,15 @@ chomp( $samtools);
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $vcf )      if ( $vcf);
 
-
-my %reports;
-
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
-my @vfs;
-
+my $counter = 0;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
+  
+  next if ($chr ne '1');
+
 
   my %res;
+  my @vfs;
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
         
@@ -125,30 +130,32 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
 	
 	next if ( ! $Echr );
-	
-	my $slice = fetch_slice($Echr);
+	my $slice;
+	$slice = $sa->fetch_by_region('chromosome', $Echr); 
 	my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
 	
 	# create a new VariationFeature object
-	my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
-	  -start          => $Epos,
-	  -end            => $Epos,
-	  -slice          => $slice,           # the variation must be attached to a slice
-	  -allele_string  => $allele_string,
-	  -strand         => 1,
-	  -map_weight     => 1,
-	  -adaptor        => $vfa,           # we must attach a variation feature adaptor
-	  -variation_name => $position, # original position is used as the key!
-	    );
-	
+ 	my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
+ 	  -start          => $Epos,
+ 	  -end            => $Epos,
+ 	  -slice          => $slice,           # the variation must be attached to a slice
+ 	  -allele_string  => $allele_string,
+ 	  -strand         => 1,
+ 	  -map_weight     => 1,
+ 	  -adaptor        => $vfa,           # we must attach a variation feature adaptor
+ 	  -variation_name => $position, # original position is used as the key!
+ 	    );
+      
 	push @vfs, $new_vf; 
 	
 	
-	if ( @vfs >= $buffer_size) {
+	if ( 1 || @vfs >= $buffer_size) {
 	  my $effects = variation_effects(\@vfs);
 	  print_results( \%res, $effects);
-	  @vfs = ();
-	  %res = ();
+	  undef @vfs;# = ();	  
+	  undef %res;# = ();
+
+
 	}
       }
     }
@@ -160,7 +167,6 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     @vfs = ();
     %res = ();
   }
-
 
 }
 
@@ -349,7 +355,22 @@ sub print_oneliner {
     foreach my $name (sort keys %$mapping) {
       
       my @line;
-      push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      
+
+      if ( $html_out && $igv_links) {
+
+	if ($name =~ /^\d+\z/) {
+	  push @line, "<a href='localhost:60151/locus=chr$name'> $name</a>";
+	}
+	else {
+	  push @line,  "<a href='localhost:60151/locus=$name'> $name</a>";
+	}
+      }
+      else {
+	push @line, "$name";
+      }
+
+      push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
       push @line, $$mapping{$name}{qual};
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
@@ -365,9 +386,22 @@ sub print_oneliner {
     foreach my $effect ( @$effects ) {
       
       my $name = $$effect[0]{ name };
-      
+
       my @line;
-      push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      if ( $html_out && $igv_links) {
+
+	if ($name =~ /^\d+:/) {
+	  push @line, "<a href='http://localhost:60151/goto?locus=chr$name'> $name</a>";
+	}
+	else {
+	  push @line,  "<a href='http://localhost:60151/goto?locus=$name'> $name</a>";
+	}
+      }
+      else {
+	push @line, "$name";
+      }
+
+      push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
       push @line, $$mapping{$name}{qual};
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
@@ -464,7 +498,21 @@ sub print_fullreport {
     my $name = $$effect[0]{ name };
 
     my @line;
-    push @line, "$name", "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+
+    if ( $html_out && $igv_links) {
+
+      if ($name =~ /^\d+:/) {
+	push @line, "<a href='http://localhost:60151/goto?locus=chr$name'> $name</a>";
+      }
+      else {
+	push @line,  "<a href='http://localhost:60151/goto?locus=$name'> $name</a>";
+      }
+    }
+    else {
+      push @line, "$name";
+    }
+
+    push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
 
 
     push @line, $$mapping{$name}{qual};
@@ -556,7 +604,6 @@ sub variation_effects {
   # get consequences
   # results are stored attached to reference VF objects
   # so no need to capture return value here
-#  print Dumper( $var_features );
   $tva->fetch_all_by_VariationFeatures( $var_features );
   foreach my $vf (@$var_features) {    
 
@@ -636,15 +683,16 @@ sub variation_effects {
 	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
 
 	  if ( $con->translation_start) {
-	    my ( $old, $new ) = split("\/", $con->pep_allele_string);
+	    my ( $old, $new ) = ("","");
+	    ( $old, $new ) = split("\/", $con->pep_allele_string);
 	    
-	    $new = $old if ( !$new);
+	    $new = $old if ( !$new || $new eq "");
 	    $old = one2three( $old );
 	    $new = one2three( $new );
 	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
 
 	    my $protein = $con->transcript->translation();
-	  
+
 	    my $prot_feats = $protein->get_all_ProteinFeatures();
 	    
 	    while (my $prot_feat = shift @{ $prot_feats }) {
@@ -659,7 +707,11 @@ sub variation_effects {
 		$gene_res{ interpro } = $prot_feat->interpro_ac();
 	      } 
 	    }
+	    weaken($protein) if ($weaken);
+	    weaken($prot_feats) if ($weaken);
 	  }
+	  weaken($gene) if ($weaken);
+	  weaken($xref) if ($weaken);
 	}
 
 	$gene_res{ regulation } = $regulations; 
@@ -667,6 +719,7 @@ sub variation_effects {
 	push @{$res[$feature]}, \%gene_res;
 
       }
+      weaken($con) if ($weaken);
     }
     $feature++;
   }
@@ -710,7 +763,8 @@ sub fetch_slice {
 
   my $slice;
   # check if we have fetched this slice already
-  if(defined $slice_hash{$chr}) {
+  # disabled the caching, as we have a memory problem on our hands...
+  if( defined $slice_hash{$chr}) {
     $slice = $slice_hash{$chr};
   }
  
@@ -744,6 +798,8 @@ sub fetch_slice {
 # Kim Brugger (02 Jun 2010)
 sub one2three {
   my ( $aminoacid) = @_;
+
+  return "" if ( ! defined $aminoacid);
   
   my %trans = ('A' => 'Ala',
 	       'R' => 'Arg',
@@ -1060,6 +1116,10 @@ Prints out a multi-line report, otherwise it is done on a oneline basis (good fo
 =item B<-H>: 
 
 Prints a HTML report, default is a tab-separated one.
+
+=item B<-I>: 
+
+Adds links to IGV to ease navigation.
 
 =item B<-m>: 
 

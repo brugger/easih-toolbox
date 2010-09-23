@@ -97,8 +97,6 @@ my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
 my $counter = 0;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
   
-  next if ($chr ne '1');
-
 
   my %res;
   my @vfs;
@@ -130,8 +128,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
 	
 	next if ( ! $Echr );
-	my $slice;
-	$slice = $sa->fetch_by_region('chromosome', $Echr); 
+	my $slice = fetch_slice($Echr);
 	my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
 	
 	# create a new VariationFeature object
@@ -684,12 +681,14 @@ sub variation_effects {
 
 	  if ( $con->translation_start) {
 	    my ( $old, $new ) = ("","");
-	    ( $old, $new ) = split("\/", $con->pep_allele_string);
-	    
-	    $new = $old if ( !$new || $new eq "");
-	    $old = one2three( $old );
-	    $new = one2three( $new );
-	    $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	    if ($con->pep_allele_string) {
+	      ( $old, $new ) = split("\/", $con->pep_allele_string);
+	      
+	      $new = $old if ( !$new || $new eq "");
+	      $old = one2three( $old );
+	      $new = one2three( $new );
+	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	    }
 
 	    my $protein = $con->transcript->translation();
 
@@ -760,7 +759,6 @@ sub remap {
 sub fetch_slice {
   my ( $chr) = @_;
 
-
   my $slice;
   # check if we have fetched this slice already
   # disabled the caching, as we have a memory problem on our hands...
@@ -773,6 +771,8 @@ sub fetch_slice {
     
     # first try to get a chromosome
     eval { $slice = $sa->fetch_by_region('chromosome', $chr); };
+
+    eval { $slice = $sa->fetch_by_region('supercontig', $chr); } if(!defined($slice));
     
     # if failed, try to get any seq region
     if(!defined($slice)) {

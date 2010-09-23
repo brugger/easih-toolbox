@@ -66,6 +66,24 @@ while(<STDIN>) {
     }
   }
 
+  if ( /^\@PG/) {
+    my ( $same_aligner, $same_param) = (0, 0);
+    foreach my $field ( split("\t", $_)) {
+      next if ($field =~ /^\@/);
+      my ($key, $value) = split(":", $field);
+      $same_aligner++ if ( $field eq 'ID' && $value eq $aligner);
+      $same_param++    if ( $field eq 'CL' && $value eq $a_line);
+    }
+
+    if ( $same_aligner && $same_param ) {
+      $written_cmd_flags++;
+    }
+    else {
+      next;
+    }
+  }
+    
+
   if ( ! /^\@/ ) {
 
     if ( $aligner && ! $written_cmd_flags ) {

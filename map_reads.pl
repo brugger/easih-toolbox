@@ -132,8 +132,8 @@ my $gatk         = EASIH::JMS::Misc::find_program('gatk');
 validate_input();
 
 #EASIH::JMS::verbosity(10);
-EASIH::JMS::hive('Darwin');
-#EASIH::JMS::hive('Kluster');
+EASIH::JMS::backend('Darwin');
+#EASIH::JMS::backend('Kluster');
 EASIH::JMS::max_retry(0);
 
 

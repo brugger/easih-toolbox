@@ -40,7 +40,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
 		 'std-generate'      => { function   => 'bwa_generate',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=160:00:00",},
 
 		 'std-tag_sam'       => { function   => 'sam_add_tags',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
@@ -149,7 +149,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
+getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
 
 usage() if ( $opts{h});
 my $hard_reset    = $opts{'H'};
@@ -158,11 +158,11 @@ my $soft_reset    = $opts{'S'};
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L', \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L', \%opts);
 }
 
 
@@ -174,9 +174,10 @@ my $dbsnp         = $opts{'d'}     || usage();
 my $email         = $opts{'e'}     || "$username\@cam.ac.uk";
 my $filter        = $opts{'f'}     || "exon";
 my $loose_mapping = $opts{'l'}     || 0;
+my $log           = $opts{'L'};
 my $mark_dup      = $opts{'m'};
 my $min_depth     = $opts{'M'}     || 0;
-my $split         = $opts{'n'}     || 10000000;
+my $split         = $opts{'n'}     || 5000000;
 my $no_split      = $opts{'N'}     || 0;
 my $report        = $opts{'o'}     || usage();
 my $platform      = uc($opts{'p'}) || usage();
@@ -188,6 +189,8 @@ my $reference     = $opts{'R'}     || usage();
 my $align_param   = ' ';
 
 my $bam_file      = "$report.bam";
+
+open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 
 
 # set platform specific bwa aln parameters
@@ -244,8 +247,8 @@ elsif ( $filter eq "exon-low" ) {
 }
 
 #EASIH::JMS::verbosity(10);
-EASIH::JMS::hive('Darwin');
-#EASIH::JMS::hive('Kluster');
+EASIH::JMS::backend('Darwin');
+#EASIH::JMS::backend('Kluster');
 EASIH::JMS::max_retry(0);
 
 
@@ -355,7 +358,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} | egrep -v '(null)' > $tmp_file";
+    $cmd = "$bwa sampe  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
   
   }
   else {
@@ -616,12 +619,14 @@ sub validate_input {
 # Kim Brugger (22 Apr 2010)
 sub usage {
 
-  $0 =~ s/.*\///;
-  print "USAGE: $0 -1 [fastq file]  -2 [fastq file] -l[oose mapping] -R[eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid]\n";
+  my $script = $0;
+  $script =~ s/.*\///;
+  print "USAGE: $script -1 [fastq file]  -2 [fastq file] -l[oose mapping] -R[eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid]\n";
   print "\n";
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
   print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -L[og file, default is STDOUT]\n";  
   print "extra flags: -m[ark duplicates (always done for paired ends]\n";
   print "extra flags: -M[in depth for snps, defaults: normal=20 low=5]\n";
   print "extra flags: -N[o splitting of fastq file(s)]\n";

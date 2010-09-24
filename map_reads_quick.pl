@@ -108,8 +108,8 @@ my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 validate_input();
 
 #EASIH::JMS::verbosity(10);
-EASIH::JMS::hive('Darwin');
-#EASIH::JMS::hive('Kluster');
+EASIH::JMS::backend('Darwin');
+#EASIH::JMS::backend('Kluster');
 EASIH::JMS::max_retry(0);
 
 

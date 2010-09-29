@@ -40,7 +40,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
 		 
 		 'std-generate'      => { function   => 'bwa_generate',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=160:00:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=12:00:00",},
 
 		 'std-tag_sam'       => { function   => 'sam_add_tags',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
@@ -72,7 +72,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
 		 
 		 'realign_indel'     => { function   => 'realign_indel',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
 
 		 'realigned_merge'   => { function   => 'EASIH::JMS::Picard::merge',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
@@ -158,11 +158,11 @@ my $soft_reset    = $opts{'S'};
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
 }
 
 
@@ -208,6 +208,7 @@ if ( $print_filter ) {
 $flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
+#$bwa = '/home/kb468/bin/bwa_testing ';
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
@@ -358,7 +359,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+    $cmd = "$bwa sampe -M 300  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
   
   }
   else {

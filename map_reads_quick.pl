@@ -70,18 +70,30 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:nm:R:o:r:p:hl', \%opts);
+getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
 
-# if ( $opts{ r} ) {
-#   EASIH::JMS::restore_state($opts{r});
-#   getopts('i:b:f:n:hlr:g:', \%opts);
-# }
+
+usage() if ( $opts{h});
+my $hard_reset    = $opts{'H'};
+my $soft_reset    = $opts{'S'};
+
+if ( $soft_reset ) {
+  &EASIH::JMS::reset($soft_reset);
+  getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
+}
+elsif ( $hard_reset ) {
+  &EASIH::JMS::hard_reset($hard_reset);
+  getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
+}
 
 
 my $first       = $opts{'1'} || usage();
 my $second      = $opts{'2'};
 my $no_split    = $opts{'n'} || 0;
 my $split       = $opts{'m'} || 5000000;
+
+my $log         = $opts{'L'};
+open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 
 my $reference   = $opts{'R'} || usage();
 my $align_param = ' ';
@@ -94,8 +106,8 @@ my $platform    = uc($opts{'p'}) || usage();
 $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 
 # set platform specific bwa aln parameters
-$align_param .= " -c "    if ( $platform eq "SOLID");
-$align_param .= " -q 15 " if ( $platform eq "SOLEXA");
+$align_param .= " -c "      if ( $platform eq "SOLID");
+$align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
 $align_param .= " -e5 -t5 " if ( $loose_mapping);
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
@@ -430,6 +442,13 @@ sub usage {
 
   $0 =~ s/.*\///;
   print "USAGE: $0 -1 [fastq file]  -2 [fastq file] -l[oose mapping] -n[o splitting of fastq file(s)] -R [eference genome]  -o[ut prefix] -p[latform: illumina or solid]\n";
+
+  print "\n";
+  print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -L[og file, default is STDOUT]\n";  
+  print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "\n";
+  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
   exit;
 
 }

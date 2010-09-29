@@ -49,18 +49,30 @@ our %flow = ( 'identify_snps'    => 'filter_snps',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('b:R:d:f:o:hp:', \%opts);
+getopts('b:R:d:f:o:hH:L:p:M:S:', \%opts);
 
-# if ( $opts{ r} ) {
-#   EASIH::JMS::restore_state($opts{r});
-#   getopts('i:b:f:n:hlr:g:', \%opts);
-# }
+usage() if ( $opts{h});
+my $hard_reset    = $opts{'H'};
+my $soft_reset    = $opts{'S'};
+
+if ( $soft_reset ) {
+  print "Doing a soft reset/restart\n";
+  &EASIH::JMS::reset($soft_reset);
+  getopts('b:R:d:f:o:hH:L:p:M:S:', \%opts);
+}
+elsif ( $hard_reset ) {
+  &EASIH::JMS::hard_reset($hard_reset);
+  getopts('b:R:d:f:o:hH:L:p:M:S:', \%opts);
+}
 
 
 my $bam_file    = $opts{'b'} || usage();
 my $reference   = $opts{'R'} || usage();
 my $dbsnp       = $opts{'d'} || usage();
-my $filters     = $opts{'f'} || "default";
+my $filters     = $opts{'f'} || "exon";
+my $log         = $opts{'L'};
+open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
+my $min_depth   = $opts{'M'}     || 0;
 my $report      = $opts{'o'} || usage();
 
 my $platform    = uc($opts{'p'});
@@ -76,6 +88,36 @@ validate_input();
 EASIH::JMS::backend('Darwin');
 #EASIH::JMS::hive('Kluster');
 EASIH::JMS::max_retry(0);
+
+if ($filter eq "wgs" ) {
+  $min_depth ||= 20;
+
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+#  $filter .= "-clusterWindowSize 10 ";
+  $filter .= "--filterExpression 'AB > 0.75 && DP > 40 || DP > 100 || MQ0 > 40 || SB > -0.10'   --filterName StandardFilters ";
+  $filter .= "--filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)'  --filterName HARD_TO_VALIDATE ";
+  
+}
+elsif ( $filter eq "wgs-low" ) {
+  $min_depth ||= 5;
+
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter .= "--filterExpression 'MQ0 >= 4 && (MQ0 / (1.0 * DP)) > 0.1'  --filterName HARD_TO_VALIDATE";
+}
+elsif ( $filter eq "exon" ) {
+  $min_depth ||= 20;
+
+  $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
+  $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
+}
+elsif ( $filter eq "exon-low" ) {
+  $min_depth ||= 5;
+
+  $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
+  $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
+}
 
 
 &EASIH::JMS::run('identify_snps');
@@ -195,6 +237,8 @@ sub validate_input {
 
   push @errors, "Platform must be either SOLEXA or SOLID not '$platform'" if ( $platform && $platform ne "SOLEXA" && $platform ne 'SOLID');
 
+  push @errors, "$filter should be one of the following: wgs,wgs-low,exon,exon-low\n"
+      if ($filter ne "wgs" && $filter ne "wgs-low" && $filter ne "exon" && $filter ne "exon-low");
 
   # print the messages and die if critical ones.
   die join("\n", @errors) . "\n"   if ( @errors );
@@ -209,7 +253,15 @@ sub validate_input {
 sub usage {
 
   $0 =~ s/.*\///;
-  print "USAGE: $0 -b[am file] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n";
+  print "USAGE: $0 -b[am file] -R [eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid\n\n";
+
+  print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
+  print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -L[og file, default is STDOUT]\n";  
+  print "extra flags: -M[in depth for snps, defaults: normal=20 low=5]\n";
+  print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "\n";
+  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
   exit;
 
 }

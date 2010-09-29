@@ -35,20 +35,28 @@ our %flow = ( 'call_indels'      => 'merge_indels',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('b:R:o:p:h', \%opts);
+getopts('b:R:o:p:hH:L:S:', \%opts);
 
-# if ( $opts{ r} ) {
-#   EASIH::JMS::restore_state($opts{r});
-#   getopts('i:b:f:n:hlr:g:', \%opts);
-# }
+usage() if ( $opts{h});
+my $hard_reset    = $opts{'H'};
+my $soft_reset    = $opts{'S'};
+
+if ( $soft_reset ) {
+  &EASIH::JMS::reset($soft_reset);
+  getopts('b:R:o:p:hH:L:S:', \%opts);
+}
+elsif ( $hard_reset ) {
+  &EASIH::JMS::hard_reset($hard_reset);
+  getopts('b:R:o:p:hH:L:S:', \%opts);
+}
 
 
 my $bam_file    = $opts{'b'} || usage();
 my $reference   = $opts{'R'} || usage();
-my $filters     = $opts{'f'} || "default";
+my $log         = $opts{'L'};
+open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 my $report      = $opts{'o'} || usage();
 
-my $readgroup   = $opts{'r'} || $report;
 
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
@@ -144,6 +152,13 @@ sub usage {
 
   $0 =~ s/.*\///;
   print "USAGE: $0 -b [am file] -R [eference genome]  -o[ut prefix] \n";
+
+  print "\n";
+  print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -L[og file, default is STDOUT]\n";  
+  print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "\n";
+  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
   exit;
 
 }

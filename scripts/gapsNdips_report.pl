@@ -9,9 +9,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use lib '/home/kb468/projects/ensembl-variation/modules/';
-use lib '/home/kb468/projects/e57/ensembl/modules/';
-use lib '/home/kb468/projects/e57/bioperl-live/';
+
+use lib '/usr/local/lib/ensembl-variation/modules/';
+use lib '/usr/local/lib/ensembl-functgenomics/modules/';
+use lib '/usr/local/lib/ensembl/modules/';
+use lib '/usr/local/lib/bioperl/';
 
 use strict;
 use Getopt::Std;
@@ -527,7 +529,7 @@ indel_report turns a vcf file into a nice report, annotated with Ensembl gene in
 
 =item B<-b F<bed file>>: 
 
-The bedfile that the SNP calling was based on.
+The bedfile resulting from the gap/dip calling.
 
 =item B<-f>: 
 
@@ -536,10 +538,6 @@ Prints out a multi-line report, otherwise it is done on a oneline basis (good fo
 =item B<-H>: 
 
 Prints a HTML report, default is a tab-separated one.
-
-=item B<-d>: 
-
-Minumum depth required when reporting an indel
 
 =item B<-T>: 
 

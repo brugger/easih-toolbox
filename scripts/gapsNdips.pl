@@ -12,7 +12,7 @@ use Getopt::Std;
 
 
 my %opts;
-getopts('b:m:hg:l:L:', \%opts);
+getopts('b:m:hg:l:L:B:', \%opts);
 
 usage() if ( $opts{h});
 
@@ -22,6 +22,7 @@ $min_depth = $opts{m} if ( defined $opts{m});
 my $gap_file  = $opts{g};
 my $low_file  = $opts{l};
 my $region    = $opts{L};
+my $regions   = readin_bed( $opts{B} ) if ( $opts{B} );
 
 my ($gout, $lout);
 
@@ -37,7 +38,20 @@ my $seqs = names_n_lengths( $bam_file );
 
 my (@gaps, @low_coverage);
 
-if ( $region ) {
+if ( $regions ) {
+
+  foreach my $name ( keys %$regions ) {
+    foreach my $se ( @{$$regions{$name}}) {    
+      $name =~ s/chr//i;
+      $name ="chr$name";
+      my ($start, $end) = @$se;
+      my $region = "$name:$start-$end";
+      open (my $depth, "$bam2depth $bam_file $region | ") || die "Could not open bam2depth pipeline with $bam_file $name: $!\n";
+      analyse_depth( $depth, $name, $start, $end);
+    }
+  }
+}
+elsif ( $region ) {
 
   my ($name, $start, $end) = $region =~ /^(\w+?):(\d+)-(\d+)/;
   die "region should be in name:start-end format not '$region'\n"
@@ -153,7 +167,7 @@ sub names_n_lengths {
 sub usage {
   
   $0 =~ s/.*\///;
-  die "USAGE: $0 -b[am file] -m[in depth, default 200] -g[ap out file, default stdout] -l[ow regions file, default stdout] -L[ only look at this region (name:start-end)\n";
+  die "USAGE: $0 -b[am file] -m[in depth, default 200] -g[ap out file, default stdout] -l[ow regions file, default stdout] -L[ only look at this region (name:start-end) -B[ed file with regions of interest]\n";
 }
 
 
@@ -182,4 +196,66 @@ sub find_program {
   return $location if ( $location );
 
   return undef;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (11 May 2010)
+sub readin_bed {
+  my ( $infile, $merge ) = @_;
+
+  $merge = 1;
+  my %res;
+
+  open (STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
+  while(<STDIN>) {
+
+    chomp;
+    my ($chr, $start, $end) = split("\t", $_);
+
+    ($chr, $start, $end) = $_ =~ /(.*?):(\d+)-(\d+)/
+	if ( ! $start );
+    
+    push @{$res{$chr}}, [$start, $end];
+  }
+
+  if ( $merge ) {
+    
+    foreach my $key ( keys %res ) {
+      
+      @{$res{$key}} = sort { $$a[0] <=> $$b[0] } @{$res{$key}};
+      my @tmp;
+      my @data = @{$res{$key}};
+      
+      for(my $i=0;$i< @data; $i++) {
+	
+	# need at least one element in the array, so push and move on.
+	if ( ! @tmp ) {
+	  push @tmp, $data[ $i ];
+	  next;
+	}
+	
+	# contained in the region
+	if ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ] &&
+	     $data[ $i ][ 1 ] <= $tmp[ -1 ][ 1 ]) {
+	  next;
+	}
+	# overlapping
+	elsif ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ]  &&
+		$data[ $i ][ 0 ] <= $tmp[ -1 ][ 1 ]) {
+	  
+	  $tmp[ -1 ][ 1 ] = $data[ $i ][ 1 ];
+	}
+	# There is a gap between the end block and this one. Just push it on the end of  the array!
+	else {
+	  push @tmp, $data[ $i ];
+	}
+      }
+      @{$res{$key}} = @tmp;
+    }
+  }
+
+  return \%res;
 }

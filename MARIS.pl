@@ -49,14 +49,14 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
 		 'std-merge'         => { function   => 'EASIH::JMS::Picard::merge',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=20:00:00",
 					  sync       => 1},
 
 		 'std-sort'          => { function   => 'EASIH::JMS::Picard::sort',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 
 		 'std-mark_dup'      =>  { function   => 'EASIH::JMS::Picard::mark_duplicates',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 
 		 'std-index'         => { function   => 'EASIH::JMS::Samtools::index',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
@@ -75,7 +75,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
 
 		 'realigned_merge'   => { function   => 'EASIH::JMS::Picard::merge',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00",
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=20:00:00",
 					  sync       => 1},
 
 		 'realigned_rename'  => { function   => 'rename' },
@@ -197,7 +197,7 @@ open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 $align_param .= " -c "      if ( $platform eq "SOLID");
 $align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
 # and loose mapping, if skipping the second round of mappings.
-$align_param .= " -e5 -t5 " if ( $loose_mapping);
+$align_param .= " -e5 " if ( $loose_mapping);
 
 if ( $print_filter ) {
   print "GATK Filter to be used: $filter\n";
@@ -208,7 +208,7 @@ if ( $print_filter ) {
 $flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
-#$bwa = '/home/kb468/bin/bwa_testing ';
+$bwa = '/home/kb468/bin/bwa_testing ';
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
@@ -275,6 +275,7 @@ $extra_report .= "align_param ==> $align_param \n";
 $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
+$extra_report .= `$gatk --version`;
 
 EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
@@ -359,8 +360,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe -M 300  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
-  
+    $cmd = "$bwa sampe -sM 300  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
   }
   else {
     $cmd = "$bwa samse -f $tmp_file $reference $$input{first_sai} $$input{first_fq}";

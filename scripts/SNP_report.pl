@@ -15,6 +15,13 @@ use lib '/usr/local/lib/ensembl-functgenomics/modules/';
 use lib '/usr/local/lib/ensembl/modules/';
 use lib '/usr/local/lib/bioperl/';
 
+
+use lib '/home/easih/lib/ensembl-variation/modules/';
+use lib '/home/easih/lib/ensembl-functgenomics/modules/';
+use lib '/home/easih/lib/ensembl/modules/';
+use lib '/home/easih/lib/bioperl/';
+
+
 use strict;
 use Getopt::Long;
 use FileHandle;

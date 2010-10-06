@@ -13,18 +13,24 @@ use Getopt::Std;
 #my $picard_dir =  "/usr/local/installed/picard_1.25/";
 #my $java       = "/usr/local/java/jre1.6.0_19/bin/java";
 my $java = "/usr/local/Cluster-Apps/java/jdk1.6.0_18/bin/java";
-my $picard_dir =  "/home/kb468/bin/picard_1.25/";
+my $picard_dir =  "/home/kb468/bin/picard_1.31/";
 
 my @picard_jars = glob("$picard_dir/*jar");
 map{ $_ =~ s/.*\/// } @picard_jars;
 
 my %opts;
-getopts('hJ:T:', \%opts);
+getopts('hJ:T:v', \%opts);
 
-if ( $opts{ h } || (! $opts{J} && ! $opts{T})) {
+if ( $opts{'v'} ) {
+  my $picard = (grep (/picard-\d\.\d+.jar/, @picard_jars))[0];
+  $picard =~ s/.jar//;
+  print "$picard\n";
+  exit;
+}
+elsif ( $opts{ h } || (! $opts{J} && ! $opts{T})) {
 
   $0 =~ /.*\//;
-  print STDERR "USAGE $0 -h[elp] -J[ar file] <jar opts>\n";
+  print STDERR "USAGE $0 -h[elp] -J[ar file] <jar opts> -v<ersion>\n";
   print STDERR "Jars: " . join("\n      ", @picard_jars) . "\n";
   exit 1;
 }

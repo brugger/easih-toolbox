@@ -23,7 +23,17 @@ my $resources  = " -resources ~/bin/gatk_live/resources/R  -Rscript /usr/bin/Rsc
 foreach my $argv ( @ARGV ) {
   next if ( $argv eq $0);
 
-  
+  if ( $argv eq "--version" ) {
+    open( my $vpipe, "gatk 2> /dev/null  | head -n 2 |") || die "Could not open gatk pipe: $!\n";
+    <$vpipe>;
+    my $version = <$vpipe>;
+    print "$version";
+    close( $vpipe );
+    exit;
+  }
+ 
+
+ 
   if ( $argv =~ / /) {
     $argv_list .= qq{ "$argv" };
   }

@@ -1,0 +1,362 @@
+Index: bwape.c
+===================================================================
+--- bwape.c	(revision 45)
++++ bwape.c	(working copy)
+@@ -84,6 +84,8 @@
+ }
+ */
+ 
++int max_isize_cutoff = 100000;
++
+ // for normal distribution, this is about 3std
+ #define OUTLIER_BOUND 2.0
+ 
+@@ -101,7 +103,7 @@
+ 		p[0] = seqs[0] + i; p[1] = seqs[1] + i;
+ 		if (p[0]->mapQ >= 20 && p[1]->mapQ >= 20) {
+ 			x = (p[0]->pos < p[1]->pos)? p[1]->pos + p[1]->len - p[0]->pos : p[0]->pos + p[0]->len - p[1]->pos;
+-			if (x < 100000) isizes[tot++] = x;
++			if (x < max_isize_cutoff ) isizes[tot++] = x;
+ 		}
+ 		if (p[0]->len > max_len) max_len = p[0]->len;
+ 		if (p[1]->len > max_len) max_len = p[1]->len;
+@@ -141,7 +143,7 @@
+ 	ii->ap_prior = .01 * (n_ap + .01) / tot;
+ 	if (ii->ap_prior < ap_prior) ii->ap_prior = ap_prior;
+ 	free(isizes);
+-	if (isnan(ii->std) || p75 > 100000) {
++	if (isnan(ii->std) || p75 > max_isize_cutoff ) {
+ 		ii->low = ii->high = ii->high_bayesian = 0; ii->avg = ii->std = -1.0;
+ 		fprintf(stderr, "[infer_isize] fail to infer insert size: weird pairing\n");
+ 		return -1;
+@@ -198,7 +200,7 @@
+ 	o_n = subo_n = 0;
+ 	ks_introsort(uint64_t, d->arr.n, d->arr.a);
+ 	for (j = 0; j < 2; ++j) last_pos[j][0] = last_pos[j][1] = (uint64_t)-1;
+-	if (opt->type == BWA_PET_STD) {
++	if (opt->type == BWA_PET_STD || opt->type == BWA_PET_SOLID ) {
+ 		for (i = 0; i < d->arr.n; ++i) {
+ 			uint64_t x = d->arr.a[i];
+ 			int strand = d->aln[x&1].a[(uint32_t)x>>1].a;
+@@ -211,7 +213,7 @@
+ 				last_pos[x&1][1] = x;
+ 			}
+ 		}
+-	} else if (opt->type == BWA_PET_SOLID) {
++	} else if (opt->type == BWA_MP_SOLID) {
+ 		for (i = 0; i < d->arr.n; ++i) {
+ 			uint64_t x = d->arr.a[i];
+ 			int strand = d->aln[x&1].a[(uint32_t)x>>1].a;
+@@ -321,9 +323,16 @@
+ 		}
+ 	}
+ 
++	//	if (last_ii->avg < 0.0 )
+ 	// infer isize
+-	infer_isize(n_seqs, seqs, ii, opt->ap_prior, bwt[0]->seq_len);
+-	if (ii->avg < 0.0 && last_ii->avg > 0.0) *ii = *last_ii;
++	  infer_isize(n_seqs, seqs, ii, opt->ap_prior, bwt[0]->seq_len);
++	  
++	  if (ii->avg < 0.0 && last_ii->avg > 0.0) {
++	    fprintf(stderr, "Using previously calculated insert sizes\n");
++	    *ii = *last_ii;
++	  }
++	
++
+ 	if (opt->force_isize) {
+ 		fprintf(stderr, "[%s] discard insert size estimate as user's request.\n", __func__);
+ 		ii->low = ii->high = 0; ii->avg = ii->std = -1.0;
+@@ -561,11 +570,11 @@
+ 			++n_tot[is_singleton];
+ 			cigar[0] = cigar[1] = 0;
+ 			n_cigar[0] = n_cigar[1] = 0;
+-			if (popt->type != BWA_PET_STD && popt->type != BWA_PET_SOLID) continue; // other types of pairing is not considered
++			if (popt->type != BWA_PET_STD && popt->type != BWA_PET_SOLID && popt->type != BWA_MP_SOLID) continue; // other types of pairing is not considered 
+ 			for (k = 0; k < 2; ++k) { // p[1-k] is the reference read and p[k] is the read considered to be modified
+ 				ubyte_t *seq;
+ 				if (p[1-k]->type == BWA_TYPE_NO_MATCH) continue; // if p[1-k] is unmapped, skip
+-				if (popt->type == BWA_PET_STD) {
++				if (popt->type == BWA_PET_STD ) { 
+ 					if (p[1-k]->strand == 0) { // then the mate is on the reverse strand and has larger coordinate
+ 						__set_rght_coor(beg[k], end[k], p[1-k], p[k]);
+ 						seq = p[k]->rseq;
+@@ -574,7 +583,16 @@
+ 						seq = p[k]->seq;
+ 						seq_reverse(p[k]->len, seq, 0); // because ->seq is reversed; this will reversed back shortly
+ 					}
+-				} else { // BWA_PET_SOLID
++				} else if (popt->type == BWA_PET_SOLID ) {  //F3-F5 pairing
++					if (p[1-k]->strand == 0) { // then the mate is on the reverse strand and has larger coordinate
++						__set_rght_coor(beg[k], end[k], p[1-k], p[k]);
++						seq = p[k]->rseq;
++					} else { // then the mate is on forward stand and has smaller coordinate
++						__set_left_coor(beg[k], end[k], p[1-k], p[k]);
++						seq = p[k]->seq;
++						seq_reverse(p[k]->len, seq, 0); // because ->seq is reversed; this will reversed back shortly
++					}
++				} else { // BWA_MP_SOLID
+ 					if (p[1-k]->strand == 0) { // R3-F3 pairing
+ 						if (k == 0) __set_left_coor(beg[k], end[k], p[1-k], p[k]); // p[k] is R3
+ 						else __set_rght_coor(beg[k], end[k], p[1-k], p[k]); // p[k] is F3
+@@ -604,8 +622,10 @@
+ 				// now revserse sequence back such that p[*]->seq looks untouched
+ 				if (popt->type == BWA_PET_STD) {
+ 					if (p[1-k]->strand == 1) seq_reverse(p[k]->len, seq, 0);
++				} else if (popt->type == BWA_PET_SOLID) {
++				  if (p[1-k]->strand == 1) seq_reverse(p[k]->len, seq, 0);
+ 				} else {
+-					if (p[1-k]->strand == 0) seq_reverse(p[k]->len, seq, 0);
++				  if (p[1-k]->strand == 0) seq_reverse(p[k]->len, seq, 0);
+ 				}
+ 			}
+ 			k = -1; // no read to be changed
+@@ -671,9 +691,10 @@
+ 
+ 	fread(&opt, sizeof(gap_opt_t), 1, fp_sa[0]);
+ 	fread(&opt, sizeof(gap_opt_t), 1, fp_sa[1]);
+-	if (!(opt.mode & BWA_MODE_COMPREAD)) {
+-		popt->type = BWA_PET_SOLID;
+-		ntbns = bwa_open_nt(prefix);
++	if (popt->type = BWA_MP_SOLID || !(opt.mode & BWA_MODE_COMPREAD)) { 
++	  if (popt->type != BWA_MP_SOLID) 
++	    popt->type = BWA_PET_SOLID;
++	  ntbns = bwa_open_nt(prefix);
+ 	} else { // for Illumina alignment only
+ 		if (popt->is_preload) {
+ 			strcpy(str, prefix); strcat(str, ".bwt");  bwt[0] = bwt_restore_bwt(str);
+@@ -745,7 +766,7 @@
+ 	int c;
+ 	pe_opt_t *popt;
+ 	popt = bwa_init_pe_opt();
+-	while ((c = getopt(argc, argv, "a:o:sPn:N:c:f:A")) >= 0) {
++	while ((c = getopt(argc, argv, "a:o:sPn:N:c:f:AmM:")) >= 0) {
+ 		switch (c) {
+ 		case 'a': popt->max_isize = atoi(optarg); break;
+ 		case 'o': popt->max_occ = atoi(optarg); break;
+@@ -753,7 +774,9 @@
+ 		case 'P': popt->is_preload = 1; break;
+ 		case 'n': popt->n_multi = atoi(optarg); break;
+ 		case 'N': popt->N_multi = atoi(optarg); break;
++		case 'M': max_isize_cutoff = atoi(optarg); break;
+ 		case 'c': popt->ap_prior = atof(optarg); break;
++		  case 'm': popt->type  = BWA_MP_SOLID; break; 
+         case 'f': freopen(optarg, "w", stdout); break;
+ 		case 'A': popt->force_isize = 1; break;
+ 		default: return 1;
+@@ -768,6 +791,9 @@
+ 		fprintf(stderr, "         -n INT   maximum hits to output for paired reads [%d]\n", popt->n_multi);
+ 		fprintf(stderr, "         -N INT   maximum hits to output for discordant pairs [%d]\n", popt->N_multi);
+ 		fprintf(stderr, "         -c FLOAT prior of chimeric rate (lower bound) [%.1le]\n", popt->ap_prior);
++		fprintf(stderr, "         -m       SOLiD matepair run\n"); 
++		fprintf(stderr, "         -M       maximum insert size for size estimate [%d]\n", max_isize_cutoff);
++
+         fprintf(stderr, "         -f FILE sam file to output results to [stdout]\n\n");
+ 		fprintf(stderr, "         -P       preload index into memory (for base-space reads only)\n");
+ 		fprintf(stderr, "         -s       disable Smith-Waterman for the unmapped mate\n");
+Index: bwaseqio.c
+===================================================================
+--- bwaseqio.c	(revision 45)
++++ bwaseqio.c	(working copy)
+@@ -115,6 +115,7 @@
+ 			if (p->multi[j].cigar) free(p->multi[j].cigar);
+ 		free(p->name);
+ 		free(p->seq); free(p->rseq); free(p->qual); free(p->aln); free(p->md); free(p->multi);
++		free(p->cseq); //kb468
+ 		free(p->cigar);
+ 	}
+ 	free(seqs);
+Index: bwtaln.c
+===================================================================
+--- bwtaln.c	(revision 45)
++++ bwtaln.c	(working copy)
+@@ -130,6 +130,7 @@
+ 		p->aln = bwt_match_gap(bwt, p->len, seq, w, p->len <= opt->seed_len? 0 : seed_w, &local_opt, &p->n_aln, stack);
+ 		// store the alignment
+ 		free(p->name); free(p->seq); free(p->rseq); free(p->qual);
++		free(p->cseq); //kb468
+ 		p->name = 0; p->seq = p->rseq = p->qual = 0;
+ 	}
+ 	free(seed_w[0]); free(seed_w[1]);
+Index: cs2nt.c
+===================================================================
+--- cs2nt.c	(revision 45)
++++ cs2nt.c	(working copy)
+@@ -35,6 +35,8 @@
+  */
+ void cs2nt_DP(int size, const uint8_t *nt_ref, const uint8_t *cs_read, uint8_t *nt_read, uint8_t *btarray)
+ {
++
++
+ 	int h[8], curr, last;
+ 	int x, y, xmin, hmin, k;
+ 
+@@ -48,7 +50,7 @@
+ 	}
+ 	// recursion: main loop
+ 	curr = 1; last = 0;
+-	for (k = 1; k <= size; ++k) {
++	for (k = 1; k <= size; ++k) { //kb468
+ 		for (x = 0; x != 4; ++x) {
+ 			int min = 0x7fffffff, ymin = 0;
+ 			for (y = 0; y != 4; ++y) {
+@@ -82,6 +84,10 @@
+  */
+ uint8_t *cs2nt_nt_qual(int size, const uint8_t *nt_read, const uint8_t *cs_read, uint8_t *tarray)
+ {
++
++  //  if ( size == 0 ) 
++  // return (uint8_t) 0;
++
+ 	int k, c1, c2;
+ 	uint8_t *t2array = tarray + size;
+ 	// get the color sequence of nt_read
+@@ -91,7 +97,7 @@
+ 		tarray[k-1] = (c1 >= 4 || c2 >= 4)? 4 : nst_ntnt2cs_table[1<<c1 | 1<<c2];
+ 		c1 = c2;
+ 	}
+-	for (k = 1; k != size; ++k) {
++	for (k = 1; k < size; ++k) {
+ 		int q = 0;
+ 		if (tarray[k-1] == cs_read[k-1]>>6 && tarray[k] == cs_read[k]>>6) {
+ 			q = (int)(cs_read[k-1]&0x3f) + (int)(cs_read[k]&0x3f) + 10;
+@@ -123,7 +129,7 @@
+ 	cs_read = nt_ref + len;
+ 	nt_read = cs_read + len;
+ 	btarray = nt_read + len;
+-	tarray = nt_read + len;
++	tarray  = nt_read + len;
+ 
+ #define __gen_csbase(_cs, _i, _seq) do {							\
+ 		int q = p->qual[p->strand? p->len - 1 - (_i) : (_i)] - 33;	\
+@@ -134,6 +140,11 @@
+ 
+ 	// generate len, nt_ref[] and cs_read
+ 	seq = p->strand? p->rseq : p->seq;
++
++	//kb468, make a cs-seq copy before it is replaced.
++	p->cseq = (uint8_t*)malloc(p->len);
++	memcpy(p->cseq, seq, p->len);
++
+ 	nt_ref[0] = p->pos? bns_pac(pac, p->pos-1) : 4;
+ 	if (p->cigar == 0) { // no gap or clipping
+ 		len = p->len;
+@@ -165,11 +176,17 @@
+ 		len = z;
+ 	}
+ 
++	//#include <stdio.h>
++
++	//	if ( len == 0 ) 
++	// printf("len == 0\n");
++
++	if ( len > 0 ) {
+ 	cs2nt_DP(len, nt_ref, cs_read, nt_read, btarray);
+ 	new_nt_read = cs2nt_nt_qual(len, nt_read, cs_read, tarray);
+-
++	//	if ( len > 0 ) {
+ 	// update p
+-	p->len = p->full_len = len - 1;
++	p->len = p->full_len = len - 1; // kb468 :: if len == 0 this becomes '1048575'
+ 	for (i = 0; i < p->len; ++i) {
+ 		if ((new_nt_read[i]&0x3f) == 63) {
+ 			p->qual[i] = 33; seq[i] = 4;
+@@ -187,5 +204,6 @@
+ 		memcpy(p->rseq, seq, p->len);
+ 		seq_reverse(p->len, p->rseq, 1);
+ 	}
++	}
+ 	free(ta);
+ }
+Index: Makefile
+===================================================================
+--- Makefile	(revision 45)
++++ Makefile	(working copy)
+@@ -1,6 +1,6 @@
+ CC=			gcc
+ CXX=		g++
+-CFLAGS=		-g -Wall -O2 -m64
++CFLAGS=		-g -Wall  -m64 -O2
+ CXXFLAGS=	$(CFLAGS)
+ DFLAGS=		-DHAVE_PTHREAD #-D_FILE_OFFSET_BITS=64
+ OBJS=		utils.o bwt.o bwtio.o bwtaln.o bwtgap.o is.o \
+Index: bwtaln.h
+===================================================================
+--- bwtaln.h	(revision 45)
++++ bwtaln.h	(working copy)
+@@ -56,7 +56,7 @@
+ 
+ typedef struct {
+ 	char *name;
+-	ubyte_t *seq, *rseq, *qual;
++  ubyte_t *seq, *rseq, *qual, *cseq; //kb468
+ 	uint32_t len:20, strand:1, type:2, dummy:1, extra_flag:8;
+ 	uint32_t n_mm:8, n_gapo:8, n_gape:8, mapQ:8;
+ 	int score;
+@@ -98,9 +98,11 @@
+ 
+ #define BWA_PET_STD   1
+ #define BWA_PET_SOLID 2
++//kb468
++#define BWA_MP_SOLID  3
+ 
+ typedef struct {
+-	int max_isize, force_isize;
++  int max_isize, force_isize;
+ 	int max_occ;
+ 	int n_multi, N_multi;
+ 	int type, is_sw, is_preload;
+Index: bwase.c
+===================================================================
+--- bwase.c	(revision 45)
++++ bwase.c	(working copy)
+@@ -319,6 +319,10 @@
+ 	} else pacseq = _pacseq;
+ 	for (i = 0; i != n_seqs; ++i) {
+ 		bwa_seq_t *s = seqs + i;
++
++		if ( s->len == 0) //kb468
++		  continue;
++
+ 		seq_reverse(s->len, s->seq, 0); // IMPORTANT: s->seq is reversed here!!!
+ 		for (j = 0; j < s->n_multi; ++j) {
+ 			bwt_multi1_t *q = s->multi + j;
+@@ -336,6 +340,10 @@
+ 	if (ntbns) { // in color space
+ 		for (i = 0; i < n_seqs; ++i) {
+ 			bwa_seq_t *s = seqs + i;
++			
++			if ( s->len == 0) //kb468
++			  continue;
++			
+ 			bwa_cs2nt_core(s, bns->l_pac, ntpac);
+ 			for (j = 0; j < s->n_multi; ++j) {
+ 				bwt_multi1_t *q = s->multi + j;
+@@ -502,6 +510,15 @@
+ 				}
+ 			}
+ 		}
++		//kb468, print old raw csfasta...
++		if ( p->cseq ) {
++		  printf("\tCS:Z:T0");
++		  //		  if (p->strand == 0)
++		    for (j = 0; j != p->len+1; ++j) putchar("0123."[(int)p->cseq[j]]);
++		  //else 
++		  //		  for (j = 0; j != p->len; ++j) putchar("3210."[p->cseq[p->len - 1 - j]]);
++		  
++		}
+ 		putchar('\n');
+ 	} else { // this read has no match
+ 		ubyte_t *s = p->strand? p->rseq : p->seq;
+Index: main.c
+===================================================================
+--- main.c	(revision 45)
++++ main.c	(working copy)
+@@ -3,7 +3,7 @@
+ #include "main.h"
+ 
+ #ifndef PACKAGE_VERSION
+-#define PACKAGE_VERSION "0.5.8 (r1442)"
++#define PACKAGE_VERSION "0.5.8 (r1442) + EASIH x (Solid_PE, Solid_singletons, Solid_CS_out)"
+ #endif
+ 
+ static int usage()

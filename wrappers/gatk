@@ -11,14 +11,26 @@ use Data::Dumper;
 
 my $argv_list = "";
 
-my $java = "/usr/local/Cluster-Apps/java/jdk1.6.0_18/bin/java";
-my $gatk = "/home/kb468/bin/gatk_live/GenomeAnalysisTK.jar";
-#my $gatk = "/home/kb468/bin/GATK/GenomeAnalysisTK.jar";
 
-#my $resources  = " -resources ~/src/gatk/Sting/R/  -Rscript /usr/bin/Rscript ";
+my @java_paths = ("/usr/local/Cluster-Apps/java/",
+		  "/ifs/software/installed/java/",
+		  "/usr/local/java/",
+		  "/usr/bin/");
+
+
+my @gatk_paths = ("/usr/local/installed/",
+		  "/home/easih/installed/",
+		  "/ifs/software/installed/");
+
+my ($java, $gatk);
+set_paths();
+
+my $username = scalar getpwuid $<;
+my $scratch_dir  = "/home/$username/scratch/tmp";
+$scratch_dir = "/tmp" if ( ! -d "/home/$username/scratch/" );
+mkdir "/home/$username/scratch/tmp" if ( -d "/home/$username/scratch/" );
+
 my $resources  = " -resources ~/bin/gatk_live/resources/R  -Rscript /usr/bin/Rscript ";
-
-
 
 foreach my $argv ( @ARGV ) {
   next if ( $argv eq $0);
@@ -46,15 +58,54 @@ foreach my $argv ( @ARGV ) {
 }
 
 
-my $username = scalar getpwuid $<;
-
-mkdir "/home/$username/scratch/tmp" if ( ! -d "/home/$username/scratch/tmp");
 
 #print "$java -jar $gatk $argv_list\n";
 system "$java -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 
+
+# 
+# 
+# 
+# Kim Brugger (06 Oct 2010)
+sub set_paths {
+  
+  my ($java_date, $gatk_date) = (0, 0);
+  
+  foreach my $java_path ( @java_paths ) {
+    
+    if (-e $java_path ) {
+      foreach my $installation ( glob("$java_path/*")) {
+	if ( -e "$installation/bin/java" && -x "$installation/bin/java"  ) {
+	  
+	  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat("$installation/bin/java");
+	  if ( $java_date < $mtime ) {
+	    $java = "$installation/bin/java";
+	    $java_date = $mtime;
+	  }
+	}
+      }
+    }
+  }
+  
+
+
+  foreach my $gatk_path ( @gatk_paths ) {
+    
+    if (-e $gatk_path ) {
+      foreach my $file ( split("\n", `find $gatk_path | grep GenomeAnalysisTK.jar`)) {
+	my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat("$file");
+	if ( $gatk_date < $mtime ) {
+	  $gatk = $file;
+	  $gatk_date = $mtime;
+	  last;
+	}
+      }
+    }
+  }
+
+}
 
 
 

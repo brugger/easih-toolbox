@@ -342,7 +342,16 @@ Index: bwase.c
  			bwa_cs2nt_core(s, bns->l_pac, ntpac);
  			for (j = 0; j < s->n_multi; ++j) {
  				bwt_multi1_t *q = s->multi + j;
-@@ -502,6 +514,15 @@
+@@ -410,6 +422,8 @@
+ 
+ void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, int mode, int max_top2)
+ {
++  if ( ! p->name ) 
++    return;
+ 	int j;
+ 	if (p->type != BWA_TYPE_NO_MATCH || (mate && mate->type != BWA_TYPE_NO_MATCH)) {
+ 		int seqid, nn, am = 0, flag = p->extra_flag;
+@@ -502,6 +516,15 @@
  				}
  			}
  		}

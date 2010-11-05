@@ -275,7 +275,7 @@ Index: Makefile
  CC=			gcc
  CXX=		g++
 -CFLAGS=		-g -Wall -O2 -m64
-+CFLAGS=		-g -Wall  -m64 -O2
++CFLAGS=		-g -Wall  -m64 -O2 
  CXXFLAGS=	$(CFLAGS)
  DFLAGS=		-DHAVE_PTHREAD #-D_FILE_OFFSET_BITS=64
  OBJS=		utils.o bwt.o bwtio.o bwtaln.o bwtgap.o is.o \
@@ -309,7 +309,18 @@ Index: bwase.c
 ===================================================================
 --- bwase.c	(revision 45)
 +++ bwase.c	(working copy)
-@@ -319,6 +319,10 @@
+@@ -59,6 +59,10 @@
+ 		s->multi = calloc(rest, sizeof(bwt_multi1_t));
+ 		for (k = 0; k < n_aln; ++k) {
+ 			const bwt_aln1_t *q = aln + k;
++
++			if ( rest < 0 ) //kb468
++			  break;
++
+ 			if (q->l - q->k + 1 <= rest) {
+ 				bwtint_t l;
+ 				for (l = q->k; l <= q->l; ++l) {
+@@ -319,6 +323,10 @@
  	} else pacseq = _pacseq;
  	for (i = 0; i != n_seqs; ++i) {
  		bwa_seq_t *s = seqs + i;
@@ -320,7 +331,7 @@ Index: bwase.c
  		seq_reverse(s->len, s->seq, 0); // IMPORTANT: s->seq is reversed here!!!
  		for (j = 0; j < s->n_multi; ++j) {
  			bwt_multi1_t *q = s->multi + j;
-@@ -336,6 +340,10 @@
+@@ -336,6 +344,10 @@
  	if (ntbns) { // in color space
  		for (i = 0; i < n_seqs; ++i) {
  			bwa_seq_t *s = seqs + i;
@@ -331,7 +342,7 @@ Index: bwase.c
  			bwa_cs2nt_core(s, bns->l_pac, ntpac);
  			for (j = 0; j < s->n_multi; ++j) {
  				bwt_multi1_t *q = s->multi + j;
-@@ -502,6 +510,15 @@
+@@ -502,6 +514,15 @@
  				}
  			}
  		}

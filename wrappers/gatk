@@ -20,6 +20,7 @@ my @java_paths = ("/usr/local/Cluster-Apps/java/",
 
 my @gatk_paths = ("/usr/local/installed/",
 		  "/home/easih/installed/",
+		  "/home/kb468/bin/gatk_live/",
 		  "/ifs/software/installed/");
 
 my ($java, $gatk);

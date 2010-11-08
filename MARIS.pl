@@ -56,7 +56,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 
 		 'std-mark_dup'      =>  { function   => 'EASIH::JMS::Picard::mark_duplicates',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=5000mb,walltime=08:00:00"},
 
 		 'std-index'         => { function   => 'EASIH::JMS::Samtools::index',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
@@ -149,7 +149,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
+getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Pr:R:sS:L:', \%opts);
 
 usage() if ( $opts{h});
 my $hard_reset    = $opts{'H'};
@@ -166,6 +166,7 @@ elsif ( $hard_reset ) {
 }
 
 
+
 my $username = scalar getpwuid $<;
 
 my $first         = $opts{'1'}     || usage();
@@ -173,6 +174,7 @@ my $second        = $opts{'2'};
 my $dbsnp         = $opts{'d'}     || usage();
 my $email         = $opts{'e'}     || "$username\@cam.ac.uk";
 my $filter        = $opts{'f'}     || "exon";
+my $insert_size   = $opts{'I'};
 my $loose_mapping = $opts{'l'}     || 0;
 my $log           = $opts{'L'};
 my $mark_dup      = $opts{'m'};
@@ -185,7 +187,7 @@ $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 my $print_filter  = $opts{'P'};
 my $readgroup     = $opts{'r'} || $report;
 my $reference     = $opts{'R'}     || usage();
-
+my $no_sw_pair    = $opts{'s'};
 my $align_param   = ' ';
 
 my $bam_file      = "$report.bam";
@@ -196,23 +198,23 @@ open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 # set platform specific bwa aln parameters
 $align_param .= " -c "      if ( $platform eq "SOLID");
 $align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
-# and loose mapping, if skipping the second round of mappings.
-$align_param .= " -e5 " if ( $loose_mapping);
+# and loose mapping
+$align_param .= " -e5 "     if ( $loose_mapping);
 
-if ( $print_filter ) {
-  print "GATK Filter to be used: $filter\n";
-  exit;
-}
+my $sampe_param = "";
+$sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
+$sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
+
+
 
 # Only paired ends runs gets marked duplicates.
 $flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
-$bwa = '/home/kb468/bin/bwa_testing ';
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk         = EASIH::JMS::Misc::find_program('gatk ');
+my $gatk         = EASIH::JMS::Misc::find_program('gatk');
 
 validate_input();
 
@@ -235,16 +237,21 @@ elsif ( $filter eq "wgs-low" ) {
 elsif ( $filter eq "exon" ) {
   $min_depth ||= 20;
 
-  $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
   $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
 }
 elsif ( $filter eq "exon-low" ) {
   $min_depth ||= 5;
 
-  $filter = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
   $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
+}
+
+if ( $print_filter ) {
+  print "GATK Filter to be used: $filter\n";
+  exit;
 }
 
 #EASIH::JMS::verbosity(10);
@@ -262,8 +269,6 @@ else {
 
 &EASIH::JMS::store_state();
 
-
-
 my $extra_report = "1 ==> $first\n";
 $extra_report .= "2 ==> $second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
@@ -271,11 +276,14 @@ $extra_report .= "snp_file ==> $report.snps\n";
 $extra_report .= "indel_file ==> $report.indel\n";
 $extra_report .= "easih-pipeline: " . EASIH::JMS::version() . "\n";
 
-$extra_report .= "align_param ==> $align_param \n";
+$extra_report .= "align_param ==> $align_param and $sampe_param\n";
 $extra_report .= "Binaries used..\n";
-$extra_report .= `ls -l $samtools`;
-$extra_report .= `ls -l $bwa` . "\n";
-$extra_report .= `$gatk --version`;
+$extra_report .= "BWA: " . EASIH::JMS::Misc::bwa_version( $bwa ) . "\n";
+$extra_report .= "Samtools: " . EASIH::JMS::Samtools->version() ."\n";
+$extra_report .= "GATK: " .`$gatk --version`;
+$extra_report .= "Picard: " . EASIH::JMS::Picard->version() ."\n";
+$extra_report .= "Command line: $0 ".EASIH::JMS::args() ."\n";
+
 
 EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
@@ -360,7 +368,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe -sM 300  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+    $cmd = "$bwa sampe $sampe_param  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
   }
   else {
     $cmd = "$bwa samse -f $tmp_file $reference $$input{first_sai} $$input{first_fq}";
@@ -605,7 +613,6 @@ sub validate_input {
   push @errors, "$filter should be one of the following: wgs,wgs-low,exon,exon-low\n"
       if ($filter ne "wgs" && $filter ne "wgs-low" && $filter ne "exon" && $filter ne "exon-low");
 
-
   push @errors, "-M '$min_depth' is <0 or not a number\n" if ($min_depth < 0 || $min_depth !~ /^\d+$/);
 
   # print the messages and die if critical ones.
@@ -627,6 +634,7 @@ sub usage {
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
   print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -I[nsert size (speeds up the run)]\n";
   print "extra flags: -L[og file, default is STDOUT]\n";  
   print "extra flags: -m[ark duplicates (always done for paired ends]\n";
   print "extra flags: -M[in depth for snps, defaults: normal=20 low=5]\n";
@@ -634,10 +642,12 @@ sub usage {
   print "extra flags: -n[ entries pr split-file. default: 10000000]\n";
   print "extra flags: -P[rint GATK filter, and exit]\n"; 
   print "extra flags: -r[ead group]\n"; 
+  print "extra flags: -s[ disable Smith-Waterman for the unmapped mate]\n";
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
   print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
+
   exit;
 
 }

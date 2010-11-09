@@ -12,14 +12,15 @@ use Getopt::Std;
 
 
 my @java_paths = ("/usr/local/Cluster-Apps/java/",
-		  "/ifs/software/installed/java/",
+		  "/software/installed/java/",
 		  "/usr/local/java/",
 		  "/usr/bin/");
 
 
 my @picard_paths = ("/usr/local/installed/",
 		    "/home/easih/installed/",
-		    "/ifs/software/installed/");
+		    "/software/installed/",
+		    "/home/kb468/bin/");
 
 
 my ( $java, $picard_dir);

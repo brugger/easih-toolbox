@@ -33,11 +33,11 @@ use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 use Scalar::Util qw/weaken/;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnILE', \%opts);
+getopts('s:v:pb:Tq:m:HfrhnILEg', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 500;
+my $buffer_size = 10;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
@@ -56,6 +56,7 @@ my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
 my $igv_links   = $opts{I} || 0;
 my $at_ENSEMBL  = $opts{E} || 0;
+my $grantham    = $opts{g} || 0;
 
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
@@ -140,6 +141,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       $res{$position}{ref_base}  = $SNPs{$chr}{$pos}{ref_base};
       $res{$position}{alt_base}  = $SNPs{$chr}{$pos}{$key}{alt_base};
       $res{$position}{qual}      = $SNPs{$chr}{$pos}{$key}{qual};
+      $res{$position}{filter}    = $SNPs{$chr}{$pos}{$key}{filter};
       $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
 
       if ( ! $no_ensembl ) {
@@ -357,14 +359,16 @@ sub print_oneliner {
   if ( ! $printed_header++ ) {
     print table_start(1) if ( $html_out);
     
-    my @annotations = ('position', 'change', 'score');
+    my @annotations = ('position', 'change', 'filter', 'score');
     push @annotations, ('depth', '', '', '', '', '') if ( $bam );
       
-    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref') if ( ! $no_ensembl);
+    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
+    push @annotations, ('Grantham score') if ( ! $grantham);
+    push @annotations, ('external ref') if ( ! $no_ensembl);
 
-    push @annotations, 'regulation' if ( $regulation );
 
     push @annotations, 'pfam' if ( $pfam );
+    push @annotations, 'regulation' if ( $regulation );
 
     push @res, [@annotations];
   }
@@ -390,7 +394,9 @@ sub print_oneliner {
       }
 
       push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{filter};
       push @line, $$mapping{$name}{qual};
+      
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
 	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
@@ -421,6 +427,7 @@ sub print_oneliner {
       }
 
       push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{filter};
       push @line, $$mapping{$name}{qual};
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
@@ -462,7 +469,7 @@ sub print_oneliner {
 	push @effect_line, $$snp_effect{ position } || "";
 	push @effect_line, $$snp_effect{ cpos }     || "";
 	push @effect_line, $$snp_effect{ ppos }     || "";
-	
+	push @effect_line, $$snp_effect{ grantham } || "" if ( $grantham );
 
 	$$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
@@ -710,6 +717,7 @@ sub variation_effects {
 	      $old = one2three( $old );
 	      $new = one2three( $new );
 	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	      $gene_res{ grantham } = grantham_score($old, $new);
 	    }
 
 	    my $protein = $con->transcript->translation();
@@ -1057,7 +1065,6 @@ sub readin_vcf {
 
 #    next if ( defined $min_qual && $min_qual > $qual);
 
-    next if ( $filter ne "PASS" && $filter ne "." );
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);
@@ -1075,6 +1082,7 @@ sub readin_vcf {
     $SNPs{$chr}{$pos}{GATK} = { depth     => $depth,
 				qual      => $qual,
 				alt_base  => $alt_base,
+				filter    => $filter,
 				pos       => $pos,};
 
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
@@ -1090,6 +1098,8 @@ sub readin_pileup {
   my ($file, $min_SNP_qual) = @_;
   open (my $in, $file) || die "Could not open '$file': $!\n";
 
+  die "Pileup is no more\n";
+
   $min_SNP_qual ||= 0;
 
   while(<$in>) {
@@ -1103,9 +1113,9 @@ sub readin_pileup {
     next if ( $cons_SNP_qual < $min_SNP_qual);
     
     $SNPs{$chr}{$pos}{samtools} = { depth        => $depth,
-				mapping_qual => $cons_SNP_qual,
-				alt_base     => $alt_base,
-				pos => $pos,};
+				    mapping_qual => $cons_SNP_qual,
+				    alt_base     => $alt_base,
+				    pos => $pos,};
 
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
   }
@@ -1355,6 +1365,7 @@ sub usage {
   
   print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -H<tml out put> -I<GV links> -p<fam domains> -r<egulation information>\n";
   print "USAGE: -E[nsembl.ensembl.org databases, SLOOOOOOWWWWWERRRRRR ]\n";  
+  print "USAGE: -g[rantham score]\n";  
   print "USAGE: -L[local SNP database backup, as ensembl is broken!!]\n";  
   print "USAGE: -m[in mapping qual. for base dist. report]\n";  
   print "USAGE: -q[uality cutoff for SNPs to report]\n";

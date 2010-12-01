@@ -9,8 +9,10 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use lib '/home/kb468/projects/e57/ensembl/modules/';
-use lib '/home/kb468/projects/e57/bioperl-live/';
+use lib '/usr/local/lib/ensembl-variation/modules/';
+use lib '/usr/local/lib/ensembl-functgenomics/modules/';
+use lib '/usr/local/lib/ensembl/modules/';
+use lib '/usr/local/lib/bioperl/';
 
 use Bio::EnsEMBL::DBSQL::DBAdaptor;
 use Bio::EnsEMBL::AssemblyMapper;
@@ -64,6 +66,12 @@ while(<>) {
     if ( $res->isa( 'Bio::EnsEMBL::Mapper::Coordinate' )) {
       my $chr_slice = $sa->fetch_by_seq_region_id($res->id);
       print "$chr, $start, $end --> " . join("\t", $chr_slice->seq_region_name, $res->start, $res->end ) . "\n";
+    }
+    elsif ( $res->isa( 'Bio::EnsEMBL::Mapper::Gap' )) {
+      print STDERR "$chr:$start-$end is in a GAP\n";
+    }
+    else {
+      print STDERR "Could not transform $chr:$start-$end\n";
     }
   }
 }

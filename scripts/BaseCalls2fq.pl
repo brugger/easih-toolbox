@@ -1,7 +1,7 @@
 #!/usr/bin/perl 
 # 
 # Transforms a illumina basecalls folder into 8 or 16 fq files depending on 
-# wether is was a single or a paired run. 
+# is being a single or a paired ends run. 
 # 
 # Kim Brugger (10 Aug 2010), contact: kim.brugger@easih.ac.uk
 
@@ -91,7 +91,6 @@ sub analyse_files {
       $q_line =~ tr/!-\175/!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-\136/;
       
       if ($index ne '0') {
-
         push @read, "\@${instr}_$run_id:$lane:$tile:$x:$y\#$index/$read\n";
       } else {
         push @read, "\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n";

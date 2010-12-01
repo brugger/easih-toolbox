@@ -33,28 +33,15 @@ use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 use Scalar::Util qw/weaken/;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnI', \%opts);
-usage() if ( $opts{h});
+getopts('s:v:pb:Tq:m:HfrhnILE', \%opts);
+perldoc() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
 my $buffer_size = 500;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
-# get registry
-my $reg = 'Bio::EnsEMBL::Registry';
-$reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0);
-# get variation adaptors
-my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
-my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
-my $sa  = $reg->get_adaptor($species, 'core', 'slice');
-my $ga  = $reg->get_adaptor($species, 'core', 'gene');
-my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
-
-
-my $weaken = 0;
-
-my %slice_hash = ();
+my $exit_count = 100;
 
 
 my $vcf         = $opts{v} || usage();
@@ -68,6 +55,34 @@ my $min_qual    = $opts{q} || undef;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
 my $igv_links   = $opts{I} || 0;
+my $at_ENSEMBL  = $opts{E} || 0;
+
+# get registry
+my $reg = 'Bio::EnsEMBL::Registry';
+if ( $at_ENSEMBL ) {
+  $reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0,);
+}
+else {
+  $reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
+}
+# get variation adaptors
+my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
+my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
+my $sa  = $reg->get_adaptor($species, 'core', 'slice');
+my $ga  = $reg->get_adaptor($species, 'core', 'gene');
+my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
+
+
+
+my $weaken = 0;
+
+my %slice_hash = ();
+
+my $use_local_dbsnp = $opts{L} || 0;
+if ($use_local_dbsnp) {
+  require DBI;
+  $use_local_dbsnp = DBI->connect('DBI:mysql:dbsnp_131', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+}
 
 my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
@@ -158,7 +173,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	  print_results( \%res, $effects);
 	  undef @vfs;# = ();	  
 	  undef %res;# = ();
-
+#	  exit if ($exit_count-- < 0);
 
 	}
       }
@@ -721,6 +736,16 @@ sub variation_effects {
 	}
 
 	$gene_res{ regulation } = $regulations; 
+	
+	if ( ! $existing_vf && $use_local_dbsnp ) {
+	  my ($chr, $pos) = split(":", $vf->variation_name());
+	  
+	  my $sth = $use_local_dbsnp->prepare("SELECT rs, alleles FROM dbsnp WHERE chr='$chr' AND end = '$pos'");
+	  $sth->execute();
+	  my $result = $sth->fetchrow_hashref();
+	  $existing_vf = $result->{rs} || "";
+	}
+	
 	$gene_res{ rs_number }  = $existing_vf || "";
 	push @{$res[$feature]}, \%gene_res;
 
@@ -1089,12 +1114,262 @@ sub readin_pileup {
  
 
 
+# 
+# 
+# 
+# Kim Brugger (01 Dec 2010)
+sub grantham_score {
+  my ($aa1, $aa2) = @_;
+
+  $aa1 = uc($aa1);
+  $aa2 = uc($aa2);
+  
+  ($aa1, $aa2) = ($aa2, $aa1) if ($aa1 gt $aa2);
+  
+  my %grantham;
+  $grantham{ALA}{ARG}=112; 
+  $grantham{ALA}{ASN}=111; 
+  $grantham{ALA}{ASP}=126; 
+  $grantham{ALA}{CYS}=195; 
+  $grantham{ALA}{GLN}=91; 
+  $grantham{ALA}{GLU}=107; 
+  $grantham{ALA}{GLY}=60; 
+  $grantham{ALA}{HIS}=86; 
+  $grantham{ALA}{ILE}=94; 
+  $grantham{ALA}{LEU}=96; 
+  $grantham{ALA}{LYS}=106; 
+  $grantham{ALA}{MET}=84; 
+  $grantham{ALA}{PHE}=113; 
+  $grantham{ALA}{PRO}=27; 
+  $grantham{ALA}{SER}=99; 
+  $grantham{ALA}{THR}=58; 
+  $grantham{ALA}{TRP}=148; 
+  $grantham{ALA}{TYR}=112; 
+  $grantham{ALA}{VAL}=64;
+  
+  $grantham{ARG}{ASN}=86; 
+  $grantham{ARG}{ASP}=96; 
+  $grantham{ARG}{CYS}=180; 
+  $grantham{ARG}{GLN}=43; 
+  $grantham{ARG}{GLU}=54; 
+  $grantham{ARG}{GLY}=125; 
+  $grantham{ARG}{HIS}=29; 
+  $grantham{ARG}{ILE}=97; 
+  $grantham{ARG}{LEU}=102; 
+  $grantham{ARG}{LYS}=26; 
+  $grantham{ARG}{MET}=91; 
+  $grantham{ARG}{PHE}=97; 
+  $grantham{ARG}{PRO}=103; 
+  $grantham{ARG}{SER}=110; 
+  $grantham{ARG}{THR}=71; 
+  $grantham{ARG}{TRP}=101; 
+  $grantham{ARG}{TYR}=77; 
+  $grantham{ARG}{VAL}=96; 
+
+  $grantham{ASN}{ASP}=23; 
+  $grantham{ASN}{CYS}=139; 
+  $grantham{ASN}{GLN}=46; 
+  $grantham{ASN}{GLU}=42; 
+  $grantham{ASN}{GLY}=80; 
+  $grantham{ASN}{HIS}=68; 
+  $grantham{ASN}{ILE}=149; 
+  $grantham{ASN}{LEU}=153; 
+  $grantham{ASN}{LYS}=94; 
+  $grantham{ASN}{MET}=142; 
+  $grantham{ASN}{PHE}=158; 
+  $grantham{ASN}{PRO}=91; 
+  $grantham{ASN}{SER}=46; 
+  $grantham{ASN}{THR}=65;
+  $grantham{ASN}{TRP}=174;
+  $grantham{ASN}{TYR}=143;
+  $grantham{ASN}{VAL}=133;
+
+  $grantham{ASP}{CYS}=154; 
+  $grantham{ASP}{GLN}=61; 
+  $grantham{ASP}{GLU}=45; 
+  $grantham{ASP}{GLY}=94; 
+  $grantham{ASP}{HIS}=81; 
+  $grantham{ASP}{ILE}=168; 
+  $grantham{ASP}{LEU}=172; 
+  $grantham{ASP}{LYS}=101; 
+  $grantham{ASP}{MET}=160; 
+  $grantham{ASP}{PHE}=177; 
+  $grantham{ASP}{PRO}=108; 
+  $grantham{ASP}{SER}=65; 
+  $grantham{ASP}{THR}=85; 
+  $grantham{ASP}{TRP}=181; 
+  $grantham{ASP}{TYR}=160; 
+  $grantham{ASP}{VAL}=152;
+
+  $grantham{CYS}{GLN}=154; 
+  $grantham{CYS}{GLU}=170; 
+  $grantham{CYS}{GLY}=159; 
+  $grantham{CYS}{HIS}=174; 
+  $grantham{CYS}{ILE}=198; 
+  $grantham{CYS}{LEU}=198; 
+  $grantham{CYS}{LYS}=202; 
+  $grantham{CYS}{MET}=196; 
+  $grantham{CYS}{PHE}=205; 
+  $grantham{CYS}{PRO}=169; 
+  $grantham{CYS}{SER}=112; 
+  $grantham{CYS}{THR}=149; 
+  $grantham{CYS}{TRP}=215; 
+  $grantham{CYS}{TYR}=194; 
+  $grantham{CYS}{VAL}=192;
+
+  $grantham{GLN}{GLU}=29; 
+  $grantham{GLN}{GLY}=87; 
+  $grantham{GLN}{HIS}=24; 
+  $grantham{GLN}{ILE}=109; 
+  $grantham{GLN}{LEU}=113; 
+  $grantham{GLN}{LYS}=53; 
+  $grantham{GLN}{MET}=101; 
+  $grantham{GLN}{PHE}=116; 
+  $grantham{GLN}{PRO}=76;
+  $grantham{GLN}{SER}=68; 
+  $grantham{GLN}{THR}=42; 
+  $grantham{GLN}{TRP}=130; 
+  $grantham{GLN}{TYR}=99; 
+  $grantham{GLN}{VAL}=96;
+
+  $grantham{GLU}{GLY}=98; 
+  $grantham{GLU}{HIS}=40; 
+  $grantham{GLU}{ILE}=134; 
+  $grantham{GLU}{LEU}=138; 
+  $grantham{GLU}{LYS}=56; 
+  $grantham{GLU}{MET}=126; 
+  $grantham{GLU}{PHE}=140; 
+  $grantham{GLU}{PRO}=93; 
+  $grantham{GLU}{SER}=80; 
+  $grantham{GLU}{THR}=65; 
+  $grantham{GLU}{TRP}=152; 
+  $grantham{GLU}{TYR}=122; 
+  $grantham{GLU}{VAL}=121;
+
+  $grantham{GLY}{HIS}=89; 
+  $grantham{GLY}{ILE}=135; 
+  $grantham{GLY}{LEU}=138; 
+  $grantham{GLY}{LYS}=127; 
+  $grantham{GLY}{MET}=127; 
+  $grantham{GLY}{PHE}=153; 
+  $grantham{GLY}{PRO}=42; 
+  $grantham{GLY}{SER}=56; 
+  $grantham{GLY}{THR}=59; 
+  $grantham{GLY}{TRP}=184; 
+  $grantham{GLY}{TYR}=147; 
+  $grantham{GLY}{VAL}=109;
+  
+  $grantham{HIS}{ILE}=94; 
+  $grantham{HIS}{LEU}=99; 
+  $grantham{HIS}{LYS}=32; 
+  $grantham{HIS}{MET}=87; 
+  $grantham{HIS}{PHE}=100; 
+  $grantham{HIS}{PRO}=77; 
+  $grantham{HIS}{SER}=89; 
+  $grantham{HIS}{THR}=47; 
+  $grantham{HIS}{TRP}=115; 
+  $grantham{HIS}{TYR}=83; 
+  $grantham{HIS}{VAL}=84; 
+  
+  $grantham{ILE}{LEU}=5; 
+  $grantham{ILE}{LYS}=102; 
+  $grantham{ILE}{MET}=10; 
+  $grantham{ILE}{PHE}=21; 
+  $grantham{ILE}{PRO}=95; 
+  $grantham{ILE}{SER}=142; 
+  $grantham{ILE}{THR}=89; 
+  $grantham{ILE}{TRP}=61; 
+  $grantham{ILE}{TYR}=33; 
+  $grantham{ILE}{VAL}=29;
+  
+  $grantham{LEU}{LYS}=107; 
+  $grantham{LEU}{MET}=15; 
+  $grantham{LEU}{PHE}=22; 
+  $grantham{LEU}{PRO}=98; 
+  $grantham{LEU}{SER}=145; 
+  $grantham{LEU}{THR}=92; 
+  $grantham{LEU}{TRP}=61; 
+  $grantham{LEU}{TYR}=36; 
+  $grantham{LEU}{VAL}=32;
+  
+  $grantham{LYS}{MET}=95; 
+  $grantham{LYS}{PHE}=102; 
+  $grantham{LYS}{PRO}=103; 
+  $grantham{LYS}{SER}=121; 
+  $grantham{LYS}{THR}=78; 
+  $grantham{LYS}{TRP}=110; 
+  $grantham{LYS}{TYR}=85; 
+  $grantham{LYS}{VAL}=97;
+  
+  $grantham{MET}{PHE}=28; 
+  $grantham{MET}{PRO}=87; 
+  $grantham{MET}{SER}=135; 
+  $grantham{MET}{THR}=81; 
+  $grantham{MET}{TRP}=67; 
+  $grantham{MET}{TYR}=36; 
+  $grantham{MET}{VAL}=21;
+  
+  $grantham{PHE}{PRO}=114; 
+  $grantham{PHE}{SER}=155; 
+  $grantham{PHE}{THR}=103; 
+  $grantham{PHE}{TRP}=40; 
+  $grantham{PHE}{TYR}=22; 
+  $grantham{PHE}{VAL}=50;
+  
+  $grantham{PRO}{SER}=74; 
+  $grantham{PRO}{THR}=38; 
+  $grantham{PRO}{TRP}=147; 
+  $grantham{PRO}{TYR}=110; 
+  $grantham{PRO}{VAL}=68;
+  
+  $grantham{SER}{THR}=58; 
+  $grantham{SER}{TRP}=177; 
+  $grantham{SER}{TYR}=144; 
+  $grantham{SER}{VAL}=124;
+  
+  $grantham{THR}{TRP}=128; 
+  $grantham{THR}{TYR}=92; 
+  $grantham{THR}{VAL}=69;
+  
+  $grantham{TRP}{TYR}=37; 
+  $grantham{TRP}{VAL}=88;
+  
+  $grantham{TYR}{VAL}=55;
+
+
+  return $grantham{$aa1}{$aa2} if ($grantham{$aa1}{$aa2});
+  return "NA";
+
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (09 Nov 2010)
+sub usage {
+  
+  $0 =~ s/.*\///;
+  
+  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -H<tml out put> -I<GV links> -p<fam domains> -r<egulation information>\n";
+  print "USAGE: -E[nsembl.ensembl.org databases, SLOOOOOOWWWWWERRRRRR ]\n";  
+  print "USAGE: -L[local SNP database backup, as ensembl is broken!!]\n";  
+  print "USAGE: -m[in mapping qual. for base dist. report]\n";  
+  print "USAGE: -q[uality cutoff for SNPs to report]\n";
+  print "USAGE: -f[ multi line report]\n";
+  exit;
+}
+
+
+
 
 # 
 # 
 # 
 # Kim Brugger (09 Jul 2010)
-sub usage {
+sub perldoc {
 
   system "perldoc $0";
   exit;

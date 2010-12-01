@@ -29,6 +29,8 @@ while (<>) {
   $_ =~ s/<TD>/\t/g;
   $_ =~ s/&nbsp;//g;
   $_ =~ s/<.*?>//g;
+
+  $_ =~ s/^\s+//;
   
 #  my @fields = split("<TR><TD>");
 

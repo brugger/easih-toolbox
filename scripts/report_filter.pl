@@ -11,23 +11,25 @@ use Data::Dumper;
 use Getopt::Std;
 
 my %opts;
-getopts('b:r:s:hb:dDf:F:', \%opts);
+getopts('b:r:t:hb:dDf:F:l:', \%opts);
 
 usage() if ( $opts{h});
 
 my $bed_file        = $opts{b};
-my $region          = $opts{p};
-my $snp_file        = $opts{s} || usage();
+my $region          = $opts{r};
+my $snp_file        = $opts{t} || usage();
 my $in_dbsnp        = $opts{d};
 my $not_dbsnp       = $opts{D};
 my $filter          = $opts{g};
 my $filled_field    = $opts{f};
 my $unfilled_field  = $opts{F};
+my $leeway          = $opts{l} || 0;
 
 my $regions = readin_bed( $bed_file ) if ( $bed_file );
 
 if ( $region ) {
-  my ($chr, $start, $end) = $_ =~ /(.*?):(\d+)-(\d+)/;
+  $region =~ s/,//g;
+  my ($chr, $start, $end) = $region =~ /(.*?):(\d+)-(\d+)/;
   push @{$$regions{ $chr }}, [$start, $end];
 }
 
@@ -35,16 +37,19 @@ open(my $snps, $snp_file ) || die "Could not open '$snp_file':$!\n";
 while( <$snps> ) {
 
   chomp;
+  s/^\s+//;
 
-  next if ( $in_dbsnp  && ! /\trs\d+/);
-  next if ( $not_dbsnp && /\trs\d+/);
+#  next if ( $in_dbsnp  && ! /\trs\d+/);
+#  next if ( $not_dbsnp && /\trs\d+/);
 
-  next if ( $filter && !/$filter/);
+#  next if ( $filter && !/$filter/);
 
   my @fields = split("\t", $_);
 
-  next if ( defined $filled_field  && (!$fields[$filled_field] || $fields[$filled_field] eq ""));
-  next if ( defined $unfilled_field  && $fields[$unfilled_field] &&  $fields[$unfilled_field] ne "");
+#  next if ( defined $filled_field  && (!$fields[$filled_field] || $fields[$filled_field] eq ""));
+#  next if ( defined $unfilled_field  && $fields[$unfilled_field] &&  $fields[$unfilled_field] ne "");
+
+  next if ( ! $fields[0]);
 
   my ($chr, $start, $end) = $fields[0] =~ /(.*?):(\d+)-(\d+)/;
 
@@ -55,17 +60,15 @@ while( <$snps> ) {
 
   next if ( ! $chr || !$start || ! $end );
 
-#   for (my $i=0; $i< @fields; $i++ ) {
-#     $fields[$i] ="$i ==> $fields[$i]";
-#   }
-#  die join("\t", @fields);
-
   if ( $regions ) {
 
     foreach my $se (@{$$regions{$chr}} ) {
       my ($Rstart, $Rend) = @$se;
 
-      if ( $Rstart <= $start && $Rend >= $end ) {
+      if ( ($Rstart - $leeway <= $start  && $Rend + $leeway >= $end) || 
+	   ($start  - $leeway <= $Rstart && $end + $leeway >= $Rend) || 
+	   ($start  - $leeway <= $Rstart && $end + $leeway >= $Rstart) ||
+	   ($Rstart - $leeway <= $start  && $Rend + $leeway >= $start) ) {
 	print "$_\n";
 	last;
       }
@@ -149,7 +152,7 @@ sub usage {
   
   $0 =~ s/.*\///;
   print "Filters SNPs in various ways\n";
-  print "Usage: $0 -b<ed file, with regions of interes> -p[osition to extract] -s[np file]\n";
+  print "Usage: $0 -b<ed file, with regions of interest> -r[egion to extract from] -t[ab file (report, snp, indel)]\n";
   exit;
 
 }

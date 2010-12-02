@@ -399,6 +399,7 @@ sub print_oneliner {
       
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
+	push @line, $$mapping{$name}{base_dist}{type};      
 	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
       }
       
@@ -431,7 +432,7 @@ sub print_oneliner {
       push @line, $$mapping{$name}{qual};
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
-	
+	push @line, $$mapping{$name}{base_dist}{type};      	
 	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
       }
       
@@ -544,7 +545,7 @@ sub print_fullreport {
     push @line, $$mapping{$name}{qual};
     if ( $$mapping{$name}{base_dist} ) {
       push @line, $$mapping{$name}{base_dist}{total};      
-    
+      push @line, $$mapping{$name}{base_dist}{type};      
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
 
@@ -921,12 +922,18 @@ sub base_dist {
   }
 
   my %res;
+  my $largest = 0;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
+    $largest = $perc if ( $largest < $perc );
     my $qual = $qual_stats{$base} || 0;
     $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
-
   }
+
+  $res{type}  = "homozygous"   if ( $largest > 76);
+  $res{type}  = "heterozygous" if ( $largest < 75 && $largest > 35);
+  $res{type}  = "unknown"      if ( $largest < 35);
+  $res{type} .= " ($largest)";
 
   $res{total} = $total;
   

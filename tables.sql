@@ -5,7 +5,7 @@
 
 CREATE TABLE snp (
 
-  rs                     VARCHAR(15) PRIMARY KEY,
+  rs                     VARCHAR(50) PRIMARY KEY,
   chr                    VARCHAR(6),
   pos			 INT NOT NULL,
   flags			 VARCHAR(500),
@@ -13,6 +13,7 @@ CREATE TABLE snp (
   ref_base		 VARCHAR(1),
   alt_base		 VARCHAR(1),
   multi_genotypes        BOOLEAN,
+  centimorgan            FLOAT,
 
   KEY pos_idx (ref_id,chr,pos)
 
@@ -27,16 +28,17 @@ CREATE TABLE reference (
 
 CREATE TABLE population (
 
+  pop_id       INT NOT NULL AUTO_INCREMENT,
   pop          VARCHAR(5) NOT NULL,
   rs           VARCHAR(15) NOT NULL,
   sample_size  INT,
   allele_freq  FLOAT,
 
-  PRIMARY KEY (rs),
+  PRIMARY KEY (pop_id),
   KEY rs_pop_idx (rs, pop)
 );
 
 CREATE TABLE flags (
-  id  VARCHAR(5) PRIMARY KEY,
+  id  VARCHAR(25) PRIMARY KEY,
   full VARCHAR(500)
 );

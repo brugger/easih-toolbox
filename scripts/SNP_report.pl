@@ -22,6 +22,10 @@ use lib '/home/easih/lib/ensembl/modules/';
 use lib '/home/easih/lib/bioperl/';
 
 
+use lib '/home/kb468/easih-toolbox/modules/';
+use EASIH::SNPs;
+
+
 use strict;
 use Getopt::Long;
 use FileHandle;
@@ -30,7 +34,6 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
-use Scalar::Util qw/weaken/;
 
 my %opts;
 getopts('s:v:pb:Tq:m:HfrhnILEg', \%opts);
@@ -74,8 +77,6 @@ my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 
 
 
-
-my $weaken = 0;
 
 my %slice_hash = ();
 my ($sth_dbsnp, $sth_pop);
@@ -830,11 +831,7 @@ sub variation_effects {
 		$gene_res{ interpro } = $prot_feat->interpro_ac();
 	      } 
 	    }
-	    weaken($protein) if ($weaken);
-	    weaken($prot_feats) if ($weaken);
 	  }
-	  weaken($gene) if ($weaken);
-	  weaken($xref) if ($weaken);
 	}
 
 	$gene_res{ regulation } = $regulations; 
@@ -847,7 +844,6 @@ sub variation_effects {
 	push @{$res[$feature]}, \%gene_res;
 
       }
-      weaken($con) if ($weaken);
     }
     $feature++;
   }

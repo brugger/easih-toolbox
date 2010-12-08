@@ -37,12 +37,11 @@ getopts('s:v:pb:Tq:m:HfrhnILEg', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 10;
+my $buffer_size = 100;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
-my $exit_count = 100;
-
+my $exit_count = 10;
 
 my $vcf         = $opts{v} || usage();
 my $bam         = $opts{b};
@@ -75,15 +74,24 @@ my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 
 
 
+
 my $weaken = 0;
 
 my %slice_hash = ();
-
+my ($sth_dbsnp, $sth_pop);
 my $use_local_dbsnp = $opts{L} || 0;
 if ($use_local_dbsnp) {
   require DBI;
-  $use_local_dbsnp = DBI->connect('DBI:mysql:dbsnp_131', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $use_local_dbsnp = DBI->connect('DBI:mysql:dbsnp132', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $sth_dbsnp = $use_local_dbsnp->prepare("SELECT rs, flags FROM snp WHERE chr=? AND pos = ?");
+  $sth_pop   = $use_local_dbsnp->prepare("select * from population where rs=?;");
+
 }
+
+
+my $hgmd     = DBI->connect('DBI:mysql:hgmd', 'easih_ro') || print STDERR "Could not connect to database hgmd: $DBI::errstr";
+my $sth_hgmd = $hgmd->prepare("SELECT rs, chr, pos FROM snp WHERE (chr=? AND pos = ?) OR rs=?;");
+
 
 my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
@@ -116,8 +124,10 @@ chomp( $samtools);
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $vcf )      if ( $vcf);
 
+my %grch37_remapping = ();
+
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
-my $counter = 0;
+my $counter = 10;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
   
 
@@ -135,7 +145,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     
     $res{$position}{callers} = join("/", @keys);
 
-    if (1 || keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
+    if ( keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
       my $key = "GATK";
       $res{$position}{ref_base}  = $SNPs{$chr}{$pos}{ref_base};
@@ -151,7 +161,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	my $Epos = $pos;
 	($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
 	
+#	$res{$position}{grcH37} = "$Echr:$Epos";
+
 	next if ( ! $Echr );
+	$grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
 	my $slice = fetch_slice($Echr);
 	my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
 	
@@ -170,13 +183,13 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	push @vfs, $new_vf; 
 	
 	
-	if ( 1 || @vfs >= $buffer_size) {
+	if ( @vfs >= $buffer_size) {
 	  my $effects = variation_effects(\@vfs);
 	  print_results( \%res, $effects);
 	  undef @vfs;# = ();	  
 	  undef %res;# = ();
+	  %grch37_remapping = ();
 #	  exit if ($exit_count-- < 0);
-
 	}
       }
     }
@@ -187,6 +200,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     print_results( \%res, $effects);
     @vfs = ();
     %res = ();
+    %grch37_remapping = ();
   }
 
 }
@@ -365,6 +379,9 @@ sub print_oneliner {
     push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
     push @annotations, ('Grantham score') if ( ! $grantham);
     push @annotations, ('external ref') if ( ! $no_ensembl);
+    push @annotations, ('dbsnp freq') if ( $use_local_dbsnp);
+    push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
+    push @annotations, ('HGMD') if ( $hgmd);
 
 
     push @annotations, 'pfam' if ( $pfam );
@@ -478,10 +495,17 @@ sub print_oneliner {
 	$$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
 
-      push @effect_line, $$snp_effect{ rs_number } || "";
+	push @effect_line, $$snp_effect{ rs_number   } || "";
+	push @effect_line, $$snp_effect{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+	push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
 
-      push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
-      push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
+	push @effect_line, $$snp_effect{ HGMD } || "" if ( $hgmd );
+
+
+#	die Dumper( $snp_effect ) if ( $$snp_effect{ dbsnp_freq } );
+
+	push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+	push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
 
 	push @res, [@line, @effect_line];
       }
@@ -550,6 +574,11 @@ sub print_fullreport {
     }
 
     push @line, $$effect[0]{ rs_number } || "";
+    push @line, $$effect[0]{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+    push @line, $$effect[0]{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+
+    push @line, $$effect{ HGMD } || "" if ( $hgmd );
+
     push @line, $$effect[0]{ regulation } || "" if ( $regulation );
     push @res, \@line;
     
@@ -595,6 +624,12 @@ sub print_fullreport {
 
       $$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+      push @effect_line, $$snp_effect{ rs_number };
+      push @effect_line, $$snp_effect{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+      push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+
+      push @effect_line, $$snp_effect{ HGMD } || "" if ( $hgmd );
 
 
       push @effect_line, $$snp_effect{ pfam } || "";
@@ -666,6 +701,64 @@ sub variation_effects {
       }
       
     }
+
+
+#	$existing_vf = "";
+    my ($dbsnp_flags, $dbsnp_freq) = ('','');
+    if ( $use_local_dbsnp ) {
+      
+      my ($chr, $pos);
+      if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
+	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
+#	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
+      }
+      else {
+	($chr, $pos) = split(":", $vf->variation_name());
+      }
+     
+      $sth_dbsnp->execute($chr, $pos);
+      my $result = $sth_dbsnp->fetchrow_hashref();
+
+      if ( $result->{rs} ) {
+	$existing_vf = $result->{rs};
+	$dbsnp_flags = $result->{flags} || "";
+	$dbsnp_flags =~ s/RV;//;
+	$dbsnp_flags =~ s/dbSNPBuildID=\d+;//;
+	$dbsnp_flags =~ s/WGT=\d+;//;
+	$dbsnp_flags =~ s/SLO;//;
+	$dbsnp_flags =~ s/VC=\w+?;//;
+	$dbsnp_flags =~ s/VP=.+?;//;
+	
+	
+	$sth_pop->execute($existing_vf);
+	
+	my ( $observations, $seen, $freq, $pop) = (0,0, 0);
+	while (my $ref2 = $sth_pop->fetchrow_hashref ) {
+	  $pop++;
+	  my $count = int($$ref2{allele_freq}*$$ref2{sample_size});
+	  $observations += $$ref2{sample_size};
+	  $seen += $count;
+	  $freq += $$ref2{allele_freq};
+	}
+	$dbsnp_freq = sprintf("$seen/%.2f", $freq/$pop) if ( $pop);
+#	print "($dbsnp_freq, $dbsnp_flags) =); \n";
+	
+      }
+	  
+    }
+
+    my $HGMD;
+    if ( $hgmd ) {
+      $HGMD = "N";
+      my ($chr, $pos) = split(":", $vf->variation_name());
+      
+#      my $sth = $hgmd->prepare("SELECT rs, chr, pos FROM snp WHERE (chr='$chr' AND pos = '$pos') OR rs='$existing_vf';");
+      $sth_hgmd->execute($chr, $pos, $existing_vf);
+      my $result = $sth_hgmd->fetchrow_hashref();
+      
+      $HGMD = "Y" if ( defined $result->{rs} || defined $result->{chr} );
+    }
+
 
 		
     # the get_all_TranscriptVariations here now just retrieves the
@@ -745,17 +838,12 @@ sub variation_effects {
 	}
 
 	$gene_res{ regulation } = $regulations; 
-	
-	if ( ! $existing_vf && $use_local_dbsnp ) {
-	  my ($chr, $pos) = split(":", $vf->variation_name());
-	  
-	  my $sth = $use_local_dbsnp->prepare("SELECT rs, alleles FROM dbsnp WHERE chr='$chr' AND end = '$pos'");
-	  $sth->execute();
-	  my $result = $sth->fetchrow_hashref();
-	  $existing_vf = $result->{rs} || "";
-	}
-	
-	$gene_res{ rs_number }  = $existing_vf || "";
+
+	$gene_res{ rs_number }   = $existing_vf || "";
+	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
+	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
+	$gene_res{ HGMD } = $HGMD || "";
+
 	push @{$res[$feature]}, \%gene_res;
 
       }

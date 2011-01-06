@@ -74,7 +74,7 @@ while ($_ = pop @commands ) {
 	  $running_nodes--;
 	}
       }
-      sleep 1;
+      sleep 10;
       printf( "         %1s       %5d           %7d                   %3.2f  \r",
               $running[$running_counter++ % 7], $total, $done, $done*100/$total);
       last if ($running_nodes < $MAX_NODES);
@@ -101,7 +101,7 @@ while ($done < $total) {
   }
   printf( "         %1s       %5d           %7d                   %3.2f \r",
 	  $running[$running_counter++ % 7], $total, $done, $done*100/$total);
-  sleep 1;
+  sleep 10;
 }
 
 print "All done.\n";

@@ -149,7 +149,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Pr:R:sS:L:', \%opts);
+getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Q:Pr:R:sS:L:', \%opts);
 
 usage() if ( $opts{h});
 my $hard_reset    = $opts{'H'};
@@ -158,16 +158,26 @@ my $soft_reset    = $opts{'S'};
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:', \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Pr:R:S:L:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:', \%opts);
 }
 
 
 
 my $username = scalar getpwuid $<;
+
+# if using standard naming, this is a lot easier.
+if ( $opts{Q} ) {
+  $opts{'1'} = "$opts{Q}.1.fq"    if ( -e "$opts{Q}.1.fq");
+  $opts{'1'} = "$opts{Q}.1.fq.gz" if ( -e "$opts{Q}.1.fq.gz");
+  $opts{'2'} = "$opts{Q}.2.fq"    if ( -e "$opts{Q}.2.fq");
+  $opts{'2'} = "$opts{Q}.2.fq.gz" if ( -e "$opts{Q}.2.fq.gz");
+  $opts{'L'} = "$opts{Q}.log";
+  $opts{'o'} = "$opts{Q}";
+}  
 
 my $first         = $opts{'1'}     || usage();
 my $second        = $opts{'2'};
@@ -222,30 +232,30 @@ validate_input();
 if ($filter eq "wgs" ) {
   $min_depth ||= 20;
 
-  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow$min_depth ";
 #  $filter .= "-clusterWindowSize 10 ";
-  $filter .= "--filterExpression 'AB > 0.75 && DP > 40 || DP > 100 || MQ0 > 40 || SB > -0.10'   --filterName StandardFilters ";
+  $filter .= "--filterExpression 'AB > 0.75 && DP > 40 || DP > 100 || MQ0 > 40 || SB > -0.10'   --filterName StdFilter ";
   $filter .= "--filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)'  --filterName HARD_TO_VALIDATE ";
   
 }
 elsif ( $filter eq "wgs-low" ) {
   $min_depth ||= 5;
 
-  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow$min_depth ";
   $filter .= "--filterExpression 'MQ0 >= 4 && (MQ0 / (1.0 * DP)) > 0.1'  --filterName HARD_TO_VALIDATE";
 }
 elsif ( $filter eq "exon" ) {
   $min_depth ||= 20;
 
-  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
-  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow$min_depth ";
+  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StddFilter ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
 }
 elsif ( $filter eq "exon-low" ) {
   $min_depth ||= 5;
 
-  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow ";
-  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StandardFilters ";
+  $filter  = "--filterExpression 'DP < $min_depth' --filterName shallow$min_depth ";
+  $filter .= " --filterExpression 'QUAL < 30.0 || QD < 5.0 || HRun > 5 || SB > -0.10' -filterName StdFilter ";
   $filter .= " --filterExpression 'MQ0 >= 4 && ((MQ0 / (1.0 * DP)) > 0.1)' --filterName HARD_TO_VALIDATE";  
 }
 
@@ -630,6 +640,10 @@ sub usage {
   my $script = $0;
   $script =~ s/.*\///;
   print "USAGE: $script -1 [fastq file]  -2 [fastq file] -l[oose mapping] -R[eference genome] -d[bsnp rod] -o[ut prefix] -p[latform: illumina or solid]\n";
+  
+  print "\nor extrapolate the standard <fq, log, out names> with the -Q flag\n";
+  print "EXAMPLE: $script -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
+
   print "\n";
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";

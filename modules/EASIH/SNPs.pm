@@ -25,8 +25,65 @@ my %populations;
 my $sth_phylop = $ppdbi->prepare("SELECT score from phylop where chr=? AND pos = ? AND ref_id=?");
 my $sth_phast  = $ppdbi->prepare("SELECT score from phast  where chr=? AND pos = ? AND ref_id=?");
 
+#
+#
+#
+# Kim Brugger (08 Dec 2010)
+sub phast_score_GRCh37 {
+  my ( $chr, $pos) = @_;
+  return undef if ( ! $chr || !$pos);
+
+  $sth_phast->execute( $chr, $pos, $ref_id_GRCh37);
+  my $result = $sth_phast->fetchrow_hashref();
+
+  return $result->{score} || '';
+}
 
 
+#
+#
+#
+# Kim Brugger (08 Dec 2010)
+sub phast_score_hg18 {
+  my ( $chr, $pos) = @_;
+  return undef if ( ! $chr || !$pos);
+
+  $sth_phast->execute( $chr, $pos, $ref_id_hg18);
+  my $result = $sth_phast->fetchrow_hashref();
+
+  return $result->{score} || '';
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (08 Dec 2010)
+sub phylop_score_GRCh37 {
+  my ( $chr, $pos) = @_;
+  return undef if ( ! $chr || !$pos);
+  
+  $sth_phylop->execute( $chr, $pos, $ref_id_GRCh37);
+  my $result = $sth_phylop->fetchrow_hashref();
+  
+  return $result->{score} || '';
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (08 Dec 2010)
+sub phylop_score_hg18 {
+  my ( $chr, $pos) = @_;
+  return undef if ( ! $chr || !$pos);
+  
+  $sth_phylop->execute( $chr, $pos, $ref_id_hg18);
+  my $result = $sth_phylop->fetchrow_hashref();
+  
+  return $result->{score} || '';
+}
 
 
 # 
@@ -120,15 +177,13 @@ sub fetch_rs {
 }
  
 
-
-
 # 
 # 
 # 
 # Kim Brugger (08 Dec 2010)
 sub fetch_snp_hg18 {
   my ( $chr, $pos) = @_;
-  return undef if ( ! $chr || $pos);
+  return undef if ( ! $chr || !$pos);
   
   $sth_fetch_snp->execute( $chr, $pos, $ref_id_hg18);
   my $result = $sth_fetch_snp->fetchrow_hashref();

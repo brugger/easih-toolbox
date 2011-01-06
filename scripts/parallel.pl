@@ -12,13 +12,11 @@ use POSIX ':sys_wait_h';
 use POSIX  'tmpnam';
 use Getopt::Std;
 
-
-my $infile = shift || die "USAGE $0 COMMAND-INFILE (runs on 4 cpus)\n";
+my $MAX_NODES = 8;
+my $infile = shift || die "USAGE $0 COMMAND-INFILE (runs on $MAX_NODES cpus)\n";
 
 # Store the user specifed values in more readable named variables.
-my $MAX_NODES = 4;
 my $INFILE    = $infile;
-my $OUTFILE   = "$infile.out";
 
 my @cpids = ();
 my (@outfiles, @errfiles);
@@ -36,16 +34,22 @@ my $done = 0; # to track the number of files handled
 
 my $total = 0;
 my $running_nodes = 0;
-open INFILE, $infile || die "Could not open '$infile': $!\n";
-while (<INFILE>) {
 
-  next if (/^ *\z/);
+my @commands;
+open (my $in, $infile) || die "Could not open '$infile': $!\n";
+while( <$in>) {
+  next if (/^\s*\z/);
+  next if (/^\#/);
+  chomp;
+  push @commands, $_;
+}  
+
+while ($_ = pop @commands ) {
 
  FREE_NODE:
   if ($running_nodes <  $MAX_NODES) {
     
-    chomp;
-    my $command = " $_";
+    my $command = "$_";
 #    $command .= "> /dev/null 2>/dev/null";
 
     $total++;
@@ -107,6 +111,7 @@ sub create_child {
 
   my $pid;
   if ($pid = fork) {
+    ;
   } 
   else {
     die "cannot fork: $!" unless defined $pid;

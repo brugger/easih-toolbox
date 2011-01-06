@@ -106,7 +106,8 @@ else {
 
 
 # 
-# 
+# As demultiplexing sucks, this have to be done on a tile basis otherwise the memory 
+# usage is going to be silly.
 # 
 # Kim Brugger (04 Jan 2011)
 sub demultiplex {
@@ -115,10 +116,13 @@ sub demultiplex {
   
   my @files = glob("$indir/s_$lane\_2_*_qseq.txt");
 
-  foreach my $file (  @files) {
-    open (my $in, "$file") || die "Could not open '$file': $!\n";
+  my ($in1, $out1, $notmplexed1)  = (0, 0, 0);
+  my ($in2, $out2, $notmplexed2)  = (0, 0, 0);
 
-    while (my $line = <$in>) {
+  foreach my $file (  @files) {
+    open (my $input, "$file") || die "Could not open '$file': $!\n";
+
+    while (my $line = <$input>) {
 
       my ($instr, $run_id, $lane, $tile, $x, $y, $index, $read, $bases, $q_line, $filter)
 	  = split /\t/, $line;
@@ -127,38 +131,52 @@ sub demultiplex {
       next if ( $filter == 0);
       push @{$res{$bases}}, "\@${instr}_$run_id:$lane:$tile:$x:$y";
     }
-  }
+    close ($input);
 
-  my (%good_bc, %codes);
-  foreach my $bc ( sort {$res{$b} <=> $res{$a}} keys %res) {
+    my (%good_bc, %codes);
+    foreach my $bc ( sort {$res{$b} <=> $res{$a}} keys %res) {
 
-    next if ( $bc =~ /^\.+\Z/);
-
-    if ( ! keys %good_bc || @{$res{$bc}} > 500 ) {
-      map {$good_bc{ $_ } = $bc } @{$res{ $bc }};
-      $codes{ $bc }++;
-    }
-    elsif ( $allow_mismatches ) {
-      foreach my $bc2 ( keys %good_bc ) {
-	my @seq1 = split('', $res{$bc});
-	my @seq2 = split('', $good_bc{$bc2});
-  
-	my $diffs = 0;
-	for( my $i = 0; $i < @seq1; $i++) {
-	  $diffs++ if ( $seq1[$i] ne $seq2[$i]);
+      next if ( $bc =~ /^\.+\Z/);
+      
+      if ( ! keys %good_bc || @{$res{$bc}} > 500 ) {
+	map {$good_bc{ $_ } = $bc } @{$res{ $bc }};
+	$codes{ $bc }++;
+      }
+      elsif ( $allow_mismatches ) {
+	foreach my $bc2 ( keys %good_bc ) {
+	  my @seq1 = split('', $res{$bc});
+	  my @seq2 = split('', $good_bc{$bc2});
+	  
+	  my $diffs = 0;
+	  for( my $i = 0; $i < @seq1; $i++) {
+	    $diffs++ if ( $seq1[$i] ne $seq2[$i]);
+	  }
+	  # For now we allow one (or two) mismatches between the barcodes
+	  map {$good_bc{ $_ } = $bc } @{$res{ $bc }} if ( $diffs <= 1 );
 	}
-	# For now we allow one or two mismatches between the barcodes
-	map {$good_bc{ $_ } = $bc } @{$res{ $bc }} if ( $diffs <= 1 );
       }
     }
+
+    $file =~ s/_2_/_1_/;
+    my ($in, $out, $notmplexed) = analyse_lane($lane, "1", $lane_name, $file, \%good_bc, [keys %codes] );
+    $in1  += $in;
+    $out1 += $out;
+    $notmplexed1 += $notmplexed;
+    $file =~ s/_2_/_1_/;
+    ($in, $out, $notmplexed) = analyse_lane($lane, "2", $lane_name, $file, \%good_bc, [keys %codes] );
+    $in2  += $in;
+    $out2 += $out;
+    $notmplexed2 += $notmplexed;
   }
 
-  
-  analyse_lane($lane, "1", $lane_name, "$indir/s_$lane\_1_*_qseq.txt", \%good_bc, [keys %codes] );
-  analyse_lane($lane, "2", $lane_name, "$indir/s_$lane\_3_*_qseq.txt", \%good_bc, [keys %codes] );
+  printf STDOUT ("lane $lane.1\t$lane_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile", $out1*100/$in1, $out1/120) ;
+  printf STDOUT ("\tnot demultiplexed: %d (%.2f %%)\n", $notmplexed1, $notmplexed1*100/$in1);
 
- 
-  return \%good_bc;
+  if ( $out2) {
+    printf STDOUT ("lane $lane.2\t$lane_name\t$in2\t$out2 (%.2f %%)\t%.2f avg clusters per tile", $out2*100/$in2, $out2/120) ;
+    printf STDOUT ("\tnot demultiplexed: %d (%.2f %%)\n", $notmplexed2, $notmplexed2*100/$in2);
+  }
+
 }
 
 
@@ -223,7 +241,7 @@ sub run_parallel {
 	    $running_nodes--;
 	  }
 	}
-	sleep 1;
+	sleep 10;
 	
 	last if ($running_nodes < $MAX_NODES);
       }
@@ -246,6 +264,7 @@ sub run_parallel {
 	$cpids[$i] = -10;
       }
     }
+    sleep 10;
   }
 
   foreach my $fh (@fhs ) {
@@ -284,17 +303,18 @@ sub analyse_lane {
   my ( $lane_nr, $lane_index, $lane_name, $glob, $multiplex, $barcodes) = @_;
 
   my @files = glob($glob);
+  my ($count_in, $count_out, $not_demultiplexed) = (0,0,0);
+  my (%fhs, $out);
   if ( @files ) {
-    my (%fhs, $out);
     if ( $barcodes ) {
       foreach my $barcode ( @$barcodes) {
-	open ($fhs{$barcode}, "| gzip -c > $outdir/$lane_name\_$barcode.$lane_index.fq.gz") || die "Could not open '$outdir/$lane_name\_$barcode.$lane_index.fq.gz': $!\n";
+	open ($fhs{$barcode}, "| gzip -c >> $outdir/$lane_name\_$barcode.$lane_index.fq.gz") || die "Could not open '$outdir/$lane_name\_$barcode.$lane_index.fq.gz': $!\n";
       }
     }
     else {
       open ($out, "| gzip -c > $outdir/$lane_name.$lane_index.fq.gz") || die "Could not open '$outdir/$lane_name.$lane_index.fq.gz': $!\n";
     }
-    my ($count_in, $count_out, $not_demultiplexed) = (0,0,0);
+
 
     foreach my $file (  @files) {
       open (my $in, "$file") || die "Could not open '$file': $!\n";
@@ -353,10 +373,22 @@ sub analyse_lane {
       }
     }
     
-    printf STDOUT ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
-    printf STDOUT ("\tnot demultiplexed: %d (%.2f %%)", $not_demultiplexed, $not_demultiplexed*100/$count_in) if ($multiplex);
-    print STDOUT ("\n");
+    if ( ! $multiplex ) {
+      printf STDOUT ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
+      print  STDOUT ("\n");
+    }
+
   }
+  close ($out) if ( $out);
+
+  if ( $barcodes ) {
+    foreach my $barcode ( @$barcodes) {
+      close ($fhs{$barcode});
+    }
+  }
+
+  
+  return ($count_in, $count_out, $not_demultiplexed);
 }
 
 

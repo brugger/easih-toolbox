@@ -22,9 +22,17 @@ use Getopt::Std;
 use Data::Dumper;
 
 my %opts;
-getopts('p:o:nhsi:', \%opts);
+getopts('p:o:nhsi:Q:', \%opts);
 
 usage() if ($opts{h});
+
+if ( $opts{Q}) {
+  
+  $opts{Q} =~ s/_\z//;
+  $opts{p} = $opts{Q};
+  $opts{o} = $opts{Q};
+
+}  
 
 my $prefix     = $opts{p} || usage();
 my $out        = $opts{o} || usage();
@@ -37,6 +45,8 @@ my $singletons = $opts{s} || 0;
 $prefix =~ s/F3.*//;
 $prefix =~ s/R3.*//;
 $prefix =~ s/F5.*//;
+
+$prefix .= "_" if ( $prefix !~ /_\z/);
 
 my (@fhr, @fhw);
 my @fn_suff = ('F3.csfasta', 'F3_QV.qual', 'R3.csfasta', 'R3_QV.qual');
@@ -90,7 +100,7 @@ if ($is_mate_paired || $is_paired_ends) {
     my @files = ($F3_cs, $F3_qual, $F5_cs, $F5_qual);
     for (0 .. 3) {
       my $fn = $files[$_];
-      $fn = "gzip -dc $fn.gz |" if ($fn =~ /gz\z/);
+      $fn = "gzip -dc $fn |" if ($fn =~ /gz\z/);
       open($fhr[$_], $fn) || die("** Fail to open '$fn'. (paired_ends)\n");
     }
     

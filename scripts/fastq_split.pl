@@ -167,7 +167,7 @@ sub read1 {
   my $entry = $key . <$read_handle> . <$read_handle>. <$read_handle>;
   chomp($key);
   #chomp off /1|/2 id from the solid names
-  $key =~ s/\/[1|2]//;
+  $key =~ s/\/[1|2|3]//;
   return $key ? ($key, $entry) : ();
 }
 

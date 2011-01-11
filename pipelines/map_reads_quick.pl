@@ -114,7 +114,6 @@ my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk         = EASIH::JMS::Misc::find_program('gatk');
 my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
@@ -333,45 +332,6 @@ sub sam_add_tags {
 
 
 
-sub identify_indel {
-  my ( $input ) = @_;
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".intervals");
-    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -I $input -L $name";
-    EASIH::JMS::submit_job($cmd, "$tmp_file $name $input");
-  }
-  
-}
-
-
-sub realign_indel {
-  my ($input) = @_;
-
-  my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
-
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-  my $cmd;
-  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
-  if (  -z $interval_file ) {
-    $cmd = "$samtools view -b $bam_file $region > $tmp_file";
-  }
-  else {
-    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region --output $tmp_file -R $reference -I $tmp_bam_file";
-  }
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
 sub rename {
   my ($input) = @_;
 
@@ -393,8 +353,6 @@ sub validate_input {
 
   # Things related to the reference sequence being used.
   
-  push @errors, "GATK expects references to end with 'fasta'." 
-      if ( $reference !~ /fasta\z/);
 
   my ($dir, $basename, $postfix) = (".","","");
   if ( $reference =~ /\//) {
@@ -405,8 +363,6 @@ sub validate_input {
   }
 
   
-  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
-      if ( ! -e "$dir/$basename.dict");
   
   my @bwa_postfixes = ('amb', 'ann', 'bwt', 'fai','pac', 'rbwt', 'rpac', 'rsa', 'sa');
 

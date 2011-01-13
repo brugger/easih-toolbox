@@ -11,6 +11,8 @@ use warnings;
 
 use DBI;
 
+my $snp_db;
+my $pp_db;
 my $dbi;
 my $ppdbi;
 my $ref_id_hg18;
@@ -24,6 +26,18 @@ my %populations;
 
 my $sth_phylop = $ppdbi->prepare("SELECT score from phylop where chr=? AND pos = ? AND ref_id=?");
 my $sth_phast  = $ppdbi->prepare("SELECT score from phast  where chr=? AND pos = ? AND ref_id=?");
+
+
+# 
+# 
+# 
+# Kim Brugger (12 Jan 2011)
+sub db_info {
+
+  return "connected to $snp_db and  $pp_db at localhost (mgpc17)\n";
+  
+}
+
 
 #
 #
@@ -233,8 +247,11 @@ sub fetch_ref_id {
 # 
 # Kim Brugger (08 Dec 2010)
 BEGIN {
-  $dbi = DBI->connect('DBI:mysql:dbsnp_132', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ppdbi = DBI->connect('DBI:mysql:phylop_phast', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $snp_db = "dbsnp_132";
+  $pp_db  = "phylop_phast";
+
+  $dbi = DBI->connect("DBI:mysql:$snp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $ppdbi = DBI->connect("DBI:mysql:$pp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
   $ref_id_hg18   = fetch_ref_id('hg18');
   $ref_id_GRCh37 = fetch_ref_id('GRCh37');
   fetch_populations();

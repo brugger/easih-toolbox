@@ -12,8 +12,11 @@ use POSIX ':sys_wait_h';
 use POSIX  'tmpnam';
 use Getopt::Std;
 
-my $MAX_NODES = 8;
-my $infile = shift || die "USAGE $0 COMMAND-INFILE (runs on $MAX_NODES cpus)\n";
+my %opts;
+getopts("c:", \%opts);
+
+my $MAX_NODES = $opts{c} || 8;
+my $infile = shift || die "USAGE $0 -c[pus to use] COMMAND-INFILE (runs on 8 cpus by default)\n";
 
 # Store the user specifed values in more readable named variables.
 my $INFILE    = $infile;
@@ -22,9 +25,6 @@ my @cpids = ();
 my (@outfiles, @errfiles);
 
 # Splits the infile up so there is one entry pr. file.
-print "       Running the '$INFILE' infile on '$MAX_NODES' CPUs\n";
-print "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n";
-print "     Running:      Total :           Done:               Percent:\n";
 
 my @running = ("|","/","-","\\", "|", "/", "-");
 my $running_counter = 0;
@@ -42,9 +42,17 @@ while( <$in>) {
   next if (/^\#/);
   chomp;
   push @commands, $_;
+  $total++;
 }  
 
-while ($_ = pop @commands ) {
+print "       Running the '$INFILE' infile on '$MAX_NODES' CPUs\n";
+print "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n";
+print "     Running:      Total :           Done:               Percent:\n";
+printf( "         %1s       %5d           %7d                   %3.2f  \r",
+	$running[$running_counter++ % 7], $total, $done, $done*100/$total);
+
+
+while ($_ = shift @commands ) {
 
  FREE_NODE:
   if ($running_nodes <  $MAX_NODES) {
@@ -52,7 +60,7 @@ while ($_ = pop @commands ) {
     my $command = "$_";
 #    $command .= "> /dev/null 2>/dev/null";
 
-    $total++;
+#    $total++;
 
     my $cpid = create_child($command);
     $running_nodes++;
@@ -60,7 +68,7 @@ while ($_ = pop @commands ) {
   }
   else {
     # loop through the nodes to see when one becomes available ...
-    while ($done < $total) {
+    while ($running_nodes) {
       for (my $i = 0; $i <@cpids; $i++) {
 	next if ($cpids[$i] == -10);
 	
@@ -74,7 +82,7 @@ while ($_ = pop @commands ) {
 	  $running_nodes--;
 	}
       }
-      sleep 10;
+      sleep 4;
       printf( "         %1s       %5d           %7d                   %3.2f  \r",
               $running[$running_counter++ % 7], $total, $done, $done*100/$total);
       last if ($running_nodes < $MAX_NODES);
@@ -101,7 +109,7 @@ while ($done < $total) {
   }
   printf( "         %1s       %5d           %7d                   %3.2f \r",
 	  $running[$running_counter++ % 7], $total, $done, $done*100/$total);
-  sleep 10;
+  sleep 4;
 }
 
 print "All done.\n";

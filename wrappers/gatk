@@ -61,7 +61,7 @@ foreach my $argv ( @ARGV ) {
 
 
 #print "$java -jar $gatk $argv_list\n";
-system "$java -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
+system "$java -Xmx2500m -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

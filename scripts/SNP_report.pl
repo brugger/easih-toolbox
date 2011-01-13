@@ -22,6 +22,10 @@ use lib '/home/easih/lib/ensembl/modules/';
 use lib '/home/easih/lib/bioperl/';
 
 
+use lib '/home/kb468/easih-toolbox/modules/';
+use EASIH::SNPs;
+
+
 use strict;
 use Getopt::Long;
 use FileHandle;
@@ -30,41 +34,68 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
-use Scalar::Util qw/weaken/;
+my @argv = @ARGV;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnILE', \%opts);
+getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{s} || "human";
-my $buffer_size = 500;
+my $buffer_size = 100;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
-my $exit_count = 100;
+if ( $opts{ Q }  ) {
+
+  $opts{v} = "$opts{Q}.snps.vcf";
+  $opts{b} = "$opts{Q}.bam";
+  $opts{o} = "$opts{Q}.snps.tab";
+  $opts{g} = 1;
+  $opts{p} = 1;
+  $opts{P} = 1;
+}
+  
+
+my $exit_count = 10;
+
+my $vcf          = $opts{v} || usage();
+my $bam          = $opts{b};
+my $regulation   = $opts{r} || 0;
+die "Regulation does not work anymore, as the pipeline runs locally!\n" if ( $regulation);
+my $pfam         = $opts{p} || 0;
+my $from_36      = $opts{T} || 0;
+my $min_mapq     = undef; #$opts{m} || undef;
+my $no_ensembl   = $opts{n} || 0;
+my $min_qual     = $opts{q} || undef;
+my $full_report  = $opts{f} || 0;
+my $html_out     = $opts{H} || 0;
+my $igv_links    = $opts{I} || 0;
+#my $at_ENSEMBL   = $opts{E} || 0;
+my $grantham     = $opts{g} || 0;
+my $pass_only    = 0;#$opts{P} || 0;
+my $phylop_phast = $opts{P} || 0;
+my $hgmd         = $opts{m} || 0;
+
+my $baits        = $opts{B} || "";
+my $leeway       = $opts{l} || 100;
+
+my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
+my $out          = $opts{o} || undef;
 
 
-my $vcf         = $opts{v} || usage();
-my $bam         = $opts{b};
-my $regulation  = $opts{r} || 0;
-my $pfam        = $opts{p} || 0;
-my $from_36     = $opts{T} || 0;
-my $min_mapq    = $opts{m} || undef;
-my $no_ensembl  = $opts{n} || 0;
-my $min_qual    = $opts{q} || undef;
-my $full_report = $opts{f} || 0;
-my $html_out    = $opts{H} || 0;
-my $igv_links   = $opts{I} || 0;
-my $at_ENSEMBL  = $opts{E} || 0;
+open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
+  
+
+
 
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
-if ( $at_ENSEMBL ) {
-  $reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0,);
-}
-else {
+#if ( $at_ENSEMBL ) {
+#  $reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0,);
+#}
+#else {
   $reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
-}
+#}
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
@@ -73,16 +104,9 @@ my $ga  = $reg->get_adaptor($species, 'core', 'gene');
 my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
 
 
-
-my $weaken = 0;
-
 my %slice_hash = ();
-
-my $use_local_dbsnp = $opts{L} || 0;
-if ($use_local_dbsnp) {
-  require DBI;
-  $use_local_dbsnp = DBI->connect('DBI:mysql:dbsnp_131', 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-}
+my ($sth_dbsnp, $sth_pop);
+my $use_local_dbsnp = 1;#$opts{L} || 0;
 
 my $dbsnp_link     = 'http://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=';
 my $ens_snp_link   = 'http://www.ensembl.org/Homo_sapiens/Variation/Summary?v=';
@@ -115,8 +139,10 @@ chomp( $samtools);
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $vcf )      if ( $vcf);
 
+my %grch37_remapping = ();
+
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
-my $counter = 0;
+my $counter = 10;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
   
 
@@ -134,12 +160,13 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     
     $res{$position}{callers} = join("/", @keys);
 
-    if (1 || keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
+    if ( keys %{{ map {$SNPs{$chr}{$pos}{$_}{alt_base}, 1} @keys }} == 1) {
 	
       my $key = "GATK";
       $res{$position}{ref_base}  = $SNPs{$chr}{$pos}{ref_base};
       $res{$position}{alt_base}  = $SNPs{$chr}{$pos}{$key}{alt_base};
       $res{$position}{qual}      = $SNPs{$chr}{$pos}{$key}{qual};
+      $res{$position}{filter}    = $SNPs{$chr}{$pos}{$key}{filter};
       $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base});
 
       if ( ! $no_ensembl ) {
@@ -149,7 +176,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	my $Epos = $pos;
 	($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
 	
+#	$res{$position}{grcH37} = "$Echr:$Epos";
+
 	next if ( ! $Echr );
+	$grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
 	my $slice = fetch_slice($Echr);
 	my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
 	
@@ -168,13 +198,13 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 	push @vfs, $new_vf; 
 	
 	
-	if ( 1 || @vfs >= $buffer_size) {
+	if ( @vfs >= $buffer_size) {
 	  my $effects = variation_effects(\@vfs);
 	  print_results( \%res, $effects);
 	  undef @vfs;# = ();	  
 	  undef %res;# = ();
+	  %grch37_remapping = ();
 #	  exit if ($exit_count-- < 0);
-
 	}
       }
     }
@@ -185,6 +215,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     print_results( \%res, $effects);
     @vfs = ();
     %res = ();
+    %grch37_remapping = ();
   }
 
 }
@@ -356,15 +387,28 @@ sub print_oneliner {
   my @res;
   if ( ! $printed_header++ ) {
     print table_start(1) if ( $html_out);
-    
-    my @annotations = ('position', 'change', 'score');
-    push @annotations, ('depth', '', '', '', '', '') if ( $bam );
-      
-    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change', 'external ref') if ( ! $no_ensembl);
+    $0 =~ s/.*\///;
+    print "#commandline: $0 @argv\n";
+    print "#dbases: ". EASIH::SNPs::db_info();
 
-    push @annotations, 'regulation' if ( $regulation );
+    print "#bait filtering with a leeway of: $leeway and $baits as the bait file\n" if ($baits );
+
+    
+    my @annotations = ('position', 'change', 'filter', 'score');
+    push @annotations, ('depth', 'type','', '', '', '', '') if ( $bam );
+      
+    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
+    push @annotations, ('Grantham score') if ( $grantham);
+    push @annotations, ('external ref') if ( ! $no_ensembl);
+    push @annotations, ('dbsnp freq') if ( $use_local_dbsnp);
+    push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
+    push @annotations, ('HGMD') if ( $hgmd );
+    push @annotations, ('phylop') if ( $phylop_phast);
+    push @annotations, ('phast') if ( $phylop_phast);
+
 
     push @annotations, 'pfam' if ( $pfam );
+    push @annotations, 'regulation' if ( $regulation );
 
     push @res, [@annotations];
   }
@@ -390,9 +434,12 @@ sub print_oneliner {
       }
 
       push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{filter};
       push @line, $$mapping{$name}{qual};
+      
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
+	push @line, $$mapping{$name}{base_dist}{type};      
 	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
       }
       
@@ -421,10 +468,11 @@ sub print_oneliner {
       }
 
       push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+      push @line, $$mapping{$name}{filter};
       push @line, $$mapping{$name}{qual};
       if ( $$mapping{$name}{base_dist} ) {
 	push @line, $$mapping{$name}{base_dist}{total};      
-	
+	push @line, $$mapping{$name}{base_dist}{type};      	
 	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
       }
       
@@ -462,7 +510,7 @@ sub print_oneliner {
 	push @effect_line, $$snp_effect{ position } || "";
 	push @effect_line, $$snp_effect{ cpos }     || "";
 	push @effect_line, $$snp_effect{ ppos }     || "";
-	
+	push @effect_line, $$snp_effect{ grantham } || "" if ( $grantham );
 
 	$$snp_effect{ rs_number } = "<a href='$dbsnp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /rs\d+/ && $$snp_effect{ rs_number } !~ /href/);
@@ -470,10 +518,19 @@ sub print_oneliner {
 	$$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	    if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
 
-      push @effect_line, $$snp_effect{ rs_number } || "";
+	push @effect_line, $$snp_effect{ rs_number   } || "";
+	push @effect_line, $$snp_effect{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+	push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
 
-      push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
-      push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
+	push @effect_line, $$snp_effect{ HGMD   } || "" if ( $hgmd );
+	push @effect_line, $$snp_effect{ phylop } || "" if ( $phylop_phast );
+	push @effect_line, $$snp_effect{ phast  } || "" if ( $phylop_phast );
+
+
+#	die Dumper( $snp_effect ) if ( $$snp_effect{ dbsnp_freq } );
+
+	push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+	push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
 
 	push @res, [@line, @effect_line];
       }
@@ -537,11 +594,18 @@ sub print_fullreport {
     push @line, $$mapping{$name}{qual};
     if ( $$mapping{$name}{base_dist} ) {
       push @line, $$mapping{$name}{base_dist}{total};      
-    
+      push @line, $$mapping{$name}{base_dist}{type};      
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
 
     push @line, $$effect[0]{ rs_number } || "";
+    push @line, $$effect[0]{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+    push @line, $$effect[0]{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+
+    push @line, $$effect{ HGMD   } || "" if ( $hgmd );
+    push @line, $$effect{ phylop } || "" if ( $phylop_phast );
+    push @line, $$effect{ phast  } || "" if ( $phylop_phast );
+
     push @line, $$effect[0]{ regulation } || "" if ( $regulation );
     push @res, \@line;
     
@@ -587,6 +651,14 @@ sub print_fullreport {
 
       $$snp_effect{ rs_number } = "<a href='$ens_snp_link$$snp_effect{ rs_number }'>$$snp_effect{ rs_number }</a>"
 	  if ( $$snp_effect{ rs_number } && $html_out && $$snp_effect{ rs_number } =~ /ENSSNP\d+/ && $$snp_effect{ rs_number } !~ /href/);
+
+      push @effect_line, $$snp_effect{ rs_number };
+      push @effect_line, $$snp_effect{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
+      push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+
+      push @effect_line, $$snp_effect{ HGMD   } || "" if ( $hgmd );
+      push @effect_line, $$snp_effect{ phylop } || "" if ( $phylop_phast );
+      push @effect_line, $$snp_effect{ phast  } || "" if ( $phylop_phast );
 
 
       push @effect_line, $$snp_effect{ pfam } || "";
@@ -659,6 +731,34 @@ sub variation_effects {
       
     }
 
+
+#	$existing_vf = "";
+    my ($dbsnp_flags, $dbsnp_freq, $HGMD, $phylop, $phast) = ('','', '', '', '');
+    if ( $use_local_dbsnp ) {
+      my ($chr, $pos);
+      if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
+	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
+#	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
+      }
+      else {
+	($chr, $pos) = split(":", $vf->variation_name());
+      }
+
+      my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
+
+      if ( $result->{rs} ) {
+	$existing_vf = $result->{rs};
+	$dbsnp_flags = $result->{flags} || "";
+	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
+	$HGMD        = $result->{hgmd};
+      }
+
+      $phylop = EASIH::SNPs::phylop_score_GRCh37($chr, $pos); 
+      $phast  = EASIH::SNPs::phast_score_GRCh37($chr, $pos); 
+	  
+    }
+
+
 		
     # the get_all_TranscriptVariations here now just retrieves the
     # objects that were attached above - it doesn't go off and do
@@ -710,6 +810,7 @@ sub variation_effects {
 	      $old = one2three( $old );
 	      $new = one2three( $new );
 	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+	      $gene_res{ grantham } = grantham_score($old, $new);
 	    }
 
 	    my $protein = $con->transcript->translation();
@@ -728,29 +829,21 @@ sub variation_effects {
 		$gene_res{ interpro } = $prot_feat->interpro_ac();
 	      } 
 	    }
-	    weaken($protein) if ($weaken);
-	    weaken($prot_feats) if ($weaken);
 	  }
-	  weaken($gene) if ($weaken);
-	  weaken($xref) if ($weaken);
 	}
 
 	$gene_res{ regulation } = $regulations; 
-	
-	if ( ! $existing_vf && $use_local_dbsnp ) {
-	  my ($chr, $pos) = split(":", $vf->variation_name());
-	  
-	  my $sth = $use_local_dbsnp->prepare("SELECT rs, alleles FROM dbsnp WHERE chr='$chr' AND end = '$pos'");
-	  $sth->execute();
-	  my $result = $sth->fetchrow_hashref();
-	  $existing_vf = $result->{rs} || "";
-	}
-	
-	$gene_res{ rs_number }  = $existing_vf || "";
+
+	$gene_res{ rs_number }   = $existing_vf || "";
+	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
+	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
+	$gene_res{ HGMD   } = $HGMD || "";
+	$gene_res{ phylop } = $phylop || "";
+	$gene_res{ phast  } = $phast || "";
+
 	push @{$res[$feature]}, \%gene_res;
 
       }
-      weaken($con) if ($weaken);
     }
     $feature++;
   }
@@ -865,7 +958,7 @@ sub one2three {
 # 
 # Kim Brugger (29 Apr 2010)
 sub base_dist {
-  my ( $chr, $SNP_pos) = @_;
+  my ( $chr, $SNP_pos, $ref_base, $alt_base) = @_;
 
   if ( ! $bam ) {
 #    print STDERR "need a bam file for finding base distribution\n";
@@ -876,7 +969,7 @@ sub base_dist {
   my %qual_stats;
   my $total = 0;
 
-  open (my $st_pipe, "$samtools view $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!";
+  open (my $st_pipe, "$samtools view -F0x404 $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!";
 
   while(<$st_pipe>) {
     chomp;
@@ -913,12 +1006,18 @@ sub base_dist {
   }
 
   my %res;
+  my $alt_perc = 0;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
+    $alt_perc = $perc if ( $base eq $alt_base );
     my $qual = $qual_stats{$base} || 0;
     $res{$base} = "$base: $base_stats{$base}($perc%)/$qual";
-
   }
+
+  $res{type}  = "homozygous"   if ( $alt_perc > 76);
+  $res{type}  = "heterozygous" if ( $alt_perc < 75 && $alt_perc > 35);
+  $res{type}  = "unknown"      if ( $alt_perc < 35);
+  $res{type} .= " ($alt_perc)";
 
   $res{total} = $total;
   
@@ -1041,6 +1140,132 @@ sub subtract_reference {
 }
 
 
+
+# 
+# 
+# 
+# Kim Brugger (04 Jan 2011)
+sub in_bait_region_simple {
+  my ($chr, $pos, $baits) = @_;
+
+  die "I should not be here!!! \n";
+
+  $baits ||= $bait_regions;
+
+  $chr =~ s/chr//;
+  
+  return 0 if ( $chr ne "X" && $pos != 57421888);
+  
+  foreach my $region ( @{$$baits{$chr}})  {
+    my ( $start, $end) = @$region;
+
+    print STDERR "$start >= $pos && $end <= $pos\n";
+
+    return 1 if ( $start <= $pos && $end >= $pos);
+    last if ( $end > $pos );
+  }
+
+  print STDERR "Discarding $chr $pos\n";
+
+
+#  $dropped++;  
+  return 0;
+  
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (31 Mar 2010)
+sub verbose {
+  return;
+  my ($message, $level) = @_;
+  $level  = 1;
+  $message =~ s/\n+\Z//g;
+  print STDERR "MESS " . ":"x$level . " $message\n";
+#  sleep 1;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (04 Jan 2011)
+sub in_bait_region {
+  my ($chr, $pos, $baits) = @_;
+
+  $baits ||= $bait_regions;
+  $chr =~ s/chr//;
+
+  return if ( ! $$baits{$chr});
+
+  use POSIX qw(ceil floor);
+
+
+  my $START = 0;
+  my $END   = 1;
+  
+#  return 0 if ( $pos != 57421888);
+
+  my @regions = @{$$baits{$chr}};
+
+  # set the start and end of the array and find the 
+  # the middle of the array
+  my ( $left, $right ) = (0, int(@regions));
+  my $middle = floor(($right - $left)/2);
+
+  # Flush the buffer constantly
+  $| = 1;
+
+  my $loop_counter = 0;
+    
+  while (1) {
+
+    verbose("MIDDLE $middle ( $left, $right)\n", 1);
+    verbose(" $pos <=> $regions[ $middle ][$START] $regions[ $middle ][$END]\n", 1);
+    
+    # The new block is to the left of the middle.
+    if ( $pos < $regions[ $middle ][$START] ) {
+      $right = $middle;
+      $middle = $left + floor(($right - $left)/2);
+      verbose("L");
+      last if ( $right <= $left || $middle == $left || $middle == $right);
+    }
+    # The new block is to the right of the middle.
+    elsif ($pos > $regions[ $middle ][$END] ) {
+      $left = $middle;
+      $middle = $left + floor(($right - $left)/2);
+      verbose("R");
+      last if ( $right <= $left || $middle == $left || $middle == $right);
+    }
+    #
+    # Now things gets interesting, we here start to calculate
+    # overlapping and contained regions.
+    #
+    
+    # this is a contained snp, exactly what we want!!!!
+    elsif ( $pos >= $regions[ $middle ][ $START ]  &&
+	    $pos <= $regions[ $middle ][ $END   ] ) {
+      
+      verbose("CONTAINED BLOCK", 2);
+      return 1;
+      last;
+    }
+    else {
+      last;
+    }
+  }
+
+  verbose("Discarding $chr $pos\n");
+
+
+#  $dropped++;  
+  return 0;
+}
+
+
+
 # 
 # 
 # 
@@ -1049,15 +1274,25 @@ sub readin_vcf {
   my ($file) = @_;
   open (my $in, $file) || die "Could not open '$file': $!";
 
+  my $used = 0;
+  my $dropped = 0;
 
   while(<$in>) {
     next if (/^\#/);
     
     my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
 
+#    next if ($pass_only && $filter ne 'PASS');
+
+    if ($bait_regions && ! in_bait_region($chr, $pos)) {
+      $dropped++;
+      next;
+    }
+
+    $used++;
+
 #    next if ( defined $min_qual && $min_qual > $qual);
 
-    next if ( $filter ne "PASS" && $filter ne "." );
 
 #    print "$_";
     $alt_base = subtract_reference($alt_base, $ref_base);
@@ -1075,12 +1310,18 @@ sub readin_vcf {
     $SNPs{$chr}{$pos}{GATK} = { depth     => $depth,
 				qual      => $qual,
 				alt_base  => $alt_base,
+				filter    => $filter,
 				pos       => $pos,};
 
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
   }
 
+  print STDERR "Used: $used, Dropped: $dropped\n";
+
 }
+
+
+
  
 # 
 # 
@@ -1089,6 +1330,8 @@ sub readin_vcf {
 sub readin_pileup {
   my ($file, $min_SNP_qual) = @_;
   open (my $in, $file) || die "Could not open '$file': $!\n";
+
+  die "Pileup is no more\n";
 
   $min_SNP_qual ||= 0;
 
@@ -1103,15 +1346,81 @@ sub readin_pileup {
     next if ( $cons_SNP_qual < $min_SNP_qual);
     
     $SNPs{$chr}{$pos}{samtools} = { depth        => $depth,
-				mapping_qual => $cons_SNP_qual,
-				alt_base     => $alt_base,
-				pos => $pos,};
+				    mapping_qual => $cons_SNP_qual,
+				    alt_base     => $alt_base,
+				    pos => $pos,};
 
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
   }
   
 }
  
+
+
+# 
+# 
+# 
+# Kim Brugger (11 May 2010)
+sub readin_bed {
+  my ( $infile, $leeway ) = @_;
+
+  my %res;
+
+  open (STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
+  while(<STDIN>) {
+
+    chomp;
+    my ($chr, $start, $end) = split("\t", $_);
+
+    ($chr, $start, $end) = $_ =~ /(.*?):(\d+)-(\d+)/
+	if ( ! $start );
+
+    next if ( ! $chr );
+
+    $chr =~ s/chr//;
+    
+    $start -= $leeway;
+    $end   += $leeway;
+    
+    push @{$res{$chr}}, [$start, $end] if ( $chr);
+  }
+
+  foreach my $key ( keys %res ) {
+    
+    @{$res{$key}} = sort { $$a[0] <=> $$b[0] } @{$res{$key}};
+    my @tmp;
+    my @data = @{$res{$key}};
+    
+    for(my $i=0;$i< @data; $i++) {
+      
+      # need at least one element in the array, so push and move on.
+      if ( ! @tmp ) {
+	push @tmp, $data[ $i ];
+	next;
+      }
+      
+      # contained in the region
+      if ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ]  &&
+	   $data[ $i ][ 1 ] <= $tmp[ -1 ][ 1 ] ) {
+	next;
+      }
+      # overlapping
+      elsif ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ]  &&
+	      $data[ $i ][ 0 ] <= $tmp[ -1 ][ 1 ]) {
+	
+	$tmp[ -1 ][ 1 ] = $data[ $i ][ 1 ];
+      }
+      # There is a gap between the end block and this one. Just push it on the end of  the array!
+      else {
+	push @tmp, $data[ $i ];
+      }
+    }
+    @{$res{$key}} = @tmp;
+  }
+
+  return \%res;
+}
+  
 
 
 # 
@@ -1352,11 +1661,19 @@ sub grantham_score {
 sub usage {
   
   $0 =~ s/.*\///;
+
+  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -p<fam domains> -m<HGMD lookup> -g<rantham scpre> -p<hylop-phast scores> -B[ait file] -l[eeway, default 10 bp]\n";
+
+  print "\nor extrapolate the standard <bam, vcf, output file> with the -Q flag, this flag also sets phylop-phast, pfam and grantham flags\n";
+  print "EXAMPLE: $0 -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
+  print "\n";
+
   
   print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -H<tml out put> -I<GV links> -p<fam domains> -r<egulation information>\n";
   print "USAGE: -E[nsembl.ensembl.org databases, SLOOOOOOWWWWWERRRRRR ]\n";  
-  print "USAGE: -L[local SNP database backup, as ensembl is broken!!]\n";  
-  print "USAGE: -m[in mapping qual. for base dist. report]\n";  
+  print "USAGE: -g[rantham score]\n";  
+  print "USAGE: -o[output file]\n";  
+#  print "USAGE: -m[in mapping qual. for base dist. report]\n";  
   print "USAGE: -q[uality cutoff for SNPs to report]\n";
   print "USAGE: -f[ multi line report]\n";
   exit;

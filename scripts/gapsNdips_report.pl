@@ -31,6 +31,10 @@ my $buffer_size = 500;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
+my $host        = 'localhost';
+my $user        = 'easih_ro';
+
+
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
 $reg->load_registry_from_db(-host => $host,-user => $user);

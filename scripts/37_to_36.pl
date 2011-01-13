@@ -48,7 +48,7 @@ print "Input tab seperated data (chr,start,end) or regions (chr:start-end)\n";
 
 while(<>) {
   chomp;
-  my ( $chr, $start, $end ) = split(/\s+/);
+  my ( $chr, $start, $end, $rest ) = split(/\s+/);
 
   if ( ( ! $chr || ! $start || !$end ) && 
        $_ =~ /(.*?):(\d+)-(\d+)/) {
@@ -61,11 +61,14 @@ while(<>) {
   }
 
   $chr =~ s/chr//;
-  my @res = $mapper->map($chr, $start, $end, 1, $from_cs);
+  my @res;
+
+  eval { @res = $mapper->map($chr, $start, $end, 1, $from_cs)};
   foreach my $res ( @res ) {
     if ( $res->isa( 'Bio::EnsEMBL::Mapper::Coordinate' )) {
       my $chr_slice = $sa->fetch_by_seq_region_id($res->id);
-      print "$chr, $start, $end --> " . join("\t", $chr_slice->seq_region_name, $res->start, $res->end ) . "\n";
+#      print "$chr, $start, $end --> " . join("\t", $chr_slice->seq_region_name, $res->start, $res->end ) . "\n";
+      print join("\t", $chr_slice->seq_region_name, $res->start, $res->end, $rest ) . "\n";
     }
     elsif ( $res->isa( 'Bio::EnsEMBL::Mapper::Gap' )) {
       print STDERR "$chr:$start-$end is in a GAP\n";

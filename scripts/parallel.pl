@@ -15,8 +15,9 @@ use Getopt::Std;
 my %opts;
 getopts("c:", \%opts);
 
-my $MAX_NODES = $opts{c} || 8;
-my $infile = shift || die "USAGE $0 -c[pus to use] COMMAND-INFILE (runs on 8 cpus by default)\n";
+my $cpus = nr_of_cpus();
+my $MAX_NODES = $opts{c} || $cpus;
+my $infile = shift || die "USAGE $0 -c[pus to use, (runs on $cpus cpus by default)] COMMAND-INFILE \n";
 
 # Store the user specifed values in more readable named variables.
 my $INFILE    = $infile;
@@ -55,16 +56,17 @@ printf( "         %1s       %5d           %7d                   %3.2f  \r",
 while ($_ = shift @commands ) {
 
  FREE_NODE:
-  if ($running_nodes <  $MAX_NODES) {
+  my $load = load();
+  if ( $load < $cpus && $running_nodes <  $MAX_NODES) {
     
-    my $command = "$_";
+      my $command = "$_";
 #    $command .= "> /dev/null 2>/dev/null";
-
+      
 #    $total++;
-
-    my $cpid = create_child($command);
-    $running_nodes++;
-    push @cpids, $cpid;
+      
+      my $cpid = create_child($command);
+      $running_nodes++;
+      push @cpids, $cpid;
   }
   else {
     # loop through the nodes to see when one becomes available ...
@@ -134,3 +136,33 @@ sub create_child {
   
   return \$pid;
 }
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jan 2011)
+sub load {
+  
+  my $uptime = `uptime`;
+  
+  $uptime =~ /load average: (\d+.\d+)/;
+  return $1 || undef;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jan 2011)
+sub nr_of_cpus {
+
+  my $cpus = `cat /proc/cpuinfo | egrep ^proc | wc -l`;
+  chomp $cpus;
+  return $cpus;
+}
+
+

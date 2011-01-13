@@ -16,6 +16,7 @@ my $max_snp_freq    = 10;
 my $min_sample_size = 30;
 my $background;
 my $KGPilot         = 0;
+my $novel           = 0;
 
 GetOptions ("Homozygous=s"    => \@homozygous,
 	    "heterozygous=s"  => \@heterozygous,
@@ -23,6 +24,7 @@ GetOptions ("Homozygous=s"    => \@homozygous,
 	    "min_sample_size" => \$min_sample_size,
 	    "background=s"    => \$background,
 	    "KGPilot"         => \$KGPilot,
+	    "novel"           => \$novel,
     );
 
 @homozygous   = split(/,/,join(',',@homozygous));
@@ -33,7 +35,7 @@ my (%SNPs,%all_SNPs);
 
 my (%field_names,$region, @field_names);
 
-my ($inputs, $file1);
+my ($inputs, $file1) = (0);
 
 
 foreach my $file (@homozygous, @heterozygous) {
@@ -57,7 +59,8 @@ foreach my $file (@homozygous, @heterozygous) {
 	$field_names{ $f[$i] } = $i;
 
 	if ($f[$i] eq 'region' ) { 
-	  $region = $i;
+ 	  $region = $i;
+	  $region = 13;
 	}
       }
       next;
@@ -66,6 +69,7 @@ foreach my $file (@homozygous, @heterozygous) {
       my $effect = $f[$region];
 
       next if ($SNPs{$file}{$f[0]});
+
       
       if ( $effect eq "ESSENTIAL_SPLICE_SITE" ||
 	   $effect eq "NON_SYNONYMOUS_CODING" ||
@@ -84,17 +88,16 @@ foreach my $file (@homozygous, @heterozygous) {
 }
 
 my $goodies = 0;
-
 foreach my $key (keys %all_SNPs) {
   if ( $all_SNPs{ $key} != $inputs ) {
+    print "$all_SNPs{ $key} != $inputs\n";
     delete $all_SNPs{ $key};
   }
   else {
     $goodies++;
   }
 }
-
-print "#$goodies harmful SNPs are shared between all $inputs samples\n";
+print "#$goodies harmful SNPs are shared between all the $inputs sample(s)\n";
 
 #
 # Remove snps due to frequency.
@@ -124,13 +127,30 @@ foreach my $key (keys %all_SNPs) {
 print "#$goodies harmful SNPs left after removing SNPs with a frequency < $max_snp_freq\n";
 
 
+if ( $novel ) {
+  $goodies = 0;
+  foreach my $key (keys %all_SNPs) {
+
+    if ( ${$SNPs{$file1}{$key}}[ $field_names{ 'external ref' }] &&
+	 ${$SNPs{$file1}{$key}}[ $field_names{ 'external ref' }] ne "") {
+      delete $all_SNPs{ $key};
+    }
+    else {
+      $goodies++;
+    }
+  }
+
+  print "#$goodies harmful SNPs left after removing known SNPs from snpdb\n";
+}
+
 if ( $KGPilot ) { 
   $goodies = 0;
   foreach my $key (keys %all_SNPs) {
-  
+
     if ( ${$SNPs{$file1}{$key}}[ $field_names{ 'external ref' }] &&
 	 ${$SNPs{$file1}{$key}}[ $field_names{ 'dbsnp flags' }]  &&
-	 ${$SNPs{$file1}{$key}}[ $field_names{ 'dbsnp flags' }] !~ /KGPilot/ ) {
+	 (${$SNPs{$file1}{$key}}[ $field_names{ 'dbsnp flags' }] eq "" ||
+	  ${$SNPs{$file1}{$key}}[ $field_names{ 'dbsnp flags' }] !~ /KGPilot/ )) {
       $goodies++;
     }
     else {
@@ -193,7 +213,7 @@ print "#" .(keys %all_SNPs) ." harmful SNPs left after using the homozygous/hete
 
 print join("\t", @field_names) . "\n";
 
-foreach my $key (keys %all_SNPs) {
+foreach my $key (sort keys %all_SNPs) {
   print join("\t", @{$SNPs{$file1}{$key}}) . "\n";
 }
 

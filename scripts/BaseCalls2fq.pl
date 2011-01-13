@@ -112,7 +112,6 @@ else {
 # Kim Brugger (04 Jan 2011)
 sub demultiplex {
   my ($lane, $lane_name) = @_;
-  my %res;
   
   my @files = glob("$indir/s_$lane\_2_*_qseq.txt");
 
@@ -121,48 +120,55 @@ sub demultiplex {
 
   foreach my $file (  @files) {
     open (my $input, "$file") || die "Could not open '$file': $!\n";
-
+    my %res;
+    
     while (my $line = <$input>) {
 
-      my ($instr, $run_id, $lane, $tile, $x, $y, $index, $read, $bases, $q_line, $filter)
+      my ($instr, $run_id, $lane, $tile, $x, $y, $index, $read, $bc, $q_line, $filter)
 	  = split /\t/, $line;
 
       #Did not pass the chastity filter
       next if ( $filter == 0);
-      push @{$res{$bases}}, "\@${instr}_$run_id:$lane:$tile:$x:$y";
+      push @{$res{$bc}}, "\@${instr}_$run_id:$lane:$tile:$x:$y";
     }
     close ($input);
 
     my (%good_bc, %codes);
-    foreach my $bc ( sort {$res{$b} <=> $res{$a}} keys %res) {
+    foreach my $bc ( sort {@{$res{$b}} <=> @{$res{$a}}} keys %res) {
 
       next if ( $bc =~ /^\.+\Z/);
       
-      if ( ! keys %good_bc || @{$res{$bc}} > 500 ) {
+      if ( ! keys %good_bc ) {
 	map {$good_bc{ $_ } = $bc } @{$res{ $bc }};
 	$codes{ $bc }++;
       }
-      elsif ( $allow_mismatches ) {
-	foreach my $bc2 ( keys %good_bc ) {
-	  my @seq1 = split('', $res{$bc});
-	  my @seq2 = split('', $good_bc{$bc2});
-	  
-	  my $diffs = 0;
-	  for( my $i = 0; $i < @seq1; $i++) {
-	    $diffs++ if ( $seq1[$i] ne $seq2[$i]);
+      else {
+	# note to self: this is the ugliest code I have produced in ages. Well done, go pamper yourself!
+	if ( $allow_mismatches ) {
+	  my $bc2 = similar_bcs( $bc, keys %codes);
+	  if ( $bc2 ) {
+	    map {$good_bc{ $_ } = $bc2 } @{$res{ $bc }};
+	    $codes{ $bc2 }++;
+	    next;
 	  }
-	  # For now we allow one (or two) mismatches between the barcodes
-	  map {$good_bc{ $_ } = $bc } @{$res{ $bc }} if ( $diffs <= 1 );
+	}
+
+	next if ( $bc =~ /\./);
+	 
+	if ( @{$res{$bc}} > 500 ) {
+	  map {$good_bc{ $_ } = $bc } @{$res{ $bc }};
+	  $codes{ $bc }++;
 	}
       }
     }
+
 
     $file =~ s/_2_/_1_/;
     my ($in, $out, $notmplexed) = analyse_lane($lane, "1", $lane_name, $file, \%good_bc, [keys %codes] );
     $in1  += $in;
     $out1 += $out;
     $notmplexed1 += $notmplexed;
-    $file =~ s/_2_/_1_/;
+    $file =~ s/_1_/_3_/;
     ($in, $out, $notmplexed) = analyse_lane($lane, "2", $lane_name, $file, \%good_bc, [keys %codes] );
     $in2  += $in;
     $out2 += $out;
@@ -179,6 +185,28 @@ sub demultiplex {
 
 }
 
+
+# 
+# 
+# 
+# Kim Brugger (06 Jan 2011)
+sub similar_bcs {
+  my ($bc1, @bc2s) = @_;
+
+  foreach my $bc2 ( @bc2s ) {
+    my @seq1 = split('', $bc1);
+    my @seq2 = split('', $bc2);
+
+    my $diffs = 0;
+    for( my $i = 0; $i < @seq1; $i++) {
+      $diffs++ if ( $seq1[$i] ne $seq2[$i]);
+    }
+
+    return $bc2 if ( $diffs <= 1);
+  }
+
+  return undef;
+}
 
 
 
@@ -377,6 +405,12 @@ sub analyse_lane {
       printf STDOUT ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
       print  STDOUT ("\n");
     }
+    else {
+      printf STDERR ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
+      printf STDERR ("\tnot demultiplexed: %d (%.2f %%)", $not_demultiplexed, $not_demultiplexed*100/$count_in) if ($multiplex);
+      print  STDERR ("\n");
+    }
+
 
   }
   close ($out) if ( $out);

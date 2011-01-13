@@ -34,6 +34,7 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
+my @argv = @ARGV;
 
 my %opts;
 getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:', \%opts);
@@ -76,7 +77,7 @@ my $phylop_phast = $opts{P} || 0;
 my $hgmd         = $opts{m} || 0;
 
 my $baits        = $opts{B} || "";
-my $leeway       = $opts{l} || 10;
+my $leeway       = $opts{l} || 100;
 
 my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
 my $out          = $opts{o} || undef;
@@ -386,9 +387,15 @@ sub print_oneliner {
   my @res;
   if ( ! $printed_header++ ) {
     print table_start(1) if ( $html_out);
+    $0 =~ s/.*\///;
+    print "#commandline: $0 @argv\n";
+    print "#dbases: ". EASIH::SNPs::db_info();
+
+    print "#bait filtering with a leeway of: $leeway and $baits as the bait file\n" if ($baits );
+
     
     my @annotations = ('position', 'change', 'filter', 'score');
-    push @annotations, ('depth', '', '', '', '', '') if ( $bam );
+    push @annotations, ('depth', 'type','', '', '', '', '') if ( $bam );
       
     push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
     push @annotations, ('Grantham score') if ( $grantham);
@@ -962,7 +969,7 @@ sub base_dist {
   my %qual_stats;
   my $total = 0;
 
-  open (my $st_pipe, "$samtools view $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!";
+  open (my $st_pipe, "$samtools view -F0x404 $bam $chr:$SNP_pos-$SNP_pos | ") || die "Could not open samtools pipe: $!";
 
   while(<$st_pipe>) {
     chomp;
@@ -1190,6 +1197,7 @@ sub in_bait_region {
 
   $baits ||= $bait_regions;
   $chr =~ s/chr//;
+
   return if ( ! $$baits{$chr});
 
   use POSIX qw(ceil floor);
@@ -1216,7 +1224,6 @@ sub in_bait_region {
 
     verbose("MIDDLE $middle ( $left, $right)\n", 1);
     verbose(" $pos <=> $regions[ $middle ][$START] $regions[ $middle ][$END]\n", 1);
-
     
     # The new block is to the left of the middle.
     if ( $pos < $regions[ $middle ][$START] ) {
@@ -1309,6 +1316,8 @@ sub readin_vcf {
     $SNPs{$chr}{$pos}{ref_base} = $ref_base;
   }
 
+  print STDERR "Used: $used, Dropped: $dropped\n";
+
 }
 
 
@@ -1365,6 +1374,10 @@ sub readin_bed {
 
     ($chr, $start, $end) = $_ =~ /(.*?):(\d+)-(\d+)/
 	if ( ! $start );
+
+    next if ( ! $chr );
+
+    $chr =~ s/chr//;
     
     $start -= $leeway;
     $end   += $leeway;
@@ -1649,9 +1662,9 @@ sub usage {
   
   $0 =~ s/.*\///;
 
-  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -p<fam domains> -m<HGMD lookup> -g<rantham scpre> -p<hylop-phast scores> -b[ait file] -l[eeway, default 10 bp]\n";
+  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -p<fam domains> -m<HGMD lookup> -g<rantham scpre> -p<hylop-phast scores> -B[ait file] -l[eeway, default 10 bp]\n";
 
-  print "\nor extrapolate the standard <bam, vcf, output file> with the -Q flag, this flag also sets phylop-phast, grantham flags\n";
+  print "\nor extrapolate the standard <bam, vcf, output file> with the -Q flag, this flag also sets phylop-phast, pfam and grantham flags\n";
   print "EXAMPLE: $0 -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
   print "\n";
 

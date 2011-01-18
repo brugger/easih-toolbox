@@ -43,6 +43,9 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 				    hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
 		 
+		 'std-mark_dup'      =>  { function   => 'EASIH::JMS::Picard::mark_duplicates',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=8000mb,walltime=16:00:00"},
+
 		 'std-rename'     => { function   => 'rename'},
 
 		 
@@ -63,14 +66,15 @@ our %flow = ( 'csfasta2fastq'    => 'std-aln',
 	      'std-sam2bam'      => 'std-merge',
 	      'std-merge'        => 'std-sort',
 	      'std-sort'         => 'std-rename',
-	      'std-rename'       => 'std-index'
+	      'std-rename'       => 'std-index',
+	      'std-mark_dup'     => 'std-index',
 	      );
 
 #EASIH::JMS::no_store();
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
+getopts('1:2:nm:R:o:r:p:hH:lL:S:Q:I:sme:', \%opts);
 
 
 usage() if ( $opts{h});
@@ -79,42 +83,70 @@ my $soft_reset    = $opts{'S'};
 
 if ( $soft_reset ) {
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
+  getopts('1:2:nm:R:o:r:p:hH:lL:S:Q:I:sme:', \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:nm:R:o:r:p:hH:lL:S:', \%opts);
+  getopts('1:2:nm:R:o:r:p:hH:lL:S:Q:I:sme:', \%opts);
 }
+
+
+my $username = scalar getpwuid $<;
+
+
+# if using standard naming, this is a lot easier.
+if ( $opts{Q} ) {
+  $opts{'1'} = "$opts{Q}.1.fq"    if ( -e "$opts{Q}.1.fq");
+  $opts{'1'} = "$opts{Q}.1.fq.gz" if ( -e "$opts{Q}.1.fq.gz");
+  $opts{'2'} = "$opts{Q}.2.fq"    if ( -e "$opts{Q}.2.fq");
+  $opts{'2'} = "$opts{Q}.2.fq.gz" if ( -e "$opts{Q}.2.fq.gz");
+  $opts{'L'} = "$opts{Q}.log";
+  $opts{'o'} = "$opts{Q}";
+}  
 
 
 my $first       = $opts{'1'} || usage();
 my $second      = $opts{'2'};
 my $no_split    = $opts{'n'} || 0;
 my $split       = $opts{'m'} || 5000000;
-
+my $insert_size = $opts{'I'};
+my $mark_dup    = $opts{'m'};
 my $log         = $opts{'L'};
 open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 
 my $reference   = $opts{'R'} || usage();
+
+my $email       = $opts{'e'}     || "$username\@cam.ac.uk";
+
 my $align_param = ' ';
 my $report      = $opts{'o'} || usage();
 my $bam_file    = "$report.bam" || usage();
 my $loose_mapping = $opts{'l'}    || 0;
+my $no_sw_pair    = $opts{'s'};
 
 my $readgroup   = $opts{'r'} || $report;
 my $platform    = uc($opts{'p'}) || usage();
 $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 
+
+$flow{'std-rename'} = 'std-mark_dup' if ( $mark_dup );
+
+
 # set platform specific bwa aln parameters
 $align_param .= " -c "      if ( $platform eq "SOLID");
 $align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
-$align_param .= " -e5 -t5 " if ( $loose_mapping);
+$align_param .= " -e5 " if ( $loose_mapping);
+
+$no_sw_pair     = 1 if ($platform eq "SOLID");
+my $sampe_param = "";
+$sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
+$sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
+
 
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk         = EASIH::JMS::Misc::find_program('gatk');
 my $sam2fq       = EASIH::JMS::Misc::find_program('sam2fastq.pl');
 
 validate_input();
@@ -145,7 +177,7 @@ $extra_report .= "Binaries used..\n";
 $extra_report .= `ls -l $samtools`;
 $extra_report .= `ls -l $bwa` . "\n";
 
-EASIH::JMS::mail_report('kim.brugger@easih.ac.uk', $bam_file, $extra_report);
+EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
 
 sub fastq_split {
@@ -228,8 +260,7 @@ sub bwa_generate {
 
   my $cmd;
   if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe -f $tmp_file $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq}";
-  
+    $cmd = "$bwa sampe $sampe_param  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
   }
   else {
     $cmd = "$bwa samse -f $tmp_file $reference $$input{first_sai} $$input{first_fq}";
@@ -333,45 +364,6 @@ sub sam_add_tags {
 
 
 
-sub identify_indel {
-  my ( $input ) = @_;
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".intervals");
-    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -I $input -L $name";
-    EASIH::JMS::submit_job($cmd, "$tmp_file $name $input");
-  }
-  
-}
-
-
-sub realign_indel {
-  my ($input) = @_;
-
-  my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
-
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-  my $cmd;
-  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
-  if (  -z $interval_file ) {
-    $cmd = "$samtools view -b $bam_file $region > $tmp_file";
-  }
-  else {
-    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region --output $tmp_file -R $reference -I $tmp_bam_file";
-  }
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
 sub rename {
   my ($input) = @_;
 
@@ -393,8 +385,6 @@ sub validate_input {
 
   # Things related to the reference sequence being used.
   
-  push @errors, "GATK expects references to end with 'fasta'." 
-      if ( $reference !~ /fasta\z/);
 
   my ($dir, $basename, $postfix) = (".","","");
   if ( $reference =~ /\//) {
@@ -405,8 +395,6 @@ sub validate_input {
   }
 
   
-  push @errors, "GATK expects and references dict file (made with Picard), please see the GATK wiki\n" 
-      if ( ! -e "$dir/$basename.dict");
   
   my @bwa_postfixes = ('amb', 'ann', 'bwt', 'fai','pac', 'rbwt', 'rpac', 'rsa', 'sa');
 
@@ -440,15 +428,28 @@ sub validate_input {
 # Kim Brugger (22 Apr 2010)
 sub usage {
 
-  $0 =~ s/.*\///;
-  print "USAGE: $0 -1 [fastq file]  -2 [fastq file] -l[oose mapping] -n[o splitting of fastq file(s)] -R [eference genome]  -o[ut prefix] -p[latform: illumina or solid]\n";
+  my $script = $0;
+  $script =~ s/.*\///;
+  print "USAGE: $script -1 [fastq file]  -2 [fastq file] -l[oose mapping] -R[eference genome] -o[ut prefix] -p[latform: illumina or solid]\n";
+  
+  print "\nor extrapolate the standard <fq, log, out names> with the -Q flag\n";
+  print "EXAMPLE: $script -Q [base name]  -R[eference genome] -p[latform: illumina or solid]\n";
 
   print "\n";
+  print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
   print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
+  print "extra flags: -I[nsert size (speeds up the run)]\n";
   print "extra flags: -L[og file, default is STDOUT]\n";  
+  print "extra flags: -m[ark duplicates (always done for paired ends]\n";
+  print "extra flags: -N[o splitting of fastq file(s)]\n";
+  print "extra flags: -n[ entries pr split-file. default: 10000000]\n";
+  print "extra flags: -r[ead group]\n"; 
+  print "extra flags: -s[ disable Smith-Waterman for the unmapped mate]\n";
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
+
   print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
+
   exit;
 
 }

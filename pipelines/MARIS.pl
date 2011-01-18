@@ -56,7 +56,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 
 		 'std-mark_dup'      =>  { function   => 'EASIH::JMS::Picard::mark_duplicates',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=5000mb,walltime=08:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=8000mb,walltime=16:00:00"},
 
 		 'std-index'         => { function   => 'EASIH::JMS::Samtools::index',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
@@ -149,7 +149,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::print_flow('fastq-split');
 
 my %opts;
-getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Q:Pr:R:sS:L:', \%opts);
+getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Q:Pr:R:sS:L:v', \%opts);
 
 usage() if ( $opts{h});
 my $hard_reset    = $opts{'H'};
@@ -158,11 +158,11 @@ my $soft_reset    = $opts{'S'};
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:v', \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:', \%opts);
+  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:v', \%opts);
 }
 
 
@@ -177,6 +177,7 @@ if ( $opts{Q} ) {
   $opts{'2'} = "$opts{Q}.2.fq.gz" if ( -e "$opts{Q}.2.fq.gz");
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
+  $opts{'l'} = 1;
 }  
 
 my $first         = $opts{'1'}     || usage();
@@ -202,6 +203,10 @@ my $align_param   = ' ';
 
 my $bam_file      = "$report.bam";
 
+#EASIH::JMS::verbosity(100) if ( $opts{v});
+
+
+
 open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 
 
@@ -211,9 +216,11 @@ $align_param .= " -q 15 "   if ( $platform eq "SOLEXA");
 # and loose mapping
 $align_param .= " -e5 "     if ( $loose_mapping);
 
+$no_sw_pair     = 1 if ($platform eq "SOLID");
 my $sampe_param = "";
 $sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
 $sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
+
 
 
 
@@ -520,11 +527,15 @@ sub filter_snps {
 
   my $entries = `egrep -cv \# $input_file`;
   chomp( $entries );
-  return if ( $entries == 0 );
-
-
-  my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filter";
-  EASIH::JMS::submit_job($cmd, $tmp_file);
+  # Filtering will fail on an empty file, so we just fake it for now
+  # and ensure that the pipeline will not break its dependencies for a restart.
+  if ( $entries == 0 ) {
+    EASIH::JMS::submit_system_job("touch $tmp_file", $tmp_file);
+  }
+  else {
+    my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filter";
+    EASIH::JMS::submit_job($cmd, $tmp_file);
+  }
 }		
 
 

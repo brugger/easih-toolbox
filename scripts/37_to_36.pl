@@ -28,7 +28,8 @@ my $user        = 'anonymous';
 
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
-$reg->load_registry_from_db(-host => $host,-user => $user);
+#$reg->load_registry_from_db(-host => $host,-user => $user);
+$reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
 
 my $asma = $reg->get_adaptor($species, 'core', 'AssemblyMapper');
 my $csa  = $reg->get_adaptor($species, 'core', 'CoordSystem');
@@ -43,17 +44,28 @@ die "Unknown coord system: $to\n" if ( !$to_cs );
 
 my $mapper  = $asma->fetch_by_CoordSystems( $from_cs, $to_cs );
 
+my $vcf = 0;
 
-print "Input tab seperated data (chr,start,end) or regions (chr:start-end)\n";
+#print "Input tab seperated data (chr,start,end) or regions (chr:start-end)\n";
 
 while(<>) {
+
+  if (/#/) {
+    print;
+    next;
+  }
+
   chomp;
   my ( $chr, $start, $end, $rest ) = split(/\s+/);
 
   if ( ( ! $chr || ! $start || !$end ) && 
        $_ =~ /(.*?):(\d+)-(\d+)/) {
-
     ( $chr, $start, $end ) = ( $1, $2, $3);
+  }
+  # This is a vcf format file..
+  elsif ( $end !~ /^\d+\z/) {
+    $vcf = 1;
+    $end = $start;
   }
   elsif ( ! $chr || ! $start || !$end ) {
     print "cannot extract chr start end (tab seperated) from this line '$_'\n";
@@ -68,7 +80,14 @@ while(<>) {
     if ( $res->isa( 'Bio::EnsEMBL::Mapper::Coordinate' )) {
       my $chr_slice = $sa->fetch_by_seq_region_id($res->id);
 #      print "$chr, $start, $end --> " . join("\t", $chr_slice->seq_region_name, $res->start, $res->end ) . "\n";
-      print join("\t", $chr_slice->seq_region_name, $res->start, $res->end, $rest ) . "\n";
+      if ( $vcf ) {
+	my @f = split("\t");
+	($f[0], $f[1]) = ($chr, $start);
+	print join("\t", @f) . "\n";
+      }
+      else {
+	print join("\t", $chr_slice->seq_region_name, $res->start, $res->end, $rest ) . "\n";
+      }
     }
     elsif ( $res->isa( 'Bio::EnsEMBL::Mapper::Gap' )) {
       print STDERR "$chr:$start-$end is in a GAP\n";

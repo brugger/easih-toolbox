@@ -55,13 +55,15 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 'std-sort'          => { function   => 'EASIH::JMS::Picard::sort',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 
-		 'std-mark_dup'      =>  { function   => 'EASIH::JMS::Picard::mark_duplicates',
+		 'std-mark_dup'      => { function   => 'EASIH::JMS::Picard::mark_duplicates',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=8000mb,walltime=16:00:00"},
-
-		 'std-index'         => { function   => 'EASIH::JMS::Samtools::index',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
-
+		 'std-calmd'         => { function   => 'calmd',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=06:00:00"},
+		 
+		 'std-index'         => { function   => 'EASIH::JMS::Samtools::index',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
+		 
 		 'get_all_mapped'    => { function   => 'EASIH::JMS::Samtools::get_mapped',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 		 
@@ -111,9 +113,9 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 
 		 'rescore_snps'      => { function   => 'rescore_snps',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=01:00:00"},		 
-		 
-		 
 
+		 'flagstat'          => { function   => 'flagstat',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=01:00:00"},		 
     );
 		     
 
@@ -125,8 +127,9 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'std-tag_sam'       => 'std-sam2bam',
 	      'std-sam2bam'       => 'std-merge',
 	      'std-merge'         => 'std-sort',
-	      'std-sort'          => 'std-index',
-	      'std-mark_dup'      => 'std-index',
+	      'std-sort'          => 'std-calmd',
+	      'std-mark_dup'      => 'std-calmd',
+	      'std-calmd'         => 'std-index',
 
 	      'std-index'        => ['identify_indel', 'get_all_unmapped'],
 	      'get_all_unmapped' => 'realigned_merge',
@@ -136,7 +139,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'realigned_sort'   => 'realigned_rename',
 	      'realigned_rename' => 'realigned_index',
 
-	      'realigned_index'  => ['call_indels','identify_snps'],
+	      'realigned_index'  => ['call_indels','identify_snps', 'flagstat'],
 	      'call_indels'      => 'merge_indels',
 
 	      'identify_snps'    => 'filter_snps',
@@ -178,6 +181,8 @@ if ( $opts{Q} ) {
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
+
+  EASIH::JMS::freeze_file("$opts{'o'}.maris");
 }  
 
 my $first         = $opts{'1'}     || usage();
@@ -192,12 +197,12 @@ my $mark_dup      = $opts{'m'};
 my $min_depth     = $opts{'M'}     || 0;
 my $split         = $opts{'n'}     || 5000000;
 my $no_split      = $opts{'N'}     || 0;
-my $report        = $opts{'o'}     || usage();
+our $report       = $opts{'o'}     || usage();
 my $platform      = uc($opts{'p'}) || usage();
 $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 my $print_filter  = $opts{'P'};
 my $readgroup     = $opts{'r'} || $report;
-my $reference     = $opts{'R'}     || usage();
+our $reference    = $opts{'R'}     || usage();
 my $no_sw_pair    = $opts{'s'};
 my $align_param   = ' ';
 
@@ -232,6 +237,9 @@ my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk');
+
+$samtools = "/home/kb468/bin/samtools";
+$gatk     = "/home/kb468/bin/gatk";
 
 validate_input();
 
@@ -417,6 +425,30 @@ sub sam_add_tags {
 
 
 
+
+sub calmd {
+  my ($input) = @_;
+  
+  my $tmp_file = EASIH::JMS::tmp_file(".calmd.bam");
+  my $cmd = "$samtools calmd -b $input $reference > $tmp_file";
+
+
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+}
+
+
+
+sub flagstat {
+  my ($input) = @_;
+  
+  my $outfile = "$report.flagstat";
+  my $cmd = "$samtools flagstat $input > $outfile";
+
+  EASIH::JMS::submit_job($cmd, $outfile);
+}
+
+
+
 sub identify_indel {
   my ( $input ) = @_;
 
@@ -450,7 +482,7 @@ sub realign_indel {
     $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
   }
   else {
-    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region --output $tmp_file -R $reference -I $tmp_bam_file";
+    $cmd = "$gatk -T IndelRealigner -baq CALCULATE_AS_NECESSARY -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file";
   }
 
   EASIH::JMS::submit_job($cmd, $tmp_file);
@@ -473,7 +505,7 @@ sub call_indels {
   foreach my $name ( @names ) {
 
     my $tmp_file = EASIH::JMS::tmp_file(".indels");
-    my $cmd = "$gatk -T IndelGenotyperV2 -R $reference -O $tmp_file -I $bam_file -L $name ";
+    my $cmd = "$gatk -T IndelGenotyperV2 -R $reference -o $tmp_file -I $bam_file -L $name ";
     EASIH::JMS::submit_job($cmd, $tmp_file);
   }
 }		     
@@ -511,8 +543,8 @@ sub identify_snps {
 
   foreach my $name ( @names ) {
     my $tmp_file = EASIH::JMS::tmp_file(".vcf");
-    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -varout $tmp_file -L $name ";
-    $cmd .= " -pl $platform " if ( $platform);
+    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -o $tmp_file -L $name ";
+#    $cmd .= " -pl $platform " if ( $platform);
     EASIH::JMS::submit_job($cmd, "$tmp_file  -L $name");
   }
   
@@ -523,17 +555,16 @@ sub filter_snps {
 
   my ($input_file, $region) = split(" ", $input);
 
-  my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
-
   my $entries = `egrep -cv \# $input_file`;
   chomp( $entries );
   # Filtering will fail on an empty file, so we just fake it for now
-  # and ensure that the pipeline will not break its dependencies for a restart.
+  # and ensure that the pipeline will not break its dependencies on a restart.
   if ( $entries == 0 ) {
-    EASIH::JMS::submit_system_job("touch $tmp_file", $tmp_file);
+    EASIH::JMS::submit_system_job("sleep 1", "");
   }
   else {
-    my $cmd = "$gatk -T VariantFiltration  -R $reference  -B variant,VCF,$input  -o $tmp_file $filter";
+    my $tmp_file = EASIH::JMS::tmp_file(".filtered.vcf");
+    my $cmd = "$gatk -T VariantFiltration  -R $reference  -B:variant,VCF $input  -o $tmp_file $filter";
     EASIH::JMS::submit_job($cmd, $tmp_file);
   }
 }		
@@ -552,7 +583,7 @@ sub merge_vcfs {
     my $cmd = "$gatk -T CombineVariants -R $reference -o $merged_file -variantMergeOptions UNION -genotypeMergeOptions UNIQUIFY";
     my $count = 1;
     foreach my $input ( @inputs ) {
-      $cmd .= " -B variant,VCF,$input ";
+      $cmd .= " -B:variant,VCF $input ";
       $count++;
     }
     EASIH::JMS::submit_job($cmd, $merged_file);
@@ -563,8 +594,8 @@ sub cluster_snps {
   my ($input) = @_;
 
   my $tmp_file = EASIH::JMS::tmp_file(".cluster");
-  my $cmd = "$gatk -T GenerateVariantClusters -R $reference -B input,VCF,$input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file";
-  EASIH::JMS::submit_system_job($cmd, "$tmp_file -B input,VCF,$input");
+  my $cmd = "$gatk -T GenerateVariantClusters -R $reference -B:input,VCF $input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file";
+  EASIH::JMS::submit_system_job($cmd, "$tmp_file -B:input,VCF $input");
 }		
 		
 		
@@ -572,8 +603,11 @@ sub cluster_snps {
 sub rescore_snps {
   my ($input) = @_;
 
+  #This is where things fall apart and fails, read the wiki...
+
+  my $tmp_file = EASIH::JMS::tmp_file(".tranches");
   $report =~ s/.vcf\z//;
-  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -output  $report.snps --target_titv 3.0 ";
+  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -o  $report.snps --target_titv 3.0 -tranchesFile $tmp_file ";
   EASIH::JMS::submit_system_job($cmd, $report);
 }		
 

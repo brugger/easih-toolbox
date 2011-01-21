@@ -26,6 +26,7 @@ use Getopt::Std;
 
 #use lib '/home/cjp64/git/easih-pipeline/modules';
 use lib '/home/kb468/easih-pipeline/modules';
+use lib '/home/kb468/easih-toolbox/modules';
 
 use EASIH::JMS;
 use EASIH::JMS::Misc;
@@ -86,7 +87,9 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 'realigned_sort'    => { function   => 'EASIH::JMS::Picard::sort',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
 		 
-
+		 'realigned_scrub'   => { function   => 'solid_scrubber',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=30000mb,walltime=04:00:00"},
+		 
 		 'realigned_index'   => { function   => 'EASIH::JMS::Samtools::index',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
@@ -137,6 +140,8 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'realign_indel'    => 'realigned_merge',
 	      'realigned_merge'  => 'realigned_sort',
 	      'realigned_sort'   => 'realigned_rename',
+	      'realigned_scrub'  => 'realigned_rename',
+
 	      'realigned_rename' => 'realigned_index',
 
 	      'realigned_index'  => ['call_indels','identify_snps', 'flagstat'],
@@ -144,15 +149,16 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 
 	      'identify_snps'    => 'filter_snps',
 	      'filter_snps'      => 'merge_vcfs',
-	      'merge_vcfs'       => 'cluster_snps',
-	      'cluster_snps'     => 'rescore_snps'
+#	      'merge_vcfs'       => 'cluster_snps',
+#	      'cluster_snps'     => 'rescore_snps'
 	      );
 
 #EASIH::JMS::no_store();
 #EASIH::JMS::print_flow('fastq-split');
 
+my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:v';
 my %opts;
-getopts('1:2:d:e:f:hH:I:lmM:n:No:p:Q:Pr:R:sS:L:v', \%opts);
+getopts($opts, \%opts);
 
 usage() if ( $opts{h});
 my $hard_reset    = $opts{'H'};
@@ -161,11 +167,11 @@ my $soft_reset    = $opts{'S'};
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
   &EASIH::JMS::reset($soft_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:v', \%opts);
+  getopts($opts, \%opts);
 }
 elsif ( $hard_reset ) {
   &EASIH::JMS::hard_reset($hard_reset);
-  getopts('1:2:d:e:f:hH:lmM:n:No:p:Q:Pr:R:S:L:v', \%opts);
+  getopts($opts, \%opts);
 }
 
 
@@ -182,7 +188,11 @@ if ( $opts{Q} ) {
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
 
-  EASIH::JMS::freeze_file("$opts{'o'}.maris");
+  my $freeze_file = "$opts{'o'}.maris";
+  system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
+
+
+  EASIH::JMS::freeze_file($freeze_file);
 }  
 
 my $first         = $opts{'1'}     || usage();
@@ -203,13 +213,16 @@ $platform = 'SOLEXA'      if ( $platform eq 'ILLUMINA');
 my $print_filter  = $opts{'P'};
 my $readgroup     = $opts{'r'} || $report;
 our $reference    = $opts{'R'}     || usage();
-my $no_sw_pair    = $opts{'s'};
+my $no_sw_pair    = $opts{'D'};
 my $align_param   = ' ';
 
 my $bam_file      = "$report.bam";
 
 #EASIH::JMS::verbosity(100) if ( $opts{v});
 
+
+my $scrub_data    = $opts{s} || 0;
+$flow{'realigned_sort'} = 'realigned_scrub' if ( $scrub_data && $platform eq "SOLID");
 
 
 open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
@@ -232,11 +245,13 @@ $sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
 # Only paired ends runs gets marked duplicates.
 $flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
+
 my $bwa          = EASIH::JMS::Misc::find_program('bwa');
 my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
 my $samtools     = EASIH::JMS::Misc::find_program('samtools');
 my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
 my $gatk         = EASIH::JMS::Misc::find_program('gatk');
+my $scrubber     = EASIH::JMS::Misc::find_program('SOLiD_scrubber.pl');
 
 $samtools = "/home/kb468/bin/samtools";
 $gatk     = "/home/kb468/bin/gatk";
@@ -312,6 +327,7 @@ $extra_report .= "Command line: $0 ".EASIH::JMS::args() ."\n";
 
 EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
+#EASIH::JMS::delete_tmp_files();
 
 sub fastq_split {
   my ($input) = @_;
@@ -490,6 +506,22 @@ sub realign_indel {
 
 
 
+# 
+# 
+# 
+# Kim Brugger (18 Jan 2011)
+sub solid_scrubber {
+  my ($input) = @_;
+  
+  my $tmp_file = EASIH::JMS::tmp_file(".scrubbed.bam");
+  my $cmd = "$scrubber -b $input -R $reference -U | $samtools view -Sb - > $tmp_file";
+
+  EASIH::JMS::submit_job($cmd, $tmp_file);
+
+}
+
+
+
 sub call_indels {
   my ($input) = @_;
 
@@ -574,7 +606,8 @@ sub filter_snps {
 sub merge_vcfs {
   my (@inputs) = @_;
 
-  my $merged_file = EASIH::JMS::tmp_file(".merged.vcf");
+#  my $merged_file = EASIH::JMS::tmp_file(".merged.vcf");
+  my $merged_file = "$report.snps.vcf";
   
   if ( @inputs == 1 ) {
     EASIH::JMS::submit_system_job("mv @inputs $merged_file", $merged_file);
@@ -676,6 +709,7 @@ sub validate_input {
 }
 
 
+
 # 
 # 
 # 
@@ -690,6 +724,7 @@ sub usage {
   print "EXAMPLE: $script -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
 
   print "\n";
+  print "extra flags: -D[isable Smith-Waterman for the unmapped mate]\n";
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
   print "extra flags: -H[ard reset/restart of a crashed/failed run, needs a freeze file]\n";
@@ -701,11 +736,14 @@ sub usage {
   print "extra flags: -n[ entries pr split-file. default: 10000000]\n";
   print "extra flags: -P[rint GATK filter, and exit]\n"; 
   print "extra flags: -r[ead group]\n"; 
-  print "extra flags: -s[ disable Smith-Waterman for the unmapped mate]\n";
+  print "extra flags: -s[crub mapping (Solid only!)]\n";
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
   print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
+
+  use EASIH::Toolbox;
+  print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";
 
   exit;
 

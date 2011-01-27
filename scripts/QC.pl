@@ -13,17 +13,53 @@ use Getopt::Std;
 use strict;
 use Getopt::Long;
 
-my %opts;
-getopts('1:2:s:o:r:R:p:hb:n', \%opts);
+use lib '/home/kb468/easih-toolbox/modules/';
+use EASIH::QC;
 
-my $first_file    = $opts{1};
+my %opts;
+getopts('b:c:f:q:hs:', \%opts);
+
+my $fastq_file    = $opts{f};
+my $csfastq_file  = $opts{c};
+my $qual_file     = $opts{q};
+my $bam_file      = $opts{b};
+my $sample_size   = $opts{s} || 10;
+
+#random sample $limit MB out of the fastq file
+EASIH::QC::sample_size($sample_size);
+
+if ( $fastq_file ) {
+  my $QC = EASIH::QC::fastQC( $fastq_file );
+  $fastq_file =~ s/(.*?)\..*/$1/;
+  EASIH::QC::make_plots($QC, $fastq_file);
+}
+if ( $csfastq_file ) {
+  my $QC = EASIH::QC::csfastQC( $csfastq_file);
+  $csfastq_file =~ s/(.*?)\..*/$1/;
+  EASIH::QC::make_plots($QC, $csfastq_file);
+}
+if ( $qual_file ) {
+  my $QC = EASIH::QC::qualQC( $qual_file );
+  $qual_file =~ s/(.*?)\..*/$1/;
+  EASIH::QC::make_plots($QC, $qual_file);
+}
+if ( $bam_file ) {
+  my ($QC1, $QC2) = EASIH::QC::bamQC( $bam_file );
+  $bam_file =~ s/(.*?)\..*/$1/;
+  EASIH::QC::make_plots($QC1, "$bam_file.1");
+  EASIH::QC::make_plots($QC2, "$bam_file.2");
+}
+
+
+__END__
+
 my $second_file   = $opts{2};
 my $bam_file      = $opts{b};
 my $no_mapping    = $opts{n} ||  0;
-my $sample_size   = $opts{s} || 10; # This is in MB
+my $sample_size   = $opts{s} || 50; # This is in MB
 my $out_file      = $opts{o};
 my $report        = $opts{r} || "";
-my $reference     = 0; $opts{R} || usage() if ( ! $bam_file && ! $no_mapping);
+my $reference     = $opts{R} || usage() if ( ! $bam_file && ! $no_mapping);
 my $platform      = uc($opts{p}) || die "no platform given (-p[ SOLEXA, SOLID])\n"; 
 $platform = 'SOLEXA' if ( $platform eq 'ILLUMINA');
 
@@ -31,32 +67,11 @@ my $samtools  = '/usr/local/bin/samtools';
 
 usage() if ( ! $first_file && ! $bam_file);
 
-my $ALL_READS     = 0;
-my $UNMAPPED_READ = 1;
-my $MAPPED_READ   = 2;
-my $FIRST_READ    = 3;
-my $SECOND_READ   = 4;
-
-my @read_cat = ($ALL_READS, $UNMAPPED_READ, $MAPPED_READ, $FIRST_READ, $SECOND_READ);
-
-my ( %base_qual_dist, @base_dist, @base_qual);
-#my ( %mapped_base_qual_dist, @mapped_base_dist, @mapped_base_qual);
-#my ( %unmapped_base_qual_dist, @unmapped_base_dist, @unmapped_base_qual);
-my ( %GC, %bwa );
-
-
-my $Q_min = 20;
-
-
 validate_input();
-
-#random sample $limit MB out of the fastq file
 
 use File::Temp;
 system "mkdir tmp" if ( ! -d './tmp');
 my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "./tmp" );
-
-
 
 
 if ( $bam_file ) {
@@ -289,6 +304,8 @@ sub report {
     print $R "dev.off()\n";
     close ($R);
   }
+  
+  print Dumper(\%bwa);
 
   open ($out, " > $out_file.report ") || die "Could not open '$out_file.report': $!\n";
   print $out "$bwa{$ALL_READS} reads\n";;
@@ -297,223 +314,9 @@ sub report {
   print $out "$bwa{$FIRST_READ} read1\n"  if ($bwa{$SECOND_READ});
   print $out "$bwa{$SECOND_READ} read2\n" if ($bwa{$SECOND_READ});
   print $out "$bwa{properly_paired} properly paired\n" if ($bwa{properly_paired});
+  print $out "$bwa{duplicate} duplicated reads\n" if ($bwa{duplicate});
   
   close($out);
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (10 Aug 2010)
-sub qc_premapped {
-  my ( $bam_file, $limit ) = @_; 
-
-  my $samtools = `which samtools`;
-  chomp( $samtools);
-  
-  my $command .= "$samtools view $bam_file |  ";
-
-  $limit ||= 1;
-  my $goal = $limit*1048576;
-  my $size = 0;
-   
-  open ( my $pipe, "$command " ) || die "Could not open '$command': $!\n";
-  while(<$pipe>) {
-    chomp;
-    my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");    
-
-    $size += length($sequence);
-    last if ( $size >= $goal);
-
-    $bwa{$ALL_READS}++;
-
-    $bwa{paired}++                 if ($flags & 0x0001);
-    $bwa{properly_paired}++        if ($flags & 0x0002 );
-    $bwa{mate_unmapped}++          if ($flags & 0x0008 );
-    $bwa{not_primary_alignment}++  if ($flags & 0x0100 );
-    $bwa{dupliacate}++             if ($flags & 0x0400 );
-
-    if ( $flags & 0x0004 ){
-      analyse( $sequence, $quality, $UNMAPPED_READ);
-      $bwa{$UNMAPPED_READ}++;
-      next;
-    }
-
-    $bwa{ $MAPPED_READ }++;
-    $bwa{mapq}{$mapq}++      if ( $mapq );
-    push @{$bwa{is}}, $insert_size if ( $insert_size ) ;
-    
-    if ($flags & 0x0080 ) {
-      $bwa{$SECOND_READ}++;
-      analyse( $sequence, $quality, $SECOND_READ);
-    }
-    else {
-      $bwa{$FIRST_READ}++;
-      analyse( $sequence, $quality, $FIRST_READ);
-    }
-  }
-  close( $pipe );
-
-  
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (03 Aug 2010)
-sub map_and_qc {
-  my ( $infile1, $infile2 ) = @_;
-
-  my $bwa      = `which bwa`;
-  chomp($bwa);
-  my $samtools = `which samtools`;
-  chomp( $samtools);
-  
-  my $command;
-
-  if ( ! -z $infile2 ) {
-
-    my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "./tmp" );
-
-    $command  = "$bwa aln -f $tmp_file.1.sai $reference $infile1; $bwa aln -f $tmp_file.2.sai $reference $infile2;";
-    $command .= "$bwa sampe $reference $tmp_file.1.sai $tmp_file.1.sai $infile1 $infile2 | $samtools view -S - |  ";
-    print "$command \n";
-  }
-  else {
-    $command .= "$bwa aln $reference $infile1 | $bwa samse $reference - $infile1 | $samtools view -S - |  ";
-  }
-   
-  open ( my $pipe, "$command " ) || die "Could not open '$command': $!\n";
-  while(<$pipe>) {
-    chomp;
-    my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");    
-
-    $bwa{$ALL_READS}++;
-
-    $bwa{paired}++                 if ($flags & 0x0001);
-    $bwa{properly_paired}++        if ($flags & 0x0002 );
-    $bwa{mate_unmapped}++          if ($flags & 0x0008 );
-    $bwa{not_primary_alignment}++  if ($flags & 0x0100 );
-    $bwa{dupliacate}++             if ($flags & 0x0400 );
-
-    if ( $flags & 0x0004 ){
-      analyse( $sequence, $quality, $UNMAPPED_READ);
-      $bwa{$UNMAPPED_READ}++;
-      next;
-    }
-
-    $bwa{ $MAPPED_READ }++;
-    $bwa{mapq}{$mapq}++      if ( $mapq );
-    push @{$bwa{is}}, $insert_size if ( $insert_size ) ;
-    
-    if ($flags & 0x0080 ) {
-      $bwa{$SECOND_READ}++;
-      analyse( $sequence, $quality, $SECOND_READ);
-    }
-    else {
-      $bwa{$FIRST_READ}++;
-      analyse( $sequence, $quality, $FIRST_READ);
-    }
-  }
-  close( $pipe );
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (03 Aug 2010)
-sub qc {
-  my ( $infile1, $infile2 ) = @_;
-
-  print "starting qc, file one...\n";
-
-  open (my $file1, "$infile1") || die "Could not open '$infile1': $!\n";
-  while (<$file1>) { 
-#    print "-- $_\n";
-    my $sequence = <$file1>;
-    my  $strand  = <$file1>;
-    my $quality  = <$file1>;
-    chomp( $sequence); 
-    chomp( $strand );
-    chomp( $quality);
-#    print "$sequence, $strand, $quality\n";
-    analyse( $sequence, $quality, $FIRST_READ);
-    $bwa{$FIRST_READ}++;
-    $bwa{$ALL_READS}++;
-  }
-  
-  print "second file...\n";
-
-  if ( -f  $infile2 ) {
-    open (my $file2, "$infile2") || die "Could not open '$infile2': $!\n";
-
-    while (<$file2>) { 
-      my $sequence = <$file2>;
-      my  $strand  = <$file2>;
-      my $quality  = <$file2>;
-      chomp( $sequence); 
-      chomp( $strand );
-      chomp( $quality);
-      analyse( $sequence, $quality, $SECOND_READ);
-      $bwa{$SECOND_READ}++;
-      $bwa{$ALL_READS}++;
-    }
-  }
-}
-
-
-
-
-
-
-# 
-# 
-# 
-# Kim Brugger (16 Jul 2010)
-sub analyse {
-  my ( $seq, $qual, $read_type) = @_;
-
-  $read_type ||= 0;
-
-  my @seq  = split("", $seq);
-  my @qual = split("", $qual);
-
-  my ( $GC, $AT);
-
-  for(my $i = 0; $i < @seq; $i++) {
-    my $base = uc($seq[$i]);
-    my $base_qual = ord($qual[$i]) - 33;
-
-    $GC++ if ( $base eq 'G' || $base eq 'C');
-    $AT++ if ( $base eq 'A' || $base eq 'T');
-
-    $base_qual[ $read_type   ][$i] += $base_qual;
-    $base_qual[ $ALL_READS   ][$i] += $base_qual;
-    $base_qual[ $MAPPED_READ ][$i] += $base_qual if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
-
-    $base_qual_dist{ $read_type   }{$base_qual}++;
-    $base_qual_dist{ $ALL_READS   }{$base_qual}++;
-    $base_qual_dist{ $MAPPED_READ }{$base_qual}++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
-
-    $base_dist[ $read_type ][$i]{$base}++;
-    $base_dist[ $ALL_READS ][$i]{$base}++;
-    $base_dist[ $MAPPED_READ ][$i]{$base}++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
-  }
-
-  if ( $AT && $GC  ) {
-    
-    my $perc_GC = int( $GC*100/($GC+$AT));
-    
-    $perc_GC = int($perc_GC/5) * 5;
-
-    $GC{ $read_type }{ $perc_GC }++ if ( $AT+$GC > 0 );
-    $GC{ $ALL_READS }{ $perc_GC }++;
-    $GC{ $MAPPED_READ }{ $perc_GC }++ if ( $read_type == $FIRST_READ || $read_type == $SECOND_READ);
-  }
 }
 
 
@@ -548,10 +351,9 @@ sub validate_input {
 
 
 
-
-# 
-# 
-# 
+#
+#
+#
 # Kim Brugger (03 Aug 2010)
 sub sample {
   my ($infile1, $infile2, $outfile1, $outfile2, $limit) = @_;
@@ -562,6 +364,131 @@ sub sample {
     print "infile --> $infile1\n";
     my $outfile = $infile1;
     $outfile =~ s/.gz//;
+    print STDERR "Un-compressing the fq file $infile1 -> tmp/$outfile\n";
+    system "gunzip -c $infile1 > tmp/$outfile";
+    $infile1 = "tmp/$outfile";
+  }
+
+  if ( $infile2 && $infile2 =~ /gz\z/) {
+    print "infile --> $infile2\n";
+    my $outfile = $infile2;
+    $outfile =~ s/.gz//;
+    print STDERR "Un-compressing the fq file $infile2 -> tmp/$outfile\n";
+    system "gunzip -c $infile2 > tmp/$outfile";
+    $infile2 = "tmp/$outfile";
+  }
+
+  open (my $out1, "> $outfile1") || die "Could not open '$outfile1' for writing: $!\n";
+  open (my $out2, "> $outfile2") || die "Could not open '$outfile2' for writing: $!\n" if ( $infile2);
+  
+  my %used;
+  
+  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile1);
+  
+  open (my $file1, $infile1) || die "Could not open '$infile1': $!\n";
+  open (my $file2, $infile2) || die "Could not open '$infile2': $!\n" if ( $infile2 );
+  my $read = 0;
+  my $goal = $limit*1048576;
+  if ( $goal >= $size ) {
+    system "cp $infile1 $outfile1";
+    system "cp $infile2 $outfile2" if ( $infile2);
+    return;
+  }
+  
+  
+  while( $goal > $read ) {
+    
+
+    my ($name1, $name2);
+    
+    my $random_pos = int(rand($size));
+#    print "going to $random_pos $goal vs $read\n";
+
+    seek( $file1, $random_pos, 0);
+#    print "Finished the jump, now scanning...\n";
+    
+    while ( <$file1> ) {
+#      print ;
+      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/);
+    }
+#    print "Found it\n";
+    
+    if ($_ && $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ && !$used{ $_ }) {
+      my $name = $_;
+      my $seq = <$file1>;
+      my $str = <$file1>;
+      my $qual = <$file1>;
+      
+      print $out1 join("", $name, $seq, $str, $qual);
+      $read += length("$name$seq$str$qual");
+      $used{$infile1}++;
+      $name1 = $name;
+    }
+
+    if ( $infile2 && $name1) {
+
+      die "I should not be here \n";
+      
+      $name1 =~ s/\/\d\n//;
+      
+      my %seen;
+      
+    REREAD:
+      
+      seek( $file2, $random_pos, 0);
+      while ( <$file2> ) {
+	last if ( $_ =~ /^\@\w+:\d+:/);
+      }
+      
+      if ($_ && $_ =~ /^\@\w+:\d+:/ && !$used{ $_ }) {
+	my $name = $_;
+	$name2 = $name;
+	$name2 =~ s/\/\d\n//;
+	
+	next if ($seen{$name2} && $seen{$name2} > 10);
+	
+	
+	if ( $name1 eq $name2 ) {
+ print "$name1 eq $name2\n";
+	  my $seq = <$file2>;
+	  my $str = <$file2>;
+	  my $qual = <$file2>;
+	  
+	  print $out2 join("", $name, $seq, $str, $qual);
+	  $read += length("$name$seq$str$qual");
+	}
+	elsif ($name1 lt $name2 ) {
+ print "$name1 lt $name2\n";
+	  $random_pos -= 100;
+	  $seen{ $name2 }++;
+	  goto REREAD;
+	}
+	else {
+ print "$name1 gt $name2\n";
+	  $random_pos = tell($file2);
+	  $seen{ $name2 }++;
+	  goto REREAD;
+	}
+      }
+    }
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (03 Aug 2010)
+sub sample_old {
+  my ($infile1, $infile2, $outfile1, $outfile2, $limit) = @_;
+
+  $limit ||= 1;
+
+  if ( $infile1 =~ /gz\z/) {
+    print "infile --> $infile1\n";
+    my $outfile = $infile1;
+    $outfile =~ s/.gz//;
+    $outfile =~ s/.*\///;
     print STDERR "Un-compressing the fq file $infile1 -> tmp/$outfile\n";
     system "gunzip -c $infile1 > tmp/$outfile";
     $infile1 = "tmp/$outfile";

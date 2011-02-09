@@ -18,73 +18,127 @@ use EASIH::QC;
 use EASIH::Misc;
 
 my %opts;
-getopts('b:c:f:q:hs:', \%opts);
+getopts('b:c:f:q:hs:p:', \%opts);
 
 my $fastq_file    = $opts{f};
-my $csfastq_file  = $opts{c};
+my $csfasta_file  = $opts{c};
 my $qual_file     = $opts{q};
 my $bam_file      = $opts{b};
-my $sample_size   = $opts{s} || 15;
-
+my $sample_size   = $opts{s} || 20;
+my $platform      = $opts{p} || usage();
 #sample limit MB
 EASIH::QC::sample_size($sample_size);
 
 my ( $tmp_dir, $tmp_file) = EASIH::Misc::tmp_dir_file();
 
+usage() if ( ($fastq_file   && $csfasta_file) || 
+	     ($fastq_file   && $qual_file) || 
+	     ($fastq_file   && $bam_file) || 
+	     ($csfasta_file && $qual_file) || 
+	     ($csfasta_file && $bam_file) || 
+	     ($qual_file    && $bam_file) || 
+	     ! $platform);
+
+# 
+# 
+# Kim Brugger (03 Feb 2011)
+sub usage {
+  $0 =~ s/.*\///;
+  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA] -s<ample size (in Mbases)> \n";
+  exit -1;
+}
+
+
+
+#print "tmp stuff :: $tmp_dir, $tmp_file \n";
+
 my $pdflatex = EASIH::Misc::find_program('pdflatex');
 die "pdflatex is not installed on this system\n" if ( !$pdflatex);
 
-if ( $fastq_file ) {
-  my $QC = EASIH::QC::fastQC( $fastq_file, 1 );
-  $fastq_file =~ s/(.*?.[12])\..*/$1/ ||  $fastq_file =~ s/(.*?)\..*/$1/; 
-  EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $fastq_file);
-  print "Predicted mappability : $$QC{mappability} %\n" if ( $$QC{mappability} );
+my $cwd      = `pwd`;
+chomp($cwd);
+
+
+my ($QC, $base_name, $infile);
+
+if ( $fastq_file || $csfasta_file || $qual_file ) {
+
+  if ( $fastq_file ) {
+    $QC = EASIH::QC::fastQC( $fastq_file, 1 );
+    $base_name = $fastq_file;
+    $infile    = $fastq_file;
+    $base_name =~ s/(.*?\.[12])\..*/$1/ ||  $base_name =~ s/(.*?)\..*/$1/; 
+    $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
+    EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
+  }
+
+  if ( $csfasta_file ) {
+    $QC = EASIH::QC::csfastaQC( $csfasta_file);
+    $base_name = $csfasta_file;
+    $infile    = $csfasta_file;
+    $base_name =~ s/(.*?)\..*/$1/;
+    $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
+    EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
+  }
+
+  if ( $qual_file ) {
+    $QC = EASIH::QC::qualQC( $qual_file );
+
+    $base_name = $qual_file;
+    $infile    = $qual_file;
+    $base_name =~ s/(.*?)\..*/$1/;
+    $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
+
+    EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
+  }
+
 
   open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
-
-  print $out latex_header($fastq_file);
-  print $out latex_summary($opts{f}, "ILLUMINA", $sample_size, $$QC{reads}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit} );
+  print $out latex_header();
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
   print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates});
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
 
-  make_pdf($tmp_dir, "$tmp_file.tex", "$fastq_file.pdf");
+  make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.pdf");
   system "rm -rf $tmp_dir";
+
+
+  print "Report: $base_name.pdf\n";
 }
-
-if ( $csfastq_file ) {
-  my $QC = EASIH::QC::csfastaQC( $csfastq_file);
-  $csfastq_file =~ s/(.*?)\..*/$1/;
-  EASIH::QC::make_plots($QC, $csfastq_file);
-}
-
-if ( $qual_file ) {
-  my $QC = EASIH::QC::qualQC( $qual_file );
-  $qual_file =~ s/(.*?)\..*/$1/;
-  EASIH::QC::make_plots($QC, $qual_file);
-  print "Predicted mappability : $$QC{mappability} %\n" if ( $$QC{mappability} );
-  print "+Q30: $$QC{Q30}\n" if ($$QC{Q30});
-
-  open (my $out, "> /home/kb468/projects/QC/latex/test.tex") || die "Could not open outfile: $!\n";
-
-  print $out latex_header($qual_file);
-  print $out latex_summary($opts{q}, "SOLID", $sample_size, $$QC{reads}, $$QC{Q30}, undef, $$QC{mappability}, undef );
-  print $out latex_QV("$qual_file\_BaseQual.pdf", "$qual_file\_BaseQualDist_QualHist.pdf");
-
-  print $out latex_tail();
-
-}
-
-if ( $bam_file ) {
+elsif ( $bam_file ) {
   my ($QC1, $QC2) = EASIH::QC::bamQC( $bam_file );
-  $bam_file =~ s/(.*?)\..*/$1/;
-  
-  EASIH::QC::make_plots($QC1, "$bam_file.1");
-  print "Predicted mappability : $$QC1{mappability} %\n" if ( $$QC1{mappability} );
 
-  EASIH::QC::make_plots($QC2, "$bam_file.2");
-  print "Predicted mappability : $$QC2{mappability} %\n" if ( $$QC2{mappability} );
+  $base_name = $bam_file;
+  $infile    = $bam_file;
+  $base_name =~ s/(.*?)\..*/$1/;
+  $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
+  
+  EASIH::QC::make_plots($QC1, "$tmp_dir/$tmp_file", $base_name);
+
+  open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
+  print $out latex_header();
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC1{reads} || $$QC1{quals}, $$QC1{Q30}, $$QC1{perc_dup}, $$QC1{mappability}, $$QC1{ACsplit} );
+  print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
+  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC1{duplicates});
+  print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
+  print $out latex_tail();
+  make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.1.pdf");
+  system "rm -rf $tmp_dir/*";
+  print "Report: $base_name.1.pdf\n";
+
+  EASIH::QC::make_plots($QC2, "$tmp_dir/$tmp_file", $base_name);
+  open ( $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
+  print $out latex_header();
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC2{reads} || $$QC2{quals}, $$QC2{Q30}, $$QC2{perc_dup}, $$QC2{mappability}, $$QC2{ACsplit} );
+  print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
+  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC2{duplicates});
+  print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
+  print $out latex_tail();
+  make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.2.pdf");
+  system "rm -rf $tmp_dir";
+  print "Report: $base_name.2.pdf\n";
 }
 
 
@@ -97,9 +151,8 @@ if ( $bam_file ) {
 sub make_pdf {
   my ($dir, $tex, $report) = @_;
 
-  system "cd $tmp_dir/; $pdflatex $tex >2 /dev/null ";
+  system "cd $tmp_dir/; $pdflatex $tex >/dev/null ";
   $tex =~ s/tex/pdf/;
-  print "mv $tex $report";
   system "cd $tmp_dir/; mv $tex $report";
 
 }
@@ -111,11 +164,11 @@ sub make_pdf {
 sub latex_summary {
   my ($input, $platform, $size, $reads, $Q30, $dups, $mappable, $AC,  ) = @_;
 
+
   $input =~ s/.*\///;
   
   my $s = q(\section*{Summary}) . "\n";
-
-
+  
   $s .= q(\begin{table}[!h])."\n";
   $s .= q(\begin{tabular}{|l|l|}\hline)."\n";
   $s .= q(\rowcolor[gray]{.8} Input file & \verb|).$input. q(|\\\\\hline)."\n" if ( $input );
@@ -124,32 +177,34 @@ sub latex_summary {
 
   if ( $platform eq "SOLID" ) {
 
-    $s .= latex_coloured_row("green",  'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 > 40);
-    $s .= latex_coloured_row("yellow", 'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 <= 40 && $Q30 >= 20);
-    $s .= latex_coloured_row("red",    'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 < 20);
+    $s .= latex_coloured_row("green",  'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 > 25);
+    $s .= latex_coloured_row("yellow", 'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 <= 25 && $Q30 >= 15);
+    $s .= latex_coloured_row("red",    'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 < 15);
     
-    $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable > 40);
+    $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%')  if ( $mappable && $mappable > 40);
     $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable <= 40 && $mappable >= 20);
-    $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')   if ( $mappable && $mappable < 20);
+    $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')    if ( $mappable && $mappable < 20);
   }
   elsif ( $platform eq "ILLUMINA" ) {
     $s .= latex_coloured_row("green",  'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 > 90);
     $s .= latex_coloured_row("yellow", 'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 <= 90 && $Q30 >= 70);
     $s .= latex_coloured_row("red",    'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 < 70);
 
-    $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable > 95);
-    $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable <= 70 && $mappable >= 95);
-    $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')   if ( $mappable && $mappable < 70);
+    $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%')  if ( $mappable && $mappable > 95);
+    $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable >= 70 && $mappable <= 95);
+    $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')    if ( $mappable && $mappable < 70);
   }
 
-  $s .= latex_coloured_row("green", "Duplicated sequences", $dups.'\%') if ( $dups && $dups < 1 );
-  $s .= latex_coloured_row("yellow", "Duplicated sequences", $dups.'\%') if ( $dups && $dups >= 1 && $dups <= 1 );
-  $s .= latex_coloured_row("red", "Duplicated sequences", $dups.'\%') if ( $dups && $dups > 10 );
+  $s .= latex_coloured_row("green", "Duplicated sequences", $dups.'\%')  if ( $dups && $dups < 1 );
+  $s .= latex_coloured_row("yellow", "Duplicated sequences", $dups.'\%') if ( $dups && $dups >= 1 && $dups <= 10 );
+  $s .= latex_coloured_row("red", "Duplicated sequences", $dups.'\%')    if ( $dups && $dups > 10 );
 
-  $s .= latex_coloured_row("green", 'Avg \% AC ', $AC.'\%') if ( $AC && $AC >= 45 && $AC <= 55);
-  $s .= latex_coloured_row("yellow", 'Avg \% AC ', $AC.'\%') if ( $AC && $AC < 45 && $AC > 40);
-  $s .= latex_coloured_row("yellow", 'Avg \% AC ', $AC.'\%') if ( $AC && $AC < 60 && $AC > 55);
-  $s .= latex_coloured_row("red", 'Avg \% AC ', $AC.'\%') if ( $AC && $AC < 40 || $AC > 60 );
+  if ( $AC ) {
+    $s .= latex_coloured_row("green", 'Avg \% AC ', $AC.'\%')  if ( $AC >= 45 && $AC <= 55 );
+    $s .= latex_coloured_row("yellow", 'Avg \% AC ', $AC.'\%') if ( $AC < 45 && $AC > 40 );
+    $s .= latex_coloured_row("yellow", 'Avg \% AC ', $AC.'\%') if ( $AC < 60 && $AC > 55 );
+    $s .= latex_coloured_row("red", 'Avg \% AC ', $AC.'\%')    if ( $AC < 40 || $AC > 60 );
+  }
 
   $s .= q(\end{tabular}) . "\n";
   $s .= q(\end{table}) . "\n";
@@ -157,10 +212,10 @@ sub latex_summary {
   $s .= "\n\n\n";
   $s .= q(\begin{table}[!h])."\n";
   $s .= q(\begin{tabular}{|l|>{\columncolor{red}}c|>{\columncolor{yellow}}c|>{\columncolor{green}}c|}\hline)."\n";
-  $s .= q(Bases $>=$Q30 (SOLiD)        & $<20 \%$ &  $20-40 \%$ & $>40 \%$\\\\\hline )."\n" if ( $Q30);
-  $s .= q(Bases $>=$Q30 (Illumina)     & $<70 \%$ &  $70-90 \%$ & $>90 \%$\\\\\hline )."\n" if ( $Q30);
-  $s .= q(Mappable prediction (SOLiD)    & $<20 \%$ &  $20-40 \%$ & $>40 \%$\\\\\hline)."\n" if ($mappable && $platform eq "SOLID");
-  $s .= q(Mappable prediction (Illumina) & $<70 \%$ &  $70-95 \%$ & $>95 \%$\\\\\hline)."\n" if ($mappable && $platform eq "ILLUMINA");
+  $s .= q(Bases $>=$Q30         & $<15 \%$ &  $15-25 \%$ & $>25 \%$\\\\\hline )."\n" if ( $Q30 && $platform eq "SOLID");
+  $s .= q(Bases $>=$Q30      & $<70 \%$ &  $70-90 \%$ & $>90 \%$\\\\\hline )."\n" if ( $Q30 && $platform eq "ILLUMINA");
+  $s .= q(Mappable prediction     & $<20 \%$ &  $20-40 \%$ & $>40 \%$\\\\\hline)."\n" if ($mappable && $platform eq "SOLID");
+  $s .= q(Mappable prediction  & $<70 \%$ &  $70-95 \%$ & $>95 \%$\\\\\hline)."\n" if ($mappable && $platform eq "ILLUMINA");
   $s .= q(Duplicates sequences & $>10 \%$ &  $1-10  \%$ & $<1 \%$\\\\\hline)."\n" if ( $dups);
   $s .= q(Avg \% AC & $<40\%$ or $>60\%$ & $40-45\%$ or $55-60\%$ & $45-55 \%$\\\\\hline)."\n" if ( $AC );
 
@@ -194,6 +249,7 @@ sub latex_dups {
   my ($DupHist, $duplicates) = @_;
 
   return if ( !$DupHist && ! $duplicates);
+  return if ( ! -e $DupHist );
 
   my $s = q|\section*{Duplications}|."\n";
 
@@ -336,7 +392,9 @@ sub check_for_adaptors {
 sub latex_QV {
   my ($BaseQual, $QualHist) = @_;
 
+
   return "" if ( ! $BaseQual && ! $QualHist );
+  return if ( ! -e $BaseQual && ! -e $QualHist );
 
   my $s = q|\section*{Quality Values}| . "\n";
 
@@ -364,12 +422,12 @@ thumb the mean QV should be about 25-30.) . " \n";
   $s .= q(\hspace{-0.5cm})."\n";
   $s .= q(\begin{minipage}[b]{0.54\linewidth})."\n";
   $s .= q(\centering)."\n";
-  $s .= q(\includegraphics[scale=0.5]{). $BaseQual .q(})."\n" if ($BaseQual);
+  $s .= q(\includegraphics[scale=0.5]{). $BaseQual .q(})."\n" if ($BaseQual && -e $BaseQual);
   $s .= q(\end{minipage})."\n";
   $s .= q(\hspace{0.5cm})."\n";
   $s .= q(\begin{minipage}[b]{0.54\linewidth})."\n";
   $s .= q(\centering)."\n";
-  $s .= q(\includegraphics[scale=0.5]{). $QualHist .q(})."\n" if ($QualHist);
+  $s .= q(\includegraphics[scale=0.5]{). $QualHist .q(})."\n" if ($QualHist && -e $QualHist);
   $s .= q(\end{minipage})."\n";
   $s .= q(\end{figure})."\n";
 
@@ -388,6 +446,10 @@ thumb the mean QV should be about 25-30.) . " \n";
 sub latex_GC {
   my ($BaseDist, $GC) = @_;
 
+  return if ( !$BaseDist && ! $GC);
+  return if ( ! -e $BaseDist && ! -e $GC);
+  
+
   my $s = q|\section*{Base/colour distribution and GC\%}| ."\n";
 
 
@@ -395,12 +457,12 @@ sub latex_GC {
   $s .= q(\hspace{-0.5cm})."\n";
   $s .= q(\begin{minipage}[b]{0.54\linewidth})."\n";
   $s .= q(\centering)."\n";
-  $s .= q(\includegraphics[scale=0.5]{).$BaseDist.q(})."\n";
+  $s .= q(\includegraphics[scale=0.5]{).$BaseDist.q(})."\n" if ( $BaseDist && -e $BaseDist );
   $s .= q(\end{minipage})."\n";
   $s .= q(\hspace{0.5cm})."\n";
   $s .= q(\begin{minipage}[b]{0.54\linewidth})."\n";
   $s .= q(\centering)."\n";
-  $s .= q(\includegraphics[scale=0.5]{).$GC.q(})."\n";
+  $s .= q(\includegraphics[scale=0.5]{).$GC.q(})."\n" if ( $GC && -e $GC );
   $s .= q(\end{minipage})."\n";
   $s .= q(\end{figure})."\n";
 
@@ -429,9 +491,7 @@ originate from contaminating or sequencing adaptors.
 # 
 # Kim Brugger (02 Feb 2011)
 sub latex_header {
-  my ($name) = @_;
 
-  $name =~ s/.*\///;
 
   return q(
 \include{mixture}
@@ -457,7 +517,7 @@ sub latex_header {
 \fancyhead{} % get rid of headers on plain pages
 \renewcommand{\headrulewidth}{0pt} % and the line
 }
-%%\lhead{).$name.q(\end{verbatim} QC report}
+%%\lhead{} QC report}
 \rhead{EASIH QC pipeline}
 \begin{document}
 

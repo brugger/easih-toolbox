@@ -26,10 +26,10 @@ sub sample_size {
 
 
 # 
-# Does simple QC on a fastq file without mapping it... If doing a PE run, call the function twice...
+# Does simple QC on a csfasta file without mapping it... If doing a PE run, call the function twice...
 # 
 # Kim Brugger (03 Aug 2010)
-sub csfastQC  {
+sub csfastaQC  {
   my ( $infile1, $res ) = @_;
   
   my %res;
@@ -47,17 +47,16 @@ sub csfastQC  {
     my $sequence = substr($_, 1);
     $read += length( $sequence );
     last if ( $sample_size > 0 && $read > $sample_size );
-#    print "$read > $sample_size\n";
-#    print "$sequence\n";
     $res = analyse( $sequence, undef, $res);
   }
+
 
   return $res;
 }
 
 # Kim Brugger (03 Aug 2010)
 sub qualQC  {
-  my ( $infile1, $res ) = @_;
+  my ( $infile1) = @_;
   
   my %res;
   my $read = 0;
@@ -78,15 +77,16 @@ sub qualQC  {
     map { $qual .= chr($_+33)} split(/\s+/);
     
     $read += length( $qual );
-
-
     last if ( $sample_size > 0 && $read > $sample_size );
-#    print "$read > $sample_size\n";
-#    print "$sequence, $strand, $quality\n";
-    $res = analyse( undef, $qual, $res);
+
+    analyse( undef, $qual, \%res);
+    mappable( $qual, \%res); 
   }
 
-  return $res;
+
+  $res{mappability} = sprintf("%.2f", 100*$res{mappable}/$res{quals});
+
+  return \%res;
 }
   
 
@@ -95,9 +95,12 @@ sub qualQC  {
 # 
 # Kim Brugger (03 Aug 2010)
 sub fastQC {
-  my ( $infile1) = @_;
+  my ( $infile1, $mappable) = @_;
 
+  $mappable ||= 0;
   my %res;
+  my %duplicates;
+  my $dup_count = 1;
   my $read = 0;
   my $file1;
   if ( $infile1 =~ /gz/) {
@@ -115,11 +118,25 @@ sub fastQC {
     chomp( $strand );
     chomp( $quality);
     $read += length( $sequence );
+    $duplicates{$sequence}++;
+    if ( $read > 1048576*$dup_count) {
+      foreach my $seq ( keys %duplicates ) {
+	delete $duplicates{$seq} if ($duplicates{$seq} == 1);
+      }
+      $dup_count++;
+    }
     last if ( $sample_size > 0 && $read > $sample_size );
 #    print "$read > $sample_size\n";
 #    print "$sequence, $strand, $quality\n";
     analyse( $sequence, $quality, \%res);
+    mappable( $quality, \%res) if ($mappable); 
   }
+
+  $res{mappability} = sprintf("%.2f", 100*$res{mappable}/$res{reads}) if ($mappable); 
+  foreach my $seq ( keys %duplicates ) {
+    delete $duplicates{$seq} if ($duplicates{$seq} == 1);
+  }
+  $res{ duplicates } = \%duplicates;
 
   return \%res;
 }
@@ -130,12 +147,12 @@ sub fastQC {
 # 
 # Kim Brugger (26 Jan 2011)
 sub bamQC {
-  my ( $infile) = @_;
+  my ( $infile, $mappable) = @_;
 
   my (%res1, %res2);
   my ($read1, $read2) = (0, 0);
   
-  my $read = 0;
+  $mappable ||= 1;
 
   my $samtools = `which samtools`;
   chomp( $samtools);
@@ -146,19 +163,46 @@ sub bamQC {
     chomp;
     my (undef, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");    
     
-    $read += length($sequence);
-    last if ( $sample_size > 0 && $read > $sample_size*2 );
+    last if ( $sample_size > 0 && $read1 > $sample_size && $read2 > $sample_size );
 
     if ($flags & 0x0080 ) {
+      $read2 += length($sequence);
       analyse( $sequence, $quality, \%res2);
+      mappable( $quality, \%res2) if ($mappable); 
     }
     else {
+      $read1 += length($sequence);
       analyse( $sequence, $quality, \%res1);
+      mappable( $quality, \%res1) if ($mappable); 
     }
   }
   close( $pipe );
   
+
+  $res1{mappability} = sprintf("%.2f", 100*$res1{mappable}/$res1{quals}) if ($mappable);
+  $res2{mappability} = sprintf("%.2f", 100*$res2{mappable}/$res2{quals}) if ($mappable);
   return( \%res1, \%res2);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (28 Jan 2011)
+sub mappable {
+  my ( $quality, $res) = @_; 
+  
+  my $cutoff  =  9;
+  my $maximum =  11;
+#  $maximum = 0.22*length( $quality ) if (length( $quality ) != 50);
+
+  my $count = 0;
+  foreach my $QC ( map { (ord($_) - 33) } split("", $quality)) {
+    $count++ if ( $QC < $cutoff);
+  }
+  
+  $$res{mappable}++ if ( $count < $maximum);
 }
 
 
@@ -184,17 +228,19 @@ sub analyse {
       $GC++ if ( $base eq 'G' || $base eq 'C');
       $AT++ if ( $base eq 'A' || $base eq 'T');
       $$res{base_dist}[$i]{$base}++;
-      $$res{reads}++;
     }
 
     if ( $qual ) {
       my $base_qual = ord($qual[$i]) - 33;
       $base_qual = int($base_qual/2) if ( $base_qual > 40);
       
-      push @{$$res{base_qual}[$i]}, $base_qual;
+      $$res{base_qual}[$i]{$base_qual}++;
       $$res{base_qual_dist}{$base_qual}++;
     }
   }
+  $$res{reads}++;
+
+  $$res{quals}++ if ( $qual);
 
   if ( $AT && $GC  ) {
     my $perc_GC = int( $GC*100/($GC+$AT));
@@ -212,28 +258,80 @@ sub analyse {
 # 
 # Kim Brugger (26 Jan 2011), contact: kim.brugger@easih.ac.uk
 sub make_plots {
-  my ( $data, $title, $outfile ) = @_;
+  my ( $data, $outfile, $title ) = @_;
   
-  $title ||= "unnamed";
-  $outfile ||= "$title";
+  $title ||= $outfile;
+  $title =~ s/.*\///;
 
-
-   if ( $$data{base_dist} ) {
-     _plot_base_dist($$data{base_dist}, $$data{reads}, "$outfile.BaseDist");
-   }
-
-   if ( $$data{base_qual} ) {
-     _plot_base_qual($$data{base_qual}, "$outfile.BaseQual");
-   }
-
-   if ( $$data{base_qual_dist} ) {
-     _plot_base_qual_dist($$data{base_qual_dist}, "$outfile.BaseQualDist");
-   }
-
-  if ( $$data{GC} ) {
-    _plot_GC($$data{GC}, "$outfile.GC");
+  if ( $$data{base_dist} ) {
+    my $ACsplit = _plot_base_dist($$data{base_dist}, $$data{reads}, "$outfile", $title);
+    $$data{ACsplit} = $ACsplit;
   }
+  
+  if ( $$data{base_qual} ) {
+    _plot_base_qual($$data{base_qual}, "$outfile", $title);
+  }
+  
+  if ( $$data{base_qual_dist} ) {
+    my $Q30 = _plot_base_qual_dist($$data{base_qual_dist}, "$outfile", $title);
+    $$data{Q30} = $Q30;
+  }
+  
+  if ( $$data{GC} ) {
+    _plot_GC($$data{GC}, "$outfile", $title);
+  }
+  
+  if ( $$data{duplicates} ) {
+    my $duplicates = _plot_duplicates($$data{duplicates},  "$outfile", $title);
+    $$data{perc_dup} = sprintf("%.2f", 100*$duplicates/$$data{reads});
+    foreach my $seq ( keys %{$$data{duplicates}}) {
+      my $count = $$data{duplicates}{$seq};
+      delete $$data{duplicates}{$seq};
+      $$data{duplicates}{$seq}{count}   = $count;
+      $$data{duplicates}{$seq}{percent} = sprintf("%.2f", 100*$$data{duplicates}{$seq}{count}/$$data{reads});
+    }
+  }
+  
+}
 
+
+
+# 
+# 
+# 
+# Kim Brugger (27 Jan 2011)
+sub _plot_duplicates {
+  my ($data, $outfile_prefix, $title) = @_;
+
+  my %counts;
+  my $duplicates = 0;
+  foreach my $seq ( keys %$data ) {
+    if ($seq =~ /^N*\z/ || $$data{$seq} == 1 ) {
+      delete $$data{$seq};
+      next;
+    }
+
+    $counts{$$data{$seq}}++;
+    $duplicates += $$data{$seq};
+  }
+  
+  return $duplicates if ( ! $duplicates );
+
+  open (my $out, "> $outfile_prefix\_DupHist.R ") || die "Could not open '$outfile_prefix\_DupHist.R': $!\n";
+  foreach my $count ( sort { $a <=> $b } keys %counts ) {
+    print $out "$count\t$counts{$count}\n";
+  }
+  close( $out );  
+
+  open (my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
+  print $R "dupHist = read.table('$outfile_prefix\_DupHist.R', header=TRUE, check.names=FALSE)\n";
+  print $R "pdf('$outfile_prefix\_DupHist.pdf')\n";
+  print $R "plot(dupHist, main='$title:  Duplicates Distribution', xlab='Nr of duplications', ylab='Observations', type='h')\n";
+  print $R "dev.off()\n";
+  close ($R);
+  
+  system "rm $outfile_prefix\_DupHist.R";
+  return $duplicates;
 }
 
 
@@ -243,26 +341,30 @@ sub make_plots {
 # 
 # Kim Brugger (26 Jan 2011)
 sub _plot_base_qual_dist {
-  my ($data, $outfile_prefix) = @_;
+  my ($data, $outfile_prefix, $title) = @_;
 
-  open (my $out, "> $outfile_prefix.R ") || die "Could not open '$outfile_prefix.R': $!\n";
+  open (my $out, "> $outfile_prefix\_QualHist.R ") || die "Could not open '$outfile_prefix\_QualHist.R': $!\n";
   my (@values, @positions);
+  my ( $q30, $total ) = (0,0);
   foreach my $QV ( sort { $a <=> $b } keys %$data) {
     push @values, "$QV\t$$data{$QV}\n";
+    $total += $$data{$QV};
+    $q30 += $$data{$QV} if ( $QV >= 30 );
   }
 
   print $out "\t" . join("\t", @values) . "\n";
   close( $out );  
 
   open (my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-  print $R  "qualHist = read.table('$outfile_prefix.R', header=TRUE, check.names=FALSE)\n";
-  print $R "pdf('$outfile_prefix.QualHist.pdf')\n";
-  print $R "plot(qualHist, main='$outfile_prefix:  Quality Score Distribution', xlab='Quality score', ylab='Observations', type='h')\n";
+  print $R  "qualHist = read.table('$outfile_prefix\_QualHist.R', header=TRUE, check.names=FALSE)\n";
+  print $R "pdf('$outfile_prefix\_QualHist.pdf')\n";
+  print $R "plot(qualHist, main='$title:  Quality Score Distribution', xlab='Quality score', ylab='Observations', type='h')\n";
   print $R "dev.off()\n";
   close ($R);
   
-  system "rm $outfile_prefix.R";
-  
+  system "rm $outfile_prefix\_QualHist.R";
+
+  return sprintf("%.2f", 100*$q30/$total);
 }
 
 
@@ -271,18 +373,24 @@ sub _plot_base_qual_dist {
 # 
 # Kim Brugger (26 Jan 2011)
 sub _plot_base_qual {
-  my ($data, $outfile_prefix) = @_;
+  my ($data, $outfile_prefix, $title) = @_;
 
-  open ( my $out, "> $outfile_prefix.R ") || die "Could not open '$outfile_prefix.R': $!\n";
+  open ( my $out, "> $outfile_prefix\_BaseQual.R ") || die "Could not open '$outfile_prefix\_BaseQual.R': $!\n";
   for(my $i = 0; $i < @{$data}; $i++ ) {
-    print $out join("\t", $i+1, @{$$data[$i]}) . "\n";
+    print $out "$i\t";
+    foreach my $score ( keys %{$$data[$i]}) {
+      for( my $k = 0; $k < $$data[$i]{$score}; $k++) {
+	print $out "$score\t";
+      }
+    }
+    print $out "\n";
   }
   close $out;
 
   open (my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-  print $R "pdf('$outfile_prefix.pdf')\n";
+  print $R "pdf('$outfile_prefix\_BaseQual.pdf')\n";
 
-  print $R "datalines <- readLines('$outfile_prefix.R', n=-1)\n";
+  print $R "datalines <- readLines('$outfile_prefix\_BaseQual.R', n=-1)\n";
   print $R "datalist <- strsplit(datalines, \"\t\")\n";
 
   print $R "plotlist = list()\n";
@@ -290,11 +398,11 @@ sub _plot_base_qual {
   print $R "plotlist[[datalist[[i]][1]]] <- as.numeric(datalist[[i]][-1])\n";
   print $R "}\n";
 
-  print $R "boxplot(plotlist, ylim=c(0,45), outline=FALSE, main='$outfile_prefix', xlab='QV distribution')\n";
+  print $R "boxplot(plotlist, ylim=c(0,45), outline=FALSE, main='$title: Base qualities', xlab='QV distribution')\n";
   print $R "dev.off()\n";
   close ($R);
 
-  system "rm $outfile_prefix.R";
+  system "rm $outfile_prefix\_BaseQual.R";
 }
 
 
@@ -305,12 +413,14 @@ sub _plot_base_qual {
 # 
 # Kim Brugger (26 Jan 2011)
 sub _plot_base_dist {
-  my ($data, $reads, $outfile_prefix) = @_;
+  my ($data, $reads, $outfile_prefix, $title) = @_;
   
-  open ( my $out, "> $outfile_prefix.R ") || die "Could not open '$outfile_prefix.R': $!\n";
+  open ( my $out, "> $outfile_prefix\_BaseDist.R ") || die "Could not open '$outfile_prefix\_BaseDist.R': $!\n";
 
   my (@As, @Cs, @Gs, @Ts, @Ns, @pos);
-  
+
+  my $ACsplit = 0;
+  my $bases;
   for(my $i = 0; $i < @{$data}; $i++ ) {
   
     push @pos, $i + 1;
@@ -319,7 +429,10 @@ sub _plot_base_dist {
     push @Gs, ($$data[ $i ]{G} || $$data[ $i ]{2} || 0)/$reads*100;
     push @Ts, ($$data[ $i ]{T} || $$data[ $i ]{3} || 0)/$reads*100;
     push @Ns, ($$data[ $i ]{N} || $$data[ $i ]{'.'} || 0)/$reads*100;
-    
+
+    $ACsplit += ($$data[ $i ]{A} || $$data[ $i ]{0} || 0)/$reads*100;
+    $ACsplit += ($$data[ $i ]{T} || $$data[ $i ]{3} || 0)/$reads*100;
+    $bases++;
   }
 
   print $out "\t" . join("\t", @pos) . "\n";
@@ -332,13 +445,17 @@ sub _plot_base_dist {
   close ($out);
   
   open (my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-  print $R "pdf('$outfile_prefix.pdf')\n";
-  print $R "baseDist = read.table('$outfile_prefix.R', check.names=FALSE)\n";
-  print $R "barplot(as.matrix(baseDist), col=c('green', 'blue', 'black','red', 'grey'), axis.lty=1, main='$outfile_prefix: Base distribution', xlab='Cycle', ylab='Distribution')\n";
+  print $R "pdf('$outfile_prefix\_BaseDist.pdf')\n";
+  print $R "baseDist = read.table('$outfile_prefix\_BaseDist.R', check.names=FALSE)\n";
+  print $R "barplot(as.matrix(baseDist), col=c('green', 'blue', 'black','red', 'grey'), axis.lty=1, main='$title: Base distribution', xlab='Cycle', ylab='Distribution')\n";
   print $R "dev.off()\n";
   close ($R);
 
-  system "rm $outfile_prefix.R";
+  system "rm $outfile_prefix\_BaseDist.R";
+
+
+  $ACsplit = sprintf("%.2f",$ACsplit/$bases);
+  return $ACsplit;
 }
 
 
@@ -347,11 +464,11 @@ sub _plot_base_dist {
 # 
 # Kim Brugger (26 Jan 2011)
 sub _plot_GC {
-  my ($data, $outfile_prefix) = @_;
+  my ($data, $outfile_prefix, $title) = @_;
 
   my $max_gc = 0;
 
-  open (my $out, "> $outfile_prefix.R ") || die "Could not open '$outfile_prefix.R': $!\n";
+  open (my $out, "> $outfile_prefix\_GC.R ") || die "Could not open '$outfile_prefix\_GC.R': $!\n";
 
   my @values;
   for(my $i = 0; $i <=100; $i+=5) {
@@ -376,14 +493,16 @@ sub _plot_GC {
    $max_gc += 5;
 
    open ( my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
-   print $R "pdf('$outfile_prefix.pdf')\n";
-   print $R "GC = read.table('$outfile_prefix.R')\n";
-   print $R "plot(spline(GC[c(1,2)]),      type='b',  main='$outfile_prefix: %GC', xlab='%GC distribution', ylab='fraction', col='black', ylim=c(0,$max_gc))\n";
+   print $R "pdf('$outfile_prefix\_GC.pdf')\n";
+   print $R "GC = read.table('$outfile_prefix\_GC.R')\n";
+   print $R "plot(spline(GC[c(1,2)]),      type='b',  main='$title: %GC', xlab='%GC distribution', ylab='fraction', col='black', ylim=c(0,$max_gc))\n";
    print $R "dev.off()\n";
    close ($R);
 
-  system "rm $outfile_prefix.R";
+  system "rm $outfile_prefix\_GC.R";
 }
+
+
 
 
 1;

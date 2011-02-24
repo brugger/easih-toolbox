@@ -18,7 +18,7 @@ use EASIH::QC;
 use EASIH::Misc;
 
 my %opts;
-getopts('b:c:f:q:hs:p:', \%opts);
+getopts('b:c:f:q:hs:p:r', \%opts);
 
 my $fastq_file    = $opts{f};
 my $csfasta_file  = $opts{c};
@@ -26,8 +26,11 @@ my $qual_file     = $opts{q};
 my $bam_file      = $opts{b};
 my $sample_size   = $opts{s} || 20;
 my $platform      = $opts{p} || usage();
+my $random_sample = $opts{r} || 0;
 #sample limit MB
 EASIH::QC::sample_size($sample_size);
+EASIH::QC::random_sample(1) if ( $random_sample );
+
 
 my ( $tmp_dir, $tmp_file) = EASIH::Misc::tmp_dir_file();
 
@@ -44,7 +47,7 @@ usage() if ( ($fastq_file   && $csfasta_file) ||
 # Kim Brugger (03 Feb 2011)
 sub usage {
   $0 =~ s/.*\///;
-  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA] -s<ample size (in Mbases)> \n";
+  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA] -s<ample size (in Mbases)> -r<andom sampling>\n";
   exit -1;
 }
 
@@ -102,7 +105,7 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
 
-  $base_name = '/home/kb468/projects/QC/tyt';
+#  $base_name = '/home/kb468/projects/QC/tyt';
 
   make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.pdf");
   system "rm -rf $tmp_dir";
@@ -177,7 +180,8 @@ sub latex_summary {
   $s .= q(\begin{table}[!h])."\n";
   $s .= q(\begin{tabular}{|l|l|}\hline)."\n";
   $s .= q(\rowcolor[gray]{.8} Input file & \verb|).$input. q(|\\\\\hline)."\n" if ( $input );
-  $s .= q(Sample size & ).$size. q( Mbases\\\\\hline)."\n" if ( $size);
+  $s .= q(Sample size & ).$size. q( Mbases (Random sampling)\\\\\hline)."\n" if ( $size && $random_sample);
+  $s .= q(Sample size & ).$size. q( Mbases\\\\\hline)."\n" if ( $size && !$random_sample);
   $s .= q(\rowcolor[gray]{.8}Nr of reads & ).$reads.q( reads\\\\\hline)."\n" if ( $reads );
 
   if ( $platform eq "SOLID" ) {

@@ -248,6 +248,14 @@ sub analyse {
     $$res{GC}{ $perc_GC }++ if ( $AT+$GC > 0 );
   }
 
+  if ( $seq ) {
+    my $partial_adaptor_mapping = check_for_partial_adaptors($seq);
+    my @pam = split("", $partial_adaptor_mapping) ;
+    for (my $i=0;$i<@pam;$i++) {
+      $$res{partial_adaptor_mapping}{$i} += $pam[$i];
+    }
+  }
+
   return $res;
 }
 
@@ -291,9 +299,51 @@ sub make_plots {
       $$data{duplicates}{$seq}{percent} = sprintf("%.2f", 100*$$data{duplicates}{$seq}{count}/$$data{reads});
     }
   }
+
+  if ($$data{partial_adaptor_mapping}) {
+    my $partial_adaptor = _plot_partial_adaptor_mapping($$data{partial_adaptor_mapping}, $$data{reads}, "$outfile", $title);
+    $$data{partial_adaptor} = sprintf("%.2f", 100*$partial_adaptor/$$data{reads}) if ($partial_adaptor);
+  }
   
 }
 
+
+
+# 
+# 
+# 
+# Kim Brugger (27 Jan 2011)
+sub _plot_partial_adaptor_mapping {
+  my ($data, $reads, $outfile_prefix, $title) = @_;
+
+  my $pam_count = 0;
+
+  open (my $out, "> $outfile_prefix\_PAM.R ") || die "Could not open '$outfile_prefix\_PAM.R': $!\n";
+  foreach my $pos ( sort { $a <=> $b } keys %$data ) {
+    print $out "$pos\t".($$data{$pos}*100/$reads)."\n";
+    $pam_count += $$data{$pos};
+  }
+  close( $out );  
+
+  return if ($pam_count == 0 );
+
+  $pam_count /= int(keys %$data );
+
+
+  open (my $R, " | R --vanilla --slave ") || die "Could not open R: $!\n";
+  print $R "PAM = read.table('$outfile_prefix\_PAM.R', header=TRUE, check.names=FALSE)\n";
+  print $R "pdf('$outfile_prefix\_PAM.pdf')\n";
+  print $R "plot(PAM, main='$title:  Adaptor mapping', xlab='Cycles', ylab='Percent of reads', type='h', ylim=c(0,100))\n";
+  print $R "dev.off()\n";
+  close ($R);
+  
+  
+  system "rm $outfile_prefix\_PAM.R";
+
+  
+  
+  return $pam_count;
+}
 
 
 # 
@@ -500,6 +550,141 @@ sub _plot_GC {
    close ($R);
 
   system "rm $outfile_prefix\_GC.R";
+}
+
+
+
+my %adaptors = ( 'ACACTCTTTCCCTACACGACGCTGTTCCATCT'                              => 'Illumina Single End Apapter 1',	     
+		 'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT'                            => 'Illumina Single End Apapter 2',	     
+		 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Single End PCR Primer 1',     
+		 'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT'                            => 'Illumina Single End PCR Primer 2',     
+		 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'  	                   => 'Illumina Single End Sequencing Primer',
+		 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Paired End Adapter 1',  	
+		 'CTCGGCATTCCTGCTGAACCGCTCTTCCGATCT'                             => 'Illumina Paired End Adapter 2',  	
+		 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Paried End PCR Primer 1',  
+		 'CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT' => 'Illumina Paired End PCR Primer 2',  
+		 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Paried End Sequencing Primer 1',  
+		 'CGGTCTCGGCATTCCTACTGAACCGCTCTTCCGATCT'                         => 'Illumina Paired End Sequencing Primer 2',  
+		 
+		 'ACAGGTTCAGAGTTCTACAGTCCGAC'                                    => 'Illumina DpnII expression Adapter 1',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII expression Adapter 2',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII expression PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina DpnII expression PCR Primer 2',  
+		 'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina DpnII expression Sequencing Primer',		
+		 
+		 'ACAGGTTCAGAGTTCTACAGTCCGACATG'                                 => 'Illumina NlaIII expression Adapter 1',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII expression Adapter 2',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII expression PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina NlaIII expression PCR Primer 2',  
+		 'CCGACAGGTTCAGAGTTCTACAGTCCGACATG'                              => 'Illumina NlaIII expression Sequencing Primer', 
+		 
+		 'GTTCAGAGTTCTACAGTCCGACGATC'                                    => 'Illumina Small RNA Adapter 1',  	
+		 'TCGTATGCCGTCTTCTGCTTGT'                                        => 'Illumina Small RNA Adapter 2',  	
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA RT Primer',  	
+		 'CAAGCAGAAGACGGCATACGA'                                         =>  'Illumina Small RNA PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina Small RNA PCR Primer 2',  
+		 'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina Small RNA Sequencing Primer',  
+		 
+		 'GATCGGAAGAGCACACGTCT'                                          => 'Illumina Multiplexing Adapter 1',  
+		 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Multiplexing Adapter 2',  
+		 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Multiplexing PCR Primer 1.01',		
+		 'GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT'                            => 'Illumina Multiplexing PCR Primer 2.01',		
+		 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Multiplexing Read1 Sequencing Primer',	
+		 'GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'                             => 'Illumina Multiplexing Index Sequencing Primer',	
+		 'GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT'                            => 'Illumina Multiplexing Read2 Sequencing Primer',	
+		 
+		 'CAAGCAGAAGACGGCATACGAGATCGTGATGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 1',  	
+		 'CAAGCAGAAGACGGCATACGAGATACATCGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 2',  	
+		 'CAAGCAGAAGACGGCATACGAGATGCCTAAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 3',  	
+		 'CAAGCAGAAGACGGCATACGAGATTGGTCAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 4',  	
+		 'CAAGCAGAAGACGGCATACGAGATCACTGTGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 5',  	
+		 'CAAGCAGAAGACGGCATACGAGATATTGGCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 6',  	
+		 'CAAGCAGAAGACGGCATACGAGATGATCTGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 7',  	
+		 'CAAGCAGAAGACGGCATACGAGATTCAAGTGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 8',  	
+		 'CAAGCAGAAGACGGCATACGAGATCTGATCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 9',  	
+		 'CAAGCAGAAGACGGCATACGAGATAAGCTAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 10',  	
+		 'CAAGCAGAAGACGGCATACGAGATGTAGCCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 11',  	
+		 'CAAGCAGAAGACGGCATACGAGATTACAAGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 12',  	
+		 
+		 'GATCGTCGGACTGTAGAACTCTGAAC'                                    => 'Illumina DpnII Gex Adapter 1',  	
+		 'ACAGGTTCAGAGTTCTACAGTCCGAC'                                    => 'Illumina DpnII Gex Adapter 1.01',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII Gex Adapter 2',  	
+		 'TCGTATGCCGTCTTCTGCTTG'                                         => 'Illumina DpnII Gex Adapter 2.01',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII Gex PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina DpnII Gex PCR Primer 2',  
+		 'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina DpnII Gex Sequencing Primer',  
+		 
+		 'TCGGACTGTAGAACTCTGAAC'                                         => 'Illumina NlaIII Gex Adapter 1.01',  
+		 'ACAGGTTCAGAGTTCTACAGTCCGACATG'                                 => 'Illumina NlaIII Gex Adapter 1.02',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII Gex Adapter 2.01',  
+		 'TCGTATGCCGTCTTCTGCTTG'                                         => 'Illumina NlaIII Gex Adapter 2.02',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII Gex PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina NlaIII Gex PCR Primer 2',  
+		 'CCGACAGGTTCAGAGTTCTACAGTCCGACATG'                              => 'Illumina NlaIII Gex Sequencing Primer',		
+		 
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA RT Primer',  	
+		 'GTTCAGAGTTCTACAGTCCGACGATC'                                    => 'Illumina 5p RNA Adapter',  	
+		 'TCGTATGCCGTCTTCTGCTTGT'                                        => 'Illumina RNA Adapter1',  	
+		 
+		 'ATCTCGTATGCCGTCTTCTGCTTG'                                      => 'Illumina Small RNA 3p Adapter 1',  
+		 'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA PCR Primer 1',  
+		 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina Small RNA PCR Primer 2',  
+		 'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina Small RNA Sequencing Primer',  );
+
+
+# 
+# 
+# 
+# Kim Brugger (03 Feb 2011)
+sub check_for_adaptors {
+  my( $seq ) = @_;
+
+  foreach my $adaptor ( %adaptors ) {
+    my $rev_adaptor = reverse $adaptor;
+    $rev_adaptor =~ tr/[ACGT]/[TGCA]/;
+    return $adaptors{ $adaptor } if ( $seq =~ /$adaptor/  || $seq =~ /$rev_adaptor/);
+  }
+
+  return "Unkown";
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (03 Feb 2011)
+sub check_for_partial_adaptors {
+  my( $seq ) = @_;
+  
+  my $steps       = 5;
+  my $frag_length = 15;
+  
+  my @fragments;
+  for(my $i=0;$i<length($seq);$i+=5) {
+    push @fragments, substr($seq, $i, $frag_length);
+  }
+
+
+  my $hit_count = 0;
+  my $hit_map   = "0" x length($seq);
+  for ( my $i = 0; $i<@fragments; $i++ ) {
+    my $fragment = $fragments[$i];
+    next if (length($fragment ) < $frag_length -2);
+    foreach my $adaptor ( %adaptors ) {
+      my $rev_adaptor = reverse $adaptor;
+      $rev_adaptor =~ tr/[ACGT]/[TGCA]/;
+      if ($adaptor =~ /$fragment/ || $rev_adaptor =~ /$fragment/) {
+	substr($hit_map, $i*$steps, $frag_length) = '1' x $frag_length;
+	$hit_count++;
+	goto NXT_FRAG;
+	last;
+      }
+    }
+  NXT_FRAG:
+  }
+
+#  print "Adaptor hit count: $hit_map, $hit_count\n" if ( $hit_map );
+  return $hit_map;
 }
 
 

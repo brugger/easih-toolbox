@@ -34,7 +34,7 @@ my ( $tmp_dir, $tmp_file) = EASIH::Misc::tmp_dir_file();
 usage() if ( ($fastq_file   && $csfasta_file) || 
 	     ($fastq_file   && $qual_file) || 
 	     ($fastq_file   && $bam_file) || 
-	     ($csfasta_file && $qual_file) || 
+#	     ($csfasta_file && $qual_file) || 
 	     ($csfasta_file && $bam_file) || 
 	     ($qual_file    && $bam_file) || 
 	     ! $platform);
@@ -95,11 +95,14 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
 
   open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
   print $out latex_header();
-  print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit} );
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
   print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates});
+  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
+
+  $base_name = '/home/kb468/projects/QC/tyt';
 
   make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.pdf");
   system "rm -rf $tmp_dir";
@@ -119,9 +122,10 @@ elsif ( $bam_file ) {
 
   open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
   print $out latex_header();
-  print $out latex_summary($infile, uc($platform), $sample_size, $$QC1{reads} || $$QC1{quals}, $$QC1{Q30}, $$QC1{perc_dup}, $$QC1{mappability}, $$QC1{ACsplit} );
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC1{reads} || $$QC1{quals}, $$QC1{Q30}, $$QC1{perc_dup}, $$QC1{mappability}, $$QC1{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
   print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC1{duplicates});
+  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
   make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.1.pdf");
@@ -131,9 +135,10 @@ elsif ( $bam_file ) {
   EASIH::QC::make_plots($QC2, "$tmp_dir/$tmp_file", $base_name);
   open ( $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
   print $out latex_header();
-  print $out latex_summary($infile, uc($platform), $sample_size, $$QC2{reads} || $$QC2{quals}, $$QC2{Q30}, $$QC2{perc_dup}, $$QC2{mappability}, $$QC2{ACsplit} );
+  print $out latex_summary($infile, uc($platform), $sample_size, $$QC2{reads} || $$QC2{quals}, $$QC2{Q30}, $$QC2{perc_dup}, $$QC2{mappability}, $$QC2{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
   print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC2{duplicates});
+  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
   make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.2.pdf");
@@ -162,7 +167,7 @@ sub make_pdf {
 # 
 # Kim Brugger (02 Feb 2011)
 sub latex_summary {
-  my ($input, $platform, $size, $reads, $Q30, $dups, $mappable, $AC,  ) = @_;
+  my ($input, $platform, $size, $reads, $Q30, $dups, $mappable, $AC, $partial_adaptor  ) = @_;
 
 
   $input =~ s/.*\///;
@@ -206,6 +211,13 @@ sub latex_summary {
     $s .= latex_coloured_row("red", 'Avg \% AC ', $AC.'\%')    if ( $AC < 40 || $AC > 60 );
   }
 
+  if ( $partial_adaptor ) {
+    $s .= latex_coloured_row("green", 'Partial adaptors ', $partial_adaptor.'\%')  if ( $partial_adaptor < 1 );
+    $s .= latex_coloured_row("yellow", 'Partial adaptors ', $partial_adaptor.'\%') if ( $partial_adaptor >= 1 && $partial_adaptor <= 10 );
+    $s .= latex_coloured_row("red", 'Partial adaptors ', $partial_adaptor.'\%')    if ( $partial_adaptor > 10 );
+  }
+
+
   $s .= q(\end{tabular}) . "\n";
   $s .= q(\end{table}) . "\n";
 
@@ -218,6 +230,7 @@ sub latex_summary {
   $s .= q(Mappable prediction  & $<70 \%$ &  $70-95 \%$ & $>95 \%$\\\\\hline)."\n" if ($mappable && $platform eq "ILLUMINA");
   $s .= q(Duplicates sequences & $>10 \%$ &  $1-10  \%$ & $<1 \%$\\\\\hline)."\n" if ( $dups);
   $s .= q(Avg \% AC & $<40\%$ or $>60\%$ & $40-45\%$ or $55-60\%$ & $45-55 \%$\\\\\hline)."\n" if ( $AC );
+  $s .= q(Partial adaptors & $>10 \%$ &  $1-10  \%$ & $<1 \%$\\\\\hline)."\n" if ( $partial_adaptor );
 
   $s .= q(\end{tabular})."\n";
   $s .= q(\end{table})."\n";
@@ -239,6 +252,34 @@ sub latex_coloured_row {
 
   return '\rowcolor{' . $colour. '}' . join(" & ", @values) . ' \\\\\hline'."\n";
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (02 Feb 2011)
+sub latex_pam {
+  my ($PAM, $partial_adaptor) = @_;
+
+  return if ( !$PAM || ! -e $PAM );
+
+  my $s = q|\section*{Partial mapped adaptors}|."\n";
+
+  $s  .= q(\begin{figure}[!h]) . " \n";
+  $s  .= q(\centering) . " \n";
+  $s  .= q(\includegraphics[scale=0.5]{). $PAM .q(}) . " \n";
+  $s  .= q(\end{figure}) . " \n";
+
+  $s  .= q(The figure shows the number of hits to adaptor sequences pr base (bars on the X-axis) with the number of) . " \n";
+  $s  .= q(observations (Y-axis). ) . " \n";
+
+  $s  .= q(\newpage) . " \n";
+
+  return $s;
+
+}
+
 
 
 # 
@@ -273,7 +314,7 @@ sub latex_dups {
   
   my $max = 25;
   foreach my $read ( sort { $$duplicates{$b}{count} <=>  $$duplicates{$a}{count} } keys %$duplicates ) {
-    my $type = check_for_adaptors($read);
+    my $type = EASIH::QC::check_for_adaptors($read);
     $s  .= join(" & ", q(\tiny{) . $read. q(}), $$duplicates{$read}{percent}.'\%',q(\tiny{) .$type.q(})). q(  \\\\\hline) . " \n";
     last if ( ! $max--);
   }
@@ -286,103 +327,6 @@ sub latex_dups {
   return $s;
 
 }
-
-
-
-# 
-# 
-# 
-# Kim Brugger (03 Feb 2011)
-sub check_for_adaptors {
-  my( $seq ) = @_;
-
-  my %adaptors = ( 'ACACTCTTTCCCTACACGACGCTGTTCCATCT'                              => 'Illumina Single End Apapter 1',	     
-		   'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT'                            => 'Illumina Single End Apapter 2',	     
-		   'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Single End PCR Primer 1',     
-		   'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT'                            => 'Illumina Single End PCR Primer 2',     
-		   'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'  	                   => 'Illumina Single End Sequencing Primer',
-		   'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Paired End Adapter 1',  	
-		   'CTCGGCATTCCTGCTGAACCGCTCTTCCGATCT'                             => 'Illumina Paired End Adapter 2',  	
-		   'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Paried End PCR Primer 1',  
-		   'CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT' => 'Illumina Paired End PCR Primer 2',  
-		   'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Paried End Sequencing Primer 1',  
-		   'CGGTCTCGGCATTCCTACTGAACCGCTCTTCCGATCT'                         => 'Illumina Paired End Sequencing Primer 2',  
-		   
-		   'ACAGGTTCAGAGTTCTACAGTCCGAC'                                    => 'Illumina DpnII expression Adapter 1',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII expression Adapter 2',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII expression PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina DpnII expression PCR Primer 2',  
-		   'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina DpnII expression Sequencing Primer',		
-		   
-		   'ACAGGTTCAGAGTTCTACAGTCCGACATG'                                 => 'Illumina NlaIII expression Adapter 1',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII expression Adapter 2',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII expression PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina NlaIII expression PCR Primer 2',  
-		   'CCGACAGGTTCAGAGTTCTACAGTCCGACATG'                              => 'Illumina NlaIII expression Sequencing Primer', 
-
-		   'GTTCAGAGTTCTACAGTCCGACGATC'                                    => 'Illumina Small RNA Adapter 1',  	
-		   'TCGTATGCCGTCTTCTGCTTGT'                                        => 'Illumina Small RNA Adapter 2',  	
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA RT Primer',  	
-		   'CAAGCAGAAGACGGCATACGA'                                         =>  'Illumina Small RNA PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina Small RNA PCR Primer 2',  
-		   'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina Small RNA Sequencing Primer',  
-		   
-		   'GATCGGAAGAGCACACGTCT'                                          => 'Illumina Multiplexing Adapter 1',  
-		   'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Multiplexing Adapter 2',  
-		   'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT'    => 'Illumina Multiplexing PCR Primer 1.01',		
-		   'GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT'                            => 'Illumina Multiplexing PCR Primer 2.01',		
-		   'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'                             => 'Illumina Multiplexing Read1 Sequencing Primer',	
-		   'GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'                             => 'Illumina Multiplexing Index Sequencing Primer',	
-		   'GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT'                            => 'Illumina Multiplexing Read2 Sequencing Primer',	
-		   
-		   'CAAGCAGAAGACGGCATACGAGATCGTGATGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 1',  	
-		   'CAAGCAGAAGACGGCATACGAGATACATCGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 2',  	
-		   'CAAGCAGAAGACGGCATACGAGATGCCTAAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 3',  	
-		   'CAAGCAGAAGACGGCATACGAGATTGGTCAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 4',  	
-		   'CAAGCAGAAGACGGCATACGAGATCACTGTGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 5',  	
-		   'CAAGCAGAAGACGGCATACGAGATATTGGCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 6',  	
-		   'CAAGCAGAAGACGGCATACGAGATGATCTGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 7',  	
-		   'CAAGCAGAAGACGGCATACGAGATTCAAGTGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 8',  	
-		   'CAAGCAGAAGACGGCATACGAGATCTGATCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 9',  	
-		   'CAAGCAGAAGACGGCATACGAGATAAGCTAGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 10',  	
-		   'CAAGCAGAAGACGGCATACGAGATGTAGCCGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 11',  	
-		   'CAAGCAGAAGACGGCATACGAGATTACAAGGTGACTGGAGTTC'                   => 'Illumina PCR Primer Index 12',  	
-		   
-		   'GATCGTCGGACTGTAGAACTCTGAAC'                                    => 'Illumina DpnII Gex Adapter 1',  	
-		   'ACAGGTTCAGAGTTCTACAGTCCGAC'                                    => 'Illumina DpnII Gex Adapter 1.01',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII Gex Adapter 2',  	
-		   'TCGTATGCCGTCTTCTGCTTG'                                         => 'Illumina DpnII Gex Adapter 2.01',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina DpnII Gex PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina DpnII Gex PCR Primer 2',  
-		   'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina DpnII Gex Sequencing Primer',  
-                                                                           
-		   'TCGGACTGTAGAACTCTGAAC'                                         => 'Illumina NlaIII Gex Adapter 1.01',  
-		   'ACAGGTTCAGAGTTCTACAGTCCGACATG'                                 => 'Illumina NlaIII Gex Adapter 1.02',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII Gex Adapter 2.01',  
-		   'TCGTATGCCGTCTTCTGCTTG'                                         => 'Illumina NlaIII Gex Adapter 2.02',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina NlaIII Gex PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina NlaIII Gex PCR Primer 2',  
-		   'CCGACAGGTTCAGAGTTCTACAGTCCGACATG'                              => 'Illumina NlaIII Gex Sequencing Primer',		
-                                                                           
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA RT Primer',  	
-		   'GTTCAGAGTTCTACAGTCCGACGATC'                                    => 'Illumina 5p RNA Adapter',  	
-		   'TCGTATGCCGTCTTCTGCTTGT'                                        => 'Illumina RNA Adapter1',  	
-		   
-		   'ATCTCGTATGCCGTCTTCTGCTTG'                                      => 'Illumina Small RNA 3p Adapter 1',  
-		   'CAAGCAGAAGACGGCATACGA'                                         => 'Illumina Small RNA PCR Primer 1',  
-		   'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA'                  => 'Illumina Small RNA PCR Primer 2',  
-		   'CGACAGGTTCAGAGTTCTACAGTCCGACGATC'                              => 'Illumina Small RNA Sequencing Primer',  );
-
-
-  foreach my $adaptor ( %adaptors ) {
-    my $rev_adaptor = reverse $adaptor;
-    $rev_adaptor =~ tr/[ACGT]/[TGCA]/;
-    return $adaptors{ $adaptor } if ( $seq =~ /$adaptor/  || $seq =~ /$rev_adaptor/);
-  }
-
-  return "Unkown";
-}
-
 
 
 # 

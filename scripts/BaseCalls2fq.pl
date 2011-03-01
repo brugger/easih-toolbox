@@ -175,8 +175,8 @@ sub demultiplex {
     $notmplexed2 += $notmplexed;
   }
 
-  printf STDOUT ("lane $lane.1\t$lane_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile", $out1*100/$in1, $out1/120) ;
-  printf STDOUT ("\tnot demultiplexed: %d (%.2f %%)\n", $notmplexed1, $notmplexed1*100/$in1);
+  printf STDERR ("lane $lane.1\t$lane_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile", $out1*100/$in1, $out1/120) ;
+  printf STDERR ("\tnot demultiplexed: %d (%.2f %%)\n", $notmplexed1, $notmplexed1*100/$in1);
 
   if ( $out2) {
     printf STDOUT ("lane $lane.2\t$lane_name\t$in2\t$out2 (%.2f %%)\t%.2f avg clusters per tile", $out2*100/$in2, $out2/120) ;
@@ -308,6 +308,7 @@ sub create_child {
   my ($command, @params) = @_;
 
   my $pid;
+  # open a pipe from the kid to the parent so they can communicate
   if ($pid = open($fhs[$total], "-|")) {
     ;
   } 
@@ -406,9 +407,9 @@ sub analyse_lane {
       print  STDOUT ("\n");
     }
     else {
-      printf STDERR ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
-      printf STDERR ("\tnot demultiplexed: %d (%.2f %%)", $not_demultiplexed, $not_demultiplexed*100/$count_in) if ($multiplex);
-      print  STDERR ("\n");
+      printf STDOUT ("lane $lane_nr.$lane_index\t$lane_name\t$count_in\t$count_out (%.2f %%)\t%.2f avg clusters per tile", $count_out*100/$count_in, $count_out/120) ;
+      printf STDOUT ("\tnot demultiplexed: %d (%.2f %%)", $not_demultiplexed, $not_demultiplexed*100/$count_in) if ($multiplex);
+      print  STDOUT ("\n");
     }
 
 

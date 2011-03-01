@@ -28,10 +28,13 @@ usage() if ($opts{h});
 
 if ( $opts{Q}) {
   
+  $opts{Q} =~ s/F3.*//;
+  $opts{Q} =~ s/R3.*//;
+  $opts{Q} =~ s/F5.*//;
   $opts{Q} =~ s/_\z//;
+
   $opts{p} = $opts{Q};
   $opts{o} = $opts{Q};
-
 }  
 
 my $prefix     = $opts{p} || usage();

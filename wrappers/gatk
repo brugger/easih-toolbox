@@ -18,10 +18,11 @@ my @java_paths = ("/usr/local/Cluster-Apps/java/",
 		  "/usr/bin/");
 
 
-my @gatk_paths = ("/usr/local/installed/",
-		  "/home/easih/installed/",
-		  "/home/kb468/bin/gatk_live/",
-		  "/ifs/software/installed/");
+my @gatk_paths = ("/home/kb468/gatk/",
+		  #"/usr/local/installed/",
+		  #"/home/easih/installed/",
+		  #"/home/kb468/bin/gatk_live/",
+		  "/software/installed/");
 
 my ($java, $gatk);
 set_paths();
@@ -31,7 +32,7 @@ my $scratch_dir  = "/home/$username/scratch/tmp";
 $scratch_dir = "/tmp" if ( ! -d "/home/$username/scratch/" );
 mkdir "/home/$username/scratch/tmp" if ( -d "/home/$username/scratch/" );
 
-my $resources  = " -resources ~/bin/gatk_live/resources/R  -Rscript /usr/bin/Rscript ";
+my $resources  = " -resources /home/kb468/bin/gatk_live/resources/R  -Rscript /usr/bin/Rscript ";
 
 foreach my $argv ( @ARGV ) {
   next if ( $argv eq $0);
@@ -46,7 +47,6 @@ foreach my $argv ( @ARGV ) {
   }
  
 
- 
   if ( $argv =~ / /) {
     $argv_list .= qq{ "$argv" };
   }
@@ -61,7 +61,8 @@ foreach my $argv ( @ARGV ) {
 
 
 #print "$java -jar $gatk $argv_list\n";
-system "$java -Xmx2500m -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
+#print  "$java -Xmx3000m -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
+system "$java -Xmx3000m -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

@@ -75,22 +75,27 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=02:00:00"},
 		 
 		 'realign_indel'     => { function   => 'realign_indel',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500b,walltime=08:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=08:00:00"},
 
 		 'realigned_merge'   => { function   => 'EASIH::JMS::Picard::merge',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=20:00:00",
 					  sync       => 1},
 
+		 'realigned_sort'    => { function   => 'EASIH::JMS::Picard::sort',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=08:00:00"},
+		 
+		 'scrub'             => { function   => 'solid_scrubber',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1500mb,walltime=04:00:00"},
+		 
 		 'realigned_rename'  => { function   => 'rename' },
 
-		 
-		 'realigned_sort'    => { function   => 'EASIH::JMS::Picard::sort',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=20000mb,walltime=08:00:00"},
-		 
-		 'realigned_scrub'   => { function   => 'solid_scrubber',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=30000mb,walltime=04:00:00"},
-		 
+		 'scrub_rename'      => { function   => 'rename' },
+
 		 'realigned_index'   => { function   => 'EASIH::JMS::Samtools::index',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
+		 
+
+		 'scrub_index'       => { function   => 'EASIH::JMS::Samtools::index',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
 		 'call_indels'       => { function   => 'call_indels',
@@ -119,6 +124,9 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 
 		 'flagstat'          => { function   => 'flagstat',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=01:00:00"},		 
+
+		 'scrub_bed'         => { function   => 'scrub_bed',
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=50000mb,walltime=01:00:00"},		 
     );
 		     
 
@@ -140,7 +148,6 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'realign_indel'    => 'realigned_merge',
 	      'realigned_merge'  => 'realigned_sort',
 	      'realigned_sort'   => 'realigned_rename',
-	      'realigned_scrub'  => 'realigned_rename',
 
 	      'realigned_rename' => 'realigned_index',
 
@@ -187,10 +194,10 @@ if ( $opts{Q} ) {
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
+  $opts{'m'} = 1;
 
   my $freeze_file = "$opts{'o'}.maris";
   system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
-
 
   EASIH::JMS::freeze_file($freeze_file);
 }  
@@ -222,7 +229,15 @@ my $bam_file      = "$report.bam";
 
 
 my $scrub_data    = $opts{s} || 0;
-$flow{'realigned_sort'} = 'realigned_scrub' if ( $scrub_data && $platform eq "SOLID");
+# change the flow to accommodate scrubbing...
+if ( $scrub_data && $platform eq "SOLID" ) {
+
+  $flow{'realigned_sort'}   = 'scrub_index';
+  $flow{'scrub_index'}      = 'scrub';
+  $flow{'scrub'}            = 'scrub_rename';
+  $flow{'scrub_rename'}     = 'realigned_index';
+  push @{$flow{'realigned_index'}}, 'scrub_bed';
+}
 
 
 open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
@@ -240,18 +255,17 @@ $sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
 $sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
 
 
-
-
 # Only paired ends runs gets marked duplicates.
 $flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 
-my $bwa          = EASIH::JMS::Misc::find_program('bwa');
-my $fq_split     = EASIH::JMS::Misc::find_program('fastq_split.pl');
-my $samtools     = EASIH::JMS::Misc::find_program('samtools');
-my $tag_sam      = EASIH::JMS::Misc::find_program('tag_sam.pl');
-my $gatk         = EASIH::JMS::Misc::find_program('gatk');
-my $scrubber     = EASIH::JMS::Misc::find_program('SOLiD_scrubber.pl');
+my $bwa             = EASIH::JMS::Misc::find_program('bwa');
+my $fq_split        = EASIH::JMS::Misc::find_program('fastq_split.pl');
+my $samtools        = EASIH::JMS::Misc::find_program('samtools');
+my $tag_sam         = EASIH::JMS::Misc::find_program('tag_sam.pl');
+my $gatk            = EASIH::JMS::Misc::find_program('gatk');
+my $scrubber        = EASIH::JMS::Misc::find_program('SOLiD_scrubber.pl');
+my $bam2scubber_bed = EASIH::JMS::Misc::find_program('bam2scubber-bed.pl');
 
 $samtools = "/home/kb468/bin/samtools";
 $gatk     = "/home/kb468/bin/gatk";
@@ -514,9 +528,25 @@ sub solid_scrubber {
   my ($input) = @_;
   
   my $tmp_file = EASIH::JMS::tmp_file(".scrubbed.bam");
-  my $cmd = "$scrubber -b $input -R $reference -U | $samtools view -Sb - > $tmp_file";
+  my $cmd = "$scrubber -b $input -R $reference -Ul $report.scrubber.txt  > $tmp_file";
 
   EASIH::JMS::submit_job($cmd, $tmp_file);
+
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (18 Jan 2011)
+sub scrub_bed {
+  my ($input) = @_;
+
+  my $outfile = "$report\_scrub.bed";
+
+  my $cmd = "$bam2scubber_bed  $input > $outfile";
+
+  EASIH::JMS::submit_job($cmd, $outfile);
 
 }
 
@@ -551,7 +581,7 @@ sub merge_indels {
   my (@inputs) = @_;
 
   my $cmd = "cat  @inputs > $report";
-  EASIH::JMS::submit_system_job("cat  @inputs > $report.indels");
+  EASIH::JMS::submit_system_job("cat  @inputs > $report.indels.vcf");
 }
 
 

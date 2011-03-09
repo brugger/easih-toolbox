@@ -250,7 +250,7 @@ sub usage {
 
   $0 =~ s/.*\///;
   
-  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress] -s[ingletons in their own file] -i[d for the first part of the id line]\n";
+  print "USAGE: $0 -p[refix of the infiles] -o[outfile prefix] -n[o compress] -s[ingletons in their own file] -i[d for the first part of the id line] or -Q[basename]\n";
   exit -1;
 
 }

@@ -250,8 +250,8 @@ BEGIN {
   $snp_db = "dbsnp_132";
   $pp_db  = "phylop_phast";
 
-  $dbi = DBI->connect("DBI:mysql:$snp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ppdbi = DBI->connect("DBI:mysql:$pp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $dbi = DBI->connect("DBI:mysql:$snp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+  $ppdbi = DBI->connect("DBI:mysql:$pp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
   $ref_id_hg18   = fetch_ref_id('hg18');
   $ref_id_GRCh37 = fetch_ref_id('GRCh37');
   fetch_populations();

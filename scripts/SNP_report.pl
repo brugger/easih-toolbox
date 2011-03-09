@@ -10,16 +10,10 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/usr/local/lib/ensembl-variation/modules/';
-use lib '/usr/local/lib/ensembl-functgenomics/modules/';
-use lib '/usr/local/lib/ensembl/modules/';
-use lib '/usr/local/lib/bioperl/';
-
-
-use lib '/home/easih/lib/ensembl-variation/modules/';
-use lib '/home/easih/lib/ensembl-functgenomics/modules/';
-use lib '/home/easih/lib/ensembl/modules/';
-use lib '/home/easih/lib/bioperl/';
+use lib '/software/lib/ensembl-variation/modules/';
+use lib '/software/lib/ensembl-functgenomics/modules/';
+use lib '/software/lib/ensembl/modules/';
+use lib '/software/lib/bioperl/';
 
 
 use lib '/home/kb468/easih-toolbox/modules/';
@@ -45,7 +39,11 @@ my $buffer_size = 100;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
+
+
 if ( $opts{ Q }  ) {
+
+  $opts{ Q } =~ s/\.bam//;
 
   $opts{v} = "$opts{Q}.snps.vcf";
   $opts{b} = "$opts{Q}.bam";
@@ -94,7 +92,7 @@ my $reg = 'Bio::EnsEMBL::Registry';
 #  $reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0,);
 #}
 #else {
-  $reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
+  $reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
 #}
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');

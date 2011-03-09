@@ -10,10 +10,10 @@ use warnings;
 use Data::Dumper;
 
 
-use lib '/usr/local/lib/ensembl-variation/modules/';
-use lib '/usr/local/lib/ensembl-functgenomics/modules/';
-use lib '/usr/local/lib/ensembl/modules/';
-use lib '/usr/local/lib/bioperl/';
+use lib '/software/lib/ensembl-variation/modules/';
+use lib '/software/lib/ensembl-functgenomics/modules/';
+use lib '/software/lib/ensembl/modules/';
+use lib '/software/lib/bioperl/';
 
 use strict;
 use Getopt::Std;
@@ -33,7 +33,9 @@ my $user        = 'anonymous';
 
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
-$reg->load_registry_from_db(-host => $host,-user => $user);
+#$reg->load_registry_from_db(-host => $host,-user => $user);
+  $reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
+
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');

@@ -9,10 +9,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use lib '/usr/local/lib/ensembl-variation/modules/';
-use lib '/usr/local/lib/ensembl-functgenomics/modules/';
-use lib '/usr/local/lib/ensembl/modules/';
-use lib '/usr/local/lib/bioperl/';
+
+use lib '/software/lib/ensembl-variation/modules/';
+use lib '/software/lib/ensembl-functgenomics/modules/';
+use lib '/software/lib/ensembl/modules/';
+use lib '/software/lib/bioperl/';
 
 use Bio::EnsEMBL::DBSQL::DBAdaptor;
 use Bio::EnsEMBL::AssemblyMapper;
@@ -29,7 +30,7 @@ my $user        = 'anonymous';
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
 #$reg->load_registry_from_db(-host => $host,-user => $user);
-$reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
+$reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
 
 my $asma = $reg->get_adaptor($species, 'core', 'AssemblyMapper');
 my $csa  = $reg->get_adaptor($species, 'core', 'CoordSystem');
@@ -63,7 +64,7 @@ while(<>) {
     ( $chr, $start, $end ) = ( $1, $2, $3);
   }
   # This is a vcf format file..
-  elsif ( $end !~ /^\d+\z/) {
+  elsif ( $end && $end !~ /^\d+\z/) {
     $vcf = 1;
     $end = $start;
   }

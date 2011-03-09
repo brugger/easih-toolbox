@@ -42,12 +42,15 @@ my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa = $reg->get_adaptor($species, 'core', 'slice');
 my $ga = $reg->get_adaptor($species, 'core', 'gene');
 
-my $bed         = $opts{b} || usage();
+my $bed         = $opts{b};
+my $vcf         = $opts{v};
 my $min_depth   = $opts{d} || 0;
 my $from_36     = $opts{T} || 0;
 my $full_report = $opts{f} || 0;
 my $html_out    = $opts{H} || 0;
 my $igv_links   = $opts{I} || 0;
+
+usage() if ( ! $bed && ! $vcf );
 
 my $ens_gene_link = 'http://www.ensembl.org/Homo_sapiens/Gene/Summary?db=core;g=';
 my $ens_trans_link = 'http://www.ensembl.org/Homo_sapiens/Transcript/Summary?db=core;t=';
@@ -70,8 +73,8 @@ if ( $from_36 ) {
 }
 
 
-#my $indels = readin_bed( $bed )      if ( $bed);
-my $indels = readin_vcf( $bed )      if ( $bed);
+my $indels = readin_bed( $bed )      if ( $bed);
+$indels = readin_vcf( $vcf )      if ( $vcf);
 foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
   
 
@@ -85,10 +88,10 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
 
     next if ( $$indel{depth} < 20);
 
+
     my @line;
     push @line, $position;
-    push @line, $$indel{type};
-    push @line, $$indel{variation};
+    push @line, "$$indel{ref}>$$indel{variation}";
     push @line, $$indel{support} . "/". $$indel{depth};
     
     my $effects = indel_effect($chr, $start, $end, "$$indel{variation}/$$indel{type}");
@@ -570,6 +573,7 @@ sub readin_vcf {
   my %res;
   my $used = 0;
   my $dropped = 0;
+  my %indels;
 
   while(<$in>) {
     next if (/^\#/);
@@ -578,10 +582,6 @@ sub readin_vcf {
 
 #    next if ($pass_only && $filter ne 'PASS');
 
-    if ($bait_regions && ! in_bait_region($chr, $pos)) {
-      $dropped++;
-      next;
-    }
 
     $used++;
 
@@ -592,19 +592,25 @@ sub readin_vcf {
       $info_hash{$f[0]} = $f[1];
     }
     
+    my $type = "+";
+
+    $type = "-" if (length ($ref_base) > length( $alt_base ));
+
 
     my $depth = $info_hash{ DP };
-    my $support = split(",",$info_hash{ AC });
+    my ($support) = split(",",$info_hash{ AC });
 
-    $indels{ $chr }{ $start } = { type      => $type,
-				  ref       => $ref_base,
-				  variation => $alt_base,
-				  depth     => $depth,
-				  support   => $support,
-				  change    => $change };
+    $indels{ $chr }{ $pos } = { ref       => $ref_base,
+				end       => $pos + (length( $alt_base))-1,
+				variation => $alt_base,
+				depth     => $depth,
+				support   => $support,
+				    type => $type};
     
     
   }
+
+  return \%indels;
 
 }
 

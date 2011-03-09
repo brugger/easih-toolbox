@@ -23,7 +23,7 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 
 my %opts;
-getopts('b:d:TfHhI', \%opts);
+getopts('b:v:d:TfHhI', \%opts);
 usage() if ( $opts{h});
 
 my $species     = "human";
@@ -34,7 +34,7 @@ my $user        = 'anonymous';
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
 #$reg->load_registry_from_db(-host => $host,-user => $user);
-  $reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
+$reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
 
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
@@ -70,7 +70,8 @@ if ( $from_36 ) {
 }
 
 
-my $indels = readin_bed( $bed )      if ( $bed);
+#my $indels = readin_bed( $bed )      if ( $bed);
+my $indels = readin_vcf( $bed )      if ( $bed);
 foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
   
 
@@ -554,6 +555,57 @@ sub readin_bed {
 
 
   return \%indels;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (28 Apr 2010)
+sub readin_vcf {
+  my ($file) = @_;
+  open (my $in, $file) || die "Could not open '$file': $!";
+
+  my %res;
+  my $used = 0;
+  my $dropped = 0;
+
+  while(<$in>) {
+    next if (/^\#/);
+    
+    my ($chr, $pos, $id, $ref_base, $alt_base, $qual, $filter, $info) = split("\t");
+
+#    next if ($pass_only && $filter ne 'PASS');
+
+    if ($bait_regions && ! in_bait_region($chr, $pos)) {
+      $dropped++;
+      next;
+    }
+
+    $used++;
+
+
+    my %info_hash;
+    foreach my $entry (split("\;", $info )) {
+      my @f=split("\=", $entry); 
+      $info_hash{$f[0]} = $f[1];
+    }
+    
+
+    my $depth = $info_hash{ DP };
+    my $support = split(",",$info_hash{ AC });
+
+    $indels{ $chr }{ $start } = { type      => $type,
+				  ref       => $ref_base,
+				  variation => $alt_base,
+				  depth     => $depth,
+				  support   => $support,
+				  change    => $change };
+    
+    
+  }
+
 }
 
 

@@ -70,6 +70,12 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
     $QC = EASIH::QC::fastQC( $fastq_file, 1 );
     $base_name = $fastq_file;
     $infile    = $fastq_file;
+    if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
+      $base_name =~ s/\.\///;
+      my $cwd = `pwd`;
+      chomp $cwd;
+      $base_name = "$cwd/$base_name";
+    }
     $base_name =~ s/(.*?\.[12])\..*/$1/ ||  $base_name =~ s/(.*?)\..*/$1/; 
     $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
     EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
@@ -79,6 +85,12 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
     $QC = EASIH::QC::csfastaQC( $csfasta_file);
     $base_name = $csfasta_file;
     $infile    = $csfasta_file;
+    if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
+      $base_name =~ s/\.\///;
+      my $cwd = `pwd`;
+      chomp $cwd;
+      $base_name = "$cwd/$base_name";
+    }
     $base_name =~ s/(.*?)\..*/$1/;
     $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
     EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
@@ -87,8 +99,15 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   if ( $qual_file ) {
     $QC = EASIH::QC::qualQC( $qual_file );
 
+
     $base_name = $qual_file;
     $infile    = $qual_file;
+    if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
+      $base_name =~ s/\.\///;
+      my $cwd = `pwd`;
+      chomp $cwd;
+      $base_name = "$cwd/$base_name";
+    }
     $base_name =~ s/(.*?)\..*/$1/;
     $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
 
@@ -100,8 +119,8 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   print $out latex_header();
   print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
-  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates});
-  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
+  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates}) if ( $platform eq "ILLUMINA");
+  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor}) if ( $platform eq "ILLUMINA");
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
 
@@ -202,11 +221,18 @@ sub latex_summary {
     $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%')  if ( $mappable && $mappable > 95);
     $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable >= 70 && $mappable <= 95);
     $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')    if ( $mappable && $mappable < 70);
+
+    $s .= latex_coloured_row("green", "Duplicated sequences", $dups.'\%')  if ( $dups && $dups < 1 );
+    $s .= latex_coloured_row("yellow", "Duplicated sequences", $dups.'\%') if ( $dups && $dups >= 1 && $dups <= 10 );
+    $s .= latex_coloured_row("red", "Duplicated sequences", $dups.'\%')    if ( $dups && $dups > 10 );
+
+    if ( $partial_adaptor ) {
+      $s .= latex_coloured_row("green", 'Partial adaptors ', $partial_adaptor.'\%')  if ( $partial_adaptor < 1 );
+      $s .= latex_coloured_row("yellow", 'Partial adaptors ', $partial_adaptor.'\%') if ( $partial_adaptor >= 1 && $partial_adaptor <= 10 );
+      $s .= latex_coloured_row("red", 'Partial adaptors ', $partial_adaptor.'\%')    if ( $partial_adaptor > 10 );
+    }
   }
 
-  $s .= latex_coloured_row("green", "Duplicated sequences", $dups.'\%')  if ( $dups && $dups < 1 );
-  $s .= latex_coloured_row("yellow", "Duplicated sequences", $dups.'\%') if ( $dups && $dups >= 1 && $dups <= 10 );
-  $s .= latex_coloured_row("red", "Duplicated sequences", $dups.'\%')    if ( $dups && $dups > 10 );
 
   if ( $AC ) {
     $s .= latex_coloured_row("green", 'Avg \% AC ', $AC.'\%')  if ( $AC >= 45 && $AC <= 55 );
@@ -215,11 +241,6 @@ sub latex_summary {
     $s .= latex_coloured_row("red", 'Avg \% AC ', $AC.'\%')    if ( $AC < 40 || $AC > 60 );
   }
 
-  if ( $partial_adaptor ) {
-    $s .= latex_coloured_row("green", 'Partial adaptors ', $partial_adaptor.'\%')  if ( $partial_adaptor < 1 );
-    $s .= latex_coloured_row("yellow", 'Partial adaptors ', $partial_adaptor.'\%') if ( $partial_adaptor >= 1 && $partial_adaptor <= 10 );
-    $s .= latex_coloured_row("red", 'Partial adaptors ', $partial_adaptor.'\%')    if ( $partial_adaptor > 10 );
-  }
 
 
   $s .= q(\end{tabular}) . "\n";

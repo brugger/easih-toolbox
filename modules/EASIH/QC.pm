@@ -137,6 +137,7 @@ sub fastQC {
   if ( $random_sample ) {
     if ( $infile1 =~ /gz/) {
       $res = random_sample_fastq_gz( $infile1, $res);
+#      print Dumper( $res );
     }
     else {
       $res = random_sample_fastq( $infile1, $res);
@@ -169,6 +170,7 @@ sub fastQC {
       $res = mappable( $quality, $res) if ($mappable); 
     }
   }
+
 
   $$res{mappability} = sprintf("%.2f", 100*$$res{mappable}/$$res{reads}) if ($mappable); 
   foreach my $seq ( keys %duplicates ) {
@@ -269,7 +271,7 @@ sub analyse {
       $$res{base_dist}[$i]{$base}++;
     }
 
-    if ( $qual ) {
+    if ( $qual && $qual[$i]) {
       my $base_qual = ord($qual[$i]) - 33;
       $base_qual = int($base_qual/2) if ( $base_qual > 40);
       
@@ -736,38 +738,43 @@ sub check_for_partial_adaptors {
 sub random_sample_fastq_gz {
   my ($infile, $res ) = @_;
 
-
   my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
 
   my $read = 0;
-  my $random_pos = int(rand(1048576)) + 1000;
+  my $random_pos = int(rand(1048576));
   
   while( $sample_size > $read ) {
+
     
-    $random_pos += int(rand(1048576)) + 1000;
+    $random_pos = $z->tell() + int(rand(5120));
     if ( ! $z->seek($random_pos, SEEK_SET) ) {
       close($z);
       $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-      print STDERR "Start from the beginning again\n";
+      $random_pos = int(rand(1048576));
       next;
     }
 
     while ( $_ =  $z->getline() ) {
-      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/);
+      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
     }
-    
-    if ($_ && $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/) {
+
+    next if (! $_);
+
+    if ($_ && 
+	($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  
+	 $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
       my $name = $_;
       my $seq  = $z->getline();
       my $str  = $z->getline();
       my $qual = $z->getline();
 
-      analyse( $seq, $qual, $res);
-      mappable( $qual, $res);
+      $res = analyse( $seq, $qual, $res);
+      $res = mappable( $qual, $res);
       
       $read += length($seq);
     }
   }
+
 
   return $res;
 }
@@ -790,10 +797,10 @@ sub random_sample_fastq {
     seek( $file1, $random_pos, 0);
     
     while ( <$file1> ) {
-      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/);
+      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
     }
     
-    if ($_ && $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/) {
+    if ($_ && $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ || $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/) {
       my $name = $_;
       my $seq  = <$file1>;
       my $str  = <$file1>;
@@ -821,15 +828,16 @@ sub random_sample_csfasta_gz {
   my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
 
   my $read = 0;
-  my $random_pos = int(rand(1048576)) + 1000;
+  my $random_pos = int(rand(1048576));
   
   while( $sample_size > $read ) {
     
-    $random_pos += int(rand(1048576)) + 1000;
+    $random_pos = $z->tell() + int(rand(5120));
     if ( ! $z->seek($random_pos, SEEK_SET) ) {
       close($z);
       $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-      print STDERR "Start from the beginning again\n";
+#      print STDERR "Start from the beginning again\n";
+      $random_pos = int(rand(1048576));
       next;
     }
 
@@ -896,15 +904,16 @@ sub random_sample_qual_gz {
   my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
 
   my $read = 0;
-  my $random_pos = int(rand(1048576)) + 1000;
+  my $random_pos = int(rand(1048576));
   
   while( $sample_size > $read ) {
     
-    $random_pos += int(rand(1048576)) + 1000;
+    $random_pos = $z->tell() + int(rand(5120));
     if ( ! $z->seek($random_pos, SEEK_SET) ) {
       close($z);
       $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-      print STDERR "Start from the beginning again\n";
+      #print STDERR "Start from the beginning again\n"; 
+      $random_pos = int(rand(1048576));
       next;
     }
 

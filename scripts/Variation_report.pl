@@ -62,9 +62,7 @@ my $exit_count = 10;
 my $snp_vcf      = $opts{s};
 my $indel_vcf    = $opts{i};
 my $bam          = $opts{b};
-my $regulation   = $opts{r} || 0;
-die "Regulation does not work anymore, as the pipeline runs locally!\n" if ( $regulation);
-my $pfam         = $opts{p} || 0;
+my $pfam         = $opts{p} || 1;
 my $from_36      = $opts{T} || 0;
 my $min_mapq     = undef; #$opts{m} || undef;
 my $no_ensembl   = $opts{n} || 0;
@@ -72,7 +70,6 @@ my $min_qual     = $opts{q} || undef;
 #my $at_ENSEMBL   = $opts{E} || 0;
 my $grantham     = $opts{g} || 0;
 my $pass_only    = 0;#$opts{P} || 0;
-my $phylop_phast = $opts{P} || 0;
 my $hgmd         = $opts{m} || 0;
 
 my $baits        = $opts{B} || "";
@@ -92,7 +89,7 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 		'HGMD_MUTATION'          => 10, 
 		'SPLICE_SITE'            =>  8, 
 		'PARTIAL_CODON'          =>  8,
-		'SYNONYMOUS_CODING'      =>  1, 
+		'SYNONYMOUS_CODING'      =>  5, 
 		'REGULATORY_REGION'      =>  3, 
 		'WITHIN_MATURE_miRNA'    =>  3, 
 		'5PRIME_UTR'             =>  1,
@@ -100,10 +97,10 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 		'UTR'                    =>  1, 
 		'INTRONIC'               =>  1, 
 		'NMD_TRANSCRIPT'         =>  1, 
-		'WITHIN_NON_CODING_GENE' =>  5, 
+		'WITHIN_NON_CODING_GENE' =>  1, 
 		'UPSTREAM'               =>  2,
 		'DOWNSTREAM'             =>  2, 
-		'INTERGENIC'             =>  0,
+		'INTERGENIC'             =>  2,
 		'NO_CONSEQUENCE'         =>  0, 
     );
 
@@ -267,83 +264,51 @@ sub print_results {
     print "#dbases: ". EASIH::SNPs::db_info();
 
     print "#bait filtering with a leeway of: $leeway and $baits as the bait file\n" if ($baits );
-
     
     my @annotations = ('Position', 'Change', 'Filter', 'Score', 'Depth', 'Genotype');
     push @annotations, ('', '', '', '', '') if ( $bam );
       
     push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
-    push @annotations, ('Grantham score') if ( $grantham);
+    push @annotations, ('Grantham score');
     push @annotations, ('dbsnp') if ( ! $no_ensembl);
-    push @annotations, ('dbsnp freq') if ( $use_local_dbsnp);
     push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
-    push @annotations, ('HGMD') if ( $hgmd );
-    push @annotations, ('phylop') if ( $phylop_phast);
-    push @annotations, ('phast') if ( $phylop_phast);
+    push @annotations, ('HGMD');
 
 
     push @annotations, 'pfam' if ( $pfam );
-    push @annotations, 'regulation' if ( $regulation );
 
     push @res, [@annotations];
   }
 
-  if ( ! $effects ) {
+#  print Dumper( $effects );
 
-    foreach my $name (sort keys %$mapping) {
-      
-      my @line;
-      
-	push @line, "$name";
-
-      push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
-      push @line, $$mapping{$name}{filter};
-      push @line, $$mapping{$name}{qual};
-      
-      push @line, $$mapping{$name}{depth};      
-      push @line, $$mapping{$name}{genotype};
-      if ( $$mapping{$name}{base_dist} ) {
-	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      }
-      
-      push @res, \@line;
+  foreach my $effect ( @$effects ) {
+    
+    my $name = $$effect[0]{ name };
+    
+    my @line;
+    push @line, "$name";
+    
+    push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
+    push @line, $$mapping{$name}{filter};
+    push @line, $$mapping{$name}{qual};
+    push @line, $$mapping{$name}{depth};      
+    push @line, $$mapping{$name}{genotype};
+    if ( $$mapping{$name}{base_dist} ) {
+      #push @line, $$mapping{$name}{base_dist}{total};      
+      #push @line, $$mapping{$name}{genotype};
+      map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
-
-  }
-  else {
-
-    foreach my $effect ( @$effects ) {
       
-      my $name = $$effect[0]{ name };
-
-      my @line;
-      push @line, "$name";
-
-      push @line, "$$mapping{$name}{ref_base}>$$mapping{$name}{alt_base}";
-      push @line, $$mapping{$name}{filter};
-      push @line, $$mapping{$name}{qual};
-      push @line, $$mapping{$name}{depth};      
-      push @line, $$mapping{$name}{genotype};
-      if ( $$mapping{$name}{base_dist} ) {
-	#push @line, $$mapping{$name}{base_dist}{total};      
-	#push @line, $$mapping{$name}{genotype};
-	map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
-      }
+    
+    # find the most important/interesting variation effect
+    
+    my $picked_effect;
+    foreach my $snp_effect (@$effect) {
       
-
-      # find the most important/interesting variation effect
-      
-      my $picked_effect;
-      foreach my $snp_effect (@$effect) {
-
-
-	next if ($$snp_effect{ stable_id } && ! $$snp_effect{ external_name });
-	next if (  $$snp_effect{ external_name } && !$$snp_effect{ xref });
-
-#	next if ( ! $$snp_effect{ external_name } || !$$snp_effect{ xref });
 
 	if ( $picked_effect && 
-	     $effects{ $$picked_effect{ position }} < $effects{ $$snp_effect{ position }}) {
+	     $effects{ $$picked_effect{ effect }} < $effects{ $$snp_effect{ effect }}) {
 	  $picked_effect = $snp_effect;
 	}
 	else {
@@ -359,54 +324,50 @@ sub print_results {
 	my @effect_line;
 	
 	my $gene_id = "";
-	
-	$gene_id = "$$snp_effect{ external_name }/$$snp_effect{ stable_id }" if ($$snp_effect{ external_name } && 
-										 $$snp_effect{ stable_id } );
-	
-	$gene_id = "$$snp_effect{ stable_id }" if (!$$snp_effect{ external_name } && 
-						   $$snp_effect{ stable_id } );
-	
-	$gene_id = "$$snp_effect{ external_name }" if ($$snp_effect{ external_name });
+	$gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
 	
 	push @effect_line, $gene_id;
 	
 	
 	my $trans_id = "";
-	
-	$trans_id = "$$snp_effect{ xref }/$$snp_effect{ transcript_id }" if ($$snp_effect{ xref } && 
-									     $$snp_effect{ transcript_id } );
-	
-	$trans_id = "$$snp_effect{ transcript_id }" if (!$$snp_effect{ xref } && 
-							$$snp_effect{ transcript_id } );
-
 	$trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
 	
 	
 	push @effect_line, $trans_id;
-	push @effect_line, $$snp_effect{ position } || "";
+	push @effect_line, $$snp_effect{ effect }   || "";
 	push @effect_line, $$snp_effect{ cpos }     || "";
 	push @effect_line, $$snp_effect{ ppos }     || "";
-	push @effect_line, $$snp_effect{ grantham } || "" if ( $grantham );
+	push @effect_line, $$snp_effect{ grantham } || "";
 
 
 	push @effect_line, $$snp_effect{ rs_number   } || "";
-	push @effect_line, $$snp_effect{ dbsnp_freq  } || "" if ( $use_local_dbsnp );
 	push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
 
-	push @effect_line, $$snp_effect{ HGMD   } || "" if ( $hgmd );
-	push @effect_line, $$snp_effect{ phylop } || "" if ( $phylop_phast );
-	push @effect_line, $$snp_effect{ phast  } || "" if ( $phylop_phast );
+	push @effect_line, $$snp_effect{ HGMD   } || "";
 
 
 #	die Dumper( $snp_effect ) if ( $$snp_effect{ dbsnp_freq } );
 
 	push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
-	push @effect_line, $$snp_effect{ regulation } || "" if ( $regulation);
+
+	foreach my $tool (qw(SIFT PolyPhen Condel)) {
+	  my $lc_tool = lc($tool);
+	  
+	  my $pred_meth   = $lc_tool.'_prediction';
+	  my $score_meth  = $lc_tool.'_score';
+	  if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
+	    push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
+	  }
+	  else {
+	    push @effect_line, "";
+	  }
+	}
 
 	push @res, [@line, @effect_line];
+
       }
     }
-  }
+  
 
   print text_table(\@res, 1);
   
@@ -417,8 +378,327 @@ sub print_results {
 # 
 # 
 # 
-# Kim Brugger (28 May 2010)
+# Kim Brugger (26 Apr 2011), contact: kim.brugger@easih.ac.uk
 sub variation_effects {
+  my ($var_features) = @_;
+
+  my @res = ();
+  my $feature = 0;
+  
+  foreach my $vf (@$var_features) {    
+
+    my $name = $vf->variation_name();
+
+    my $existing_vf = "";
+    my ($dbsnp_flags, $dbsnp_freq, $HGMD) = ('','', '');
+    if ( $use_local_dbsnp ) {
+      my ($chr, $pos);
+      if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
+	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
+	#	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
+      }
+      else {
+ 	($chr, $pos) = split(":", $vf->variation_name());
+      }
+      
+      my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
+      
+      if ( $result->{rs} ) {
+ 	$existing_vf = $result->{rs};
+ 	$dbsnp_flags = $result->{flags} || "";
+ 	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
+ 	$HGMD        = $result->{hgmd};
+      }
+    }
+    
+  # get consequences
+  # results are stored attached to reference VF objects
+  # so no need to capture return value here
+    foreach my $tv (@{$vf->get_all_TranscriptVariations}) {
+
+      if($tv->cdna_start && $tv->cdna_end && $tv->cdna_start > $tv->cdna_end) {
+	($tv->{'cdna_start'}, $tv->{'cdna_end'}) = ($tv->{'cdna_end'}, $tv->{'cdna_start'});
+      }
+      
+      if($tv->translation_start &&  $tv->translation_end && $tv->translation_start > $tv->translation_end) {
+	($tv->{'translation_start'}, $tv->{'translation_end'}) = ($tv->{'translation_end'}, $tv->{'translation_start'});
+      }
+
+
+
+      foreach my $tva (@{$tv->get_all_alternate_TranscriptVariationAlleles}) {
+	
+	my %gene_res;
+	$gene_res{ effect } = "INTERGENIC";
+       $gene_res{ name } = $name;	
+	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
+
+	my $gene = ($tv->transcript ? $ga->fetch_by_transcript_stable_id($tv->transcript->stable_id) : undef);
+
+	my @entries = grep {$_->database eq 'HGNC'} @{$gene->get_all_DBEntries()};
+	if(scalar @entries) {
+	  my @effects = @{$tv->consequence_type};
+	  $gene_res{ effect } =  $effects[0];
+	  $gene_res{ HGMD } = "Y" if (grep /'HGMD_MUTATION'/, @effects);
+
+	  if ( $tva->transcript && grep /$gene_res{ effect }/, ('ESSENTIAL_SPLICE_SITE', 
+							       'STOP_GAINED',
+							       'STOP_LOST',
+							       'COMPLEX_INDEL',
+							       'FRAMESHIFT_CODING',
+								'NON_SYNONYMOUS_CODING', 
+								'UPSTREAM',
+								'DOWNSTREAM', 
+								'UTR')) {
+
+	  $gene_res{ HGNC } = $entries[0]->display_id;
+	  my $xref = $tva->transcript->get_all_DBEntries('RefSeq_dna' );
+	
+	  $gene_res{ xref } = $$xref[0]->display_id if ( $$xref[0] );
+ 	  my $gene = $ga->fetch_by_transcript_stable_id($tva->transcript->stable_id);
+	  
+ 	  $gene_res{ cpos } = "";
+ 	  $gene_res{ ppos } = "";
+
+ 	  $gene_res{ cpos } = "c.".$tv->cdna_start if ( $tv->cdna_start);
+
+ 	  if ( $tv->translation_start) {
+ 	    my ( $old, $new ) = ("","");
+ 	    if ($tv->pep_allele_string) {
+ 	      ( $old, $new ) = split("\/", $tv->pep_allele_string);
+	      
+ 	      $new = $old if ( !$new || $new eq "");
+ 	      $old = one2three( $old );
+ 	      $new = one2three( $new );
+ 	      $gene_res{ ppos } = "p.$old".$tv->translation_start . " $new";
+ 	      $gene_res{ grantham } = grantham_score($old, $new);
+ 	    }
+
+ 	    my $protein = $tv->transcript->translation();
+
+ 	    my $prot_feats = $protein->get_all_ProteinFeatures();
+	    
+ 	    while (my $prot_feat = shift @{ $prot_feats }) {
+ 	      my $logic_name = $prot_feat->analysis()->logic_name();
+	      
+ 	      next if ( $logic_name ne 'Pfam');
+	      
+ 	      if ($tva->translation_start >= $prot_feat->start() and
+ 		  $tva->translation_end <= $prot_feat->end() ) {
+		
+ 		$gene_res{ pfam }     = $prot_feat->idesc();
+ 		$gene_res{ interpro } = $prot_feat->interpro_ac();
+ 	      } 
+ 	    }
+ 	  }
+ 	}
+	  
+
+	}
+
+	# extra
+	my $extra = "";
+	
+	# HGVS
+	$gene_res{ 'HGVSc' } = $tva->hgvs_coding if defined($tva->hgvs_coding);
+	$gene_res{ 'HGVSp' } = $tva->hgvs_protein if defined($tva->hgvs_protein);
+	
+	foreach my $tool (qw(SIFT PolyPhen Condel)) {
+	  my $lc_tool = lc($tool);
+	  
+	  my $pred_meth   = $lc_tool.'_prediction';
+	  my $score_meth  = $lc_tool.'_score';
+	  
+	  my $pred = $tva->$pred_meth;
+	  my $score = $tva->$score_meth;
+	  
+	  $gene_res{$pred_meth} = $score if ($score);
+	  $gene_res{$score_meth} = $pred if ($pred);
+	}
+	
+ 	$gene_res{ rs_number }   = $existing_vf || "";
+ 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
+ 	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
+
+	push @{$res[$feature]}, \%gene_res;
+
+	next;
+      }
+    }
+    $feature++;
+  }
+  return \@res;
+}
+
+
+#     my $name = $vf->variation_name();
+#     # find any co-located existing VFs
+#     my $existing_vf = "";
+#     my $regulations;
+    
+#     if(defined($vf->adaptor->db)) {
+#       my $fs = $vf->feature_Slice;
+
+#       if($fs->start > $fs->end) {
+# 	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
+#       }
+#       foreach my $existing_vf_obj(@{$vf->adaptor->fetch_all_by_Slice($fs)}) {
+# 	$existing_vf = $existing_vf_obj->variation_name
+# 	    if ($existing_vf_obj->seq_region_start == $vf->seq_region_start &&
+# 		$existing_vf_obj->seq_region_end   == $vf->seq_region_end );
+#       }
+
+     
+#     }
+
+
+
+# #	$existing_vf = "";
+#     my ($dbsnp_flags, $dbsnp_freq, $HGMD, $phylop, $phast) = ('','', '', '', '');
+#     if ( $use_local_dbsnp ) {
+#       my ($chr, $pos);
+#       if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
+# 	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
+# #	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
+#       }
+#       else {
+# 	($chr, $pos) = split(":", $vf->variation_name());
+#       }
+
+#       my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
+
+#       if ( $result->{rs} ) {
+# 	$existing_vf = $result->{rs};
+# 	$dbsnp_flags = $result->{flags} || "";
+# 	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
+# 	$HGMD        = $result->{hgmd};
+#       }
+
+#       $phylop = EASIH::SNPs::phylop_score_GRCh37($chr, $pos); 
+#       $phast  = EASIH::SNPs::phast_score_GRCh37($chr, $pos); 
+	  
+#     }
+
+	
+#     # the get_all_TranscriptVariations here now just retrieves the
+#     # objects that were attached above - it doesn't go off and do
+#     # the calculation again		
+#     foreach my $tva (@{$vf->get_all_TranscriptVariations}) {
+
+#       my %gene_res;
+#       $gene_res{ name } = $name;
+      
+#       foreach my $string (@{$tva->consequence_type}) {
+	
+# 	$gene_res{ position } = $string;
+
+# 	if($tva->cdna_start && $tva->cdna_end && $tva->cdna_start > $tva->cdna_end) {
+# 	  ($tva->{'cdna_start'}, $tva->{'cdna_end'}) = ($tva->{'cdna_end'}, $tva->{'cdna_start'});
+# 	}
+	
+# 	if($tva->translation_start &&  $tva->translation_end && $tva->translation_start > $tva->translation_end) {
+# 	  ($tva->{'translation_start'}, $tva->{'translation_end'}) = ($tva->{'translation_end'}, $tva->{'translation_start'});
+# 	}
+
+# 	if ( $con->transcript ) {
+
+
+# 	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
+	  
+# 	  $gene_res{ external_name } = $gene->external_name;
+# 	  $gene_res{ stable_id}      = $gene->stable_id;
+# 	  $gene_res{ transcript_id}  = $con->transcript->stable_id;
+
+# 	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
+  
+# 	  $gene_res{ xref } = $$xref[0]->display_id
+# 	      if ( $$xref[0] );
+
+# 	  $gene_res{ cpos } = "";
+# 	  $gene_res{ ppos } = "";
+
+
+# 	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
+
+
+
+# 	  if ( $con->translation_start) {
+# 	    my ( $old, $new ) = ("","");
+# 	    if ($con->pep_allele_string) {
+# 	      ( $old, $new ) = split("\/", $con->pep_allele_string);
+	      
+# 	      $new = $old if ( !$new || $new eq "");
+# 	      $old = one2three( $old );
+# 	      $new = one2three( $new );
+# 	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
+# 	      $gene_res{ grantham } = grantham_score($old, $new);
+# 	    }
+
+# 	    my $protein = $con->transcript->translation();
+
+# 	    my $prot_feats = $protein->get_all_ProteinFeatures();
+	    
+# 	    while (my $prot_feat = shift @{ $prot_feats }) {
+# 	      my $logic_name = $prot_feat->analysis()->logic_name();
+	      
+# 	      next if ( $logic_name ne 'Pfam');
+	      
+# 	      if ($con->translation_start >= $prot_feat->start() and
+# 		  $con->translation_end <= $prot_feat->end() ) {
+		
+# 		$gene_res{ pfam }     = $prot_feat->idesc();
+# 		$gene_res{ interpro } = $prot_feat->interpro_ac();
+# 	      } 
+# 	    }
+# 	  }
+# 	}
+
+# 	$gene_res{ regulation } = $regulations; 
+
+# 	$gene_res{ rs_number }   = $existing_vf || "";
+# 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
+# 	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
+# 	$gene_res{ HGMD   } = $HGMD || "";
+# 	$gene_res{ phylop } = $phylop || "";
+# 	$gene_res{ phast  } = $phast || "";
+
+# 	push @{$res[$feature]}, \%gene_res;
+
+#       }
+#     }
+#     $feature++;
+#   }
+
+#   return \@res;
+# }
+
+
+sub format_coords {
+	my ($start, $end) = @_;
+	
+	if(!defined($start)) {
+		return '-';
+	}
+	elsif(!defined($end)) {
+		return $start;
+	}
+	elsif($start == $end) {
+		return $start;
+	}
+	elsif($start > $end) {
+		return $end.'-'.$start;
+	}
+	else {
+		return $start.'-'.$end;
+	}
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (28 May 2010)
+sub variation_effects_old {
   my ($var_features) = @_;
 
 
@@ -434,7 +714,6 @@ sub variation_effects {
     my $name = $vf->variation_name();
     # find any co-located existing VFs
     my $existing_vf = "";
-    my $regulations;
     
     if(defined($vf->adaptor->db)) {
       my $fs = $vf->feature_Slice;
@@ -553,7 +832,6 @@ sub variation_effects {
 	  }
 	}
 
-	$gene_res{ regulation } = $regulations; 
 
 	$gene_res{ rs_number }   = $existing_vf || "";
 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
@@ -1171,6 +1449,8 @@ sub grantham_score {
 
   $aa1 = uc($aa1);
   $aa2 = uc($aa2);
+
+  return 0 if ( $aa1 eq $aa2);
   
   ($aa1, $aa2) = ($aa2, $aa1) if ($aa1 gt $aa2);
   
@@ -1471,10 +1751,6 @@ Extracts pfam domains information from ensembl
 =item B<-q>: 
 
 Minumum SNP quality to report
-
-=item B<-r>:
-
-Extracts regulation information from ensembl
 
 =item B<-v F<vcf file>>: 
 

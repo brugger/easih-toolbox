@@ -13,6 +13,7 @@ use Getopt::Std;
 use lib '/software/lib/e62/ensembl-variation/modules/';
 use lib '/software/lib/e62/ensembl-functgenomics/modules/';
 use lib '/software/lib/e62/ensembl/modules/';
+use lib '/software/lib/e62/ensembl-compara/modules/';
 use lib '/software/lib/bioperl/';
 
 use lib '/home/kb468/easih-toolbox/modules/';
@@ -33,11 +34,10 @@ my %opts;
 getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:i:', \%opts);
 perldoc() if ( $opts{h});
 
-my $species     = $opts{s} || "human";
+my $species     = $opts{S} || "human";
 my $buffer_size = 1;
 my $host        = 'mgpc17';
 my $user        = "easih_ro";
-
 
 $host = "ensembldb.ensembl.org";
 $user = "anonymous"; 
@@ -49,7 +49,7 @@ if ( $opts{ Q }  ) {
 
   $opts{s} = "$opts{Q}.snps.vcf";
   $opts{i} = "$opts{Q}.indels.vcf";
-  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
+#  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var.csv";
   $opts{g} = 1;
 #  $opts{p} = 1;
@@ -86,7 +86,7 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 		'COMPLEX_INDEL'          => 10,
 		'FRAMESHIFT_CODING'      => 10, 
 		'NON_SYNONYMOUS_CODING'  => 10, 
-		'HGMD_MUTATION'          => 10, 
+		'HGMD_MUTATION'          =>  0, 
 		'SPLICE_SITE'            =>  8, 
 		'PARTIAL_CODON'          =>  8,
 		'SYNONYMOUS_CODING'      =>  5, 
@@ -104,18 +104,24 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 		'NO_CONSEQUENCE'         =>  0, 
     );
 
-#open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
+open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
   
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
-$reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0);
+$reg->load_registry_from_db(-host => $host,-user => $user);
 
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
 my $tva = $reg->get_adaptor($species, 'variation', 'transcriptvariation');
 my $sa  = $reg->get_adaptor($species, 'core', 'slice');
 my $ga  = $reg->get_adaptor($species, 'core', 'gene');
-#my $afa = $reg->get_adaptor($species, 'funcgen', 'AnnotatedFeature');
+
+# Getting the MethodLinkSpeciesSet adaptor: 
+my $mlssa = $reg->get_adaptor('Multi', 'compara', 'MethodLinkSpeciesSet');
+#Get constrained element method_list_species_set
+my $ce_mlss =  $mlssa->fetch_by_method_link_type_species_set_name("GERP_CONSTRAINED_ELEMENT", "mammals");
+#Get constrained_element adaptor
+my $ce_adaptor = $reg->get_adaptor('Multi', 'compara', 'ConstrainedElement');
 
 
 my %slice_hash = ();
@@ -207,7 +213,7 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
       
       
       if ( @vfs >= $buffer_size) {
-	my $effects = variation_effects(\@vfs);
+	my $effects = variation_effects(\%res, \@vfs);
 	print_results( \%res, $effects);
 	undef @vfs;# = ();	  
 	undef %res;# = ();
@@ -275,7 +281,11 @@ sub print_results {
     push @annotations, ('HGMD');
 
 
-    push @annotations, 'pfam' if ( $pfam );
+    push @annotations, 'pfam';
+    push @annotations, 'PolyPhen';
+    push @annotations, 'SIFT';
+    push @annotations, 'Condel';
+    push @annotations, 'GERP';
 
     push @res, [@annotations];
   }
@@ -300,73 +310,52 @@ sub print_results {
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
       
-    
+
     # find the most important/interesting variation effect
+    my $snp_effect = $$mapping{ $name }{ res };
+    my @effect_line;
+	
+    my $gene_id = "";
+    $gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
     
-    my $picked_effect;
-    foreach my $snp_effect (@$effect) {
-      
+    push @effect_line, $gene_id;
+    
+    my $trans_id = "";
+    $trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
+    
+    push @effect_line, $trans_id;
+    push @effect_line, $$snp_effect{ effect }   || "";
+    push @effect_line, $$snp_effect{ cpos }     || "";
+    push @effect_line, $$snp_effect{ ppos }     || "";
+    push @effect_line, $$snp_effect{ grantham } || "";
 
-	if ( $picked_effect && 
-	     $effects{ $$picked_effect{ effect }} < $effects{ $$snp_effect{ effect }}) {
-	  $picked_effect = $snp_effect;
-	}
-	else {
-	  $picked_effect = $snp_effect;
-	}
+
+    push @effect_line, $$snp_effect{ rs_number   } || "";
+    push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+
+    push @effect_line, $$snp_effect{ HGMD   } || "";
+    push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+
+    foreach my $tool (qw(SIFT PolyPhen Condel)) {
+      my $lc_tool = lc($tool);
+      
+      my $pred_meth   = $lc_tool.'_prediction';
+      my $score_meth  = $lc_tool.'_score';
+      if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
+	push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
       }
-
-      @$effect = ($picked_effect);
-      
-      foreach my $snp_effect (@$effect) {
-	
-
-	my @effect_line;
-	
-	my $gene_id = "";
-	$gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
-	
-	push @effect_line, $gene_id;
-	
-	
-	my $trans_id = "";
-	$trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
-	
-	
-	push @effect_line, $trans_id;
-	push @effect_line, $$snp_effect{ effect }   || "";
-	push @effect_line, $$snp_effect{ cpos }     || "";
-	push @effect_line, $$snp_effect{ ppos }     || "";
-	push @effect_line, $$snp_effect{ grantham } || "";
-
-
-	push @effect_line, $$snp_effect{ rs_number   } || "";
-	push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
-
-	push @effect_line, $$snp_effect{ HGMD   } || "";
-
-
-#	die Dumper( $snp_effect ) if ( $$snp_effect{ dbsnp_freq } );
-
-	push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
-
-	foreach my $tool (qw(SIFT PolyPhen Condel)) {
-	  my $lc_tool = lc($tool);
-	  
-	  my $pred_meth   = $lc_tool.'_prediction';
-	  my $score_meth  = $lc_tool.'_score';
-	  if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
-	    push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
-	  }
-	  else {
-	    push @effect_line, "";
-	  }
-	}
-
-	push @res, [@line, @effect_line];
-
+      else {
+	push @effect_line, "";
       }
     }
+    push @effect_line, $$snp_effect{ gerp } || "";
+
+#    print Dumper( $snp_effect );
+    
+    push @res, [@line, @effect_line];
+    
+  }
+    
   
 
   print text_table(\@res, 1);
@@ -380,7 +369,7 @@ sub print_results {
 # 
 # Kim Brugger (26 Apr 2011), contact: kim.brugger@easih.ac.uk
 sub variation_effects {
-  my ($var_features) = @_;
+  my ($vars, $var_features) = @_;
 
   my @res = ();
   my $feature = 0;
@@ -410,6 +399,14 @@ sub variation_effects {
  	$HGMD        = $result->{hgmd};
       }
     }
+
+
+    my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
+
+    my %gene_res;
+    
+    $gene_res{ effect } = "INTERGENIC";
+    $gene_res{ name } = $name;	
     
   # get consequences
   # results are stored attached to reference VF objects
@@ -427,26 +424,38 @@ sub variation_effects {
 
 
       foreach my $tva (@{$tv->get_all_alternate_TranscriptVariationAlleles}) {
-	
-	my %gene_res;
-	$gene_res{ effect } = "INTERGENIC";
-       $gene_res{ name } = $name;	
-	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
+
 
 	my $gene = ($tv->transcript ? $ga->fetch_by_transcript_stable_id($tv->transcript->stable_id) : undef);
-
 	my @entries = grep {$_->database eq 'HGNC'} @{$gene->get_all_DBEntries()};
+	my @e = map { $_->display_term } @{$tva->get_all_OverlapConsequences};
+	@e = sort { $effects{ $b } <=> $effects{ $a }} @e;
+
+	
+
+
+	next if ( $gene_res{effect} && $effects{ $gene_res{ effect}} > $effects{ $e[0]});
+
+
+	
+	$gene_res{ effect } = $e[0];
+	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
+	$gene_res{gerp} = $$cons[0]->score if ( @$cons );
+
+
+
 	if(scalar @entries) {
 	  my @effects = @{$tv->consequence_type};
 	  $gene_res{ effect } =  $effects[0];
 	  $gene_res{ HGMD } = "Y" if (grep /'HGMD_MUTATION'/, @effects);
 
 	  if ( $tva->transcript && grep /$gene_res{ effect }/, ('ESSENTIAL_SPLICE_SITE', 
-							       'STOP_GAINED',
-							       'STOP_LOST',
-							       'COMPLEX_INDEL',
-							       'FRAMESHIFT_CODING',
+								'STOP_GAINED',
+								'STOP_LOST',
+								'COMPLEX_INDEL',
+								'FRAMESHIFT_CODING',
 								'NON_SYNONYMOUS_CODING', 
+								'INTRONIC',
 								'UPSTREAM',
 								'DOWNSTREAM', 
 								'UTR')) {
@@ -521,6 +530,8 @@ sub variation_effects {
  	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
 
 	push @{$res[$feature]}, \%gene_res;
+	
+	$$vars{ $name }{res} = \%gene_res;
 
 	next;
       }

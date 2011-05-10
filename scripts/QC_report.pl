@@ -25,7 +25,7 @@ my $csfasta_file  = $opts{c};
 my $qual_file     = $opts{q};
 my $bam_file      = $opts{b};
 my $sample_size   = $opts{s} || 20;
-my $platform      = $opts{p} || usage();
+my $platform      = uc($opts{p}) || usage();
 my $random_sample = $opts{r} || 0;
 #sample limit MB
 EASIH::QC::sample_size($sample_size);
@@ -42,12 +42,18 @@ usage() if ( ($fastq_file   && $csfasta_file) ||
 	     ($qual_file    && $bam_file) || 
 	     ! $platform);
 
+
+$platform = "TORRENT" if ( $platform eq "ION");
+
+my %platforms = ( "ILLUMINA" => "Illumina GA2X",
+		  "SOLID"    => "SOLiD v4",
+		  "TORRENT"  => "Ion Torrent");
 # 
 # 
 # Kim Brugger (03 Feb 2011)
 sub usage {
   $0 =~ s/.*\///;
-  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA] -s<ample size (in Mbases)> -r<andom sampling>\n";
+  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA or TORRENT] -s<ample size (in Mbases)> -r<andom sampling>\n";
   exit -1;
 }
 
@@ -119,8 +125,8 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   print $out latex_header();
   print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
-  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates}) if ( $platform eq "ILLUMINA");
-  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor}) if ( $platform eq "ILLUMINA");
+  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC{duplicates}) if ( $platform eq "ILLUMINA" || $platform eq "TORRENT");
+  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor}) if ( $platform eq "ILLUMINA" || $platform eq "TORRENT");
   print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
   print $out latex_tail();
 
@@ -129,8 +135,9 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.pdf");
   system "rm -rf $tmp_dir";
 
+#  print "rm -rf $tmp_dir $platform\n";
 
-  print "Report: $base_name.pdf\n";
+#  print "Report: $base_name.pdf\n";
 }
 elsif ( $bam_file ) {
   my ($QC1, $QC2) = EASIH::QC::bamQC( $bam_file );
@@ -199,9 +206,10 @@ sub latex_summary {
   $s .= q(\begin{table}[!h])."\n";
   $s .= q(\begin{tabular}{|l|l|}\hline)."\n";
   $s .= q(\rowcolor[gray]{.8} Input file & \verb|).$input. q(|\\\\\hline)."\n" if ( $input );
-  $s .= q(Sample size & ).$size. q( Mbases (Random sampling)\\\\\hline)."\n" if ( $size && $random_sample);
-  $s .= q(Sample size & ).$size. q( Mbases\\\\\hline)."\n" if ( $size && !$random_sample);
-  $s .= q(\rowcolor[gray]{.8}Nr of reads & ).$reads.q( reads\\\\\hline)."\n" if ( $reads );
+  $s .= q(Platform & \verb|).$platforms{$platform}. q(|\\\\\hline)."\n" if ( $input );
+  $s .= q(\rowcolor[gray]{.8} Sample size & ).$size. q( Mbases (Random sampling)\\\\\hline)."\n" if ( $size && $random_sample);
+  $s .= q(\rowcolor[gray]{.8} Sample size & ).$size. q( Mbases\\\\\hline)."\n" if ( $size && !$random_sample);
+  $s .= q(Nr of reads & ).$reads.q( reads\\\\\hline)."\n" if ( $reads );
 
   if ( $platform eq "SOLID" ) {
 
@@ -217,6 +225,25 @@ sub latex_summary {
     $s .= latex_coloured_row("green",  'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 > 90);
     $s .= latex_coloured_row("yellow", 'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 <= 90 && $Q30 >= 70);
     $s .= latex_coloured_row("red",    'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 < 70);
+
+    $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%')  if ( $mappable && $mappable > 95);
+    $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable >= 70 && $mappable <= 95);
+    $s .= latex_coloured_row("red", "Mappable prediction", $mappable.'\%')    if ( $mappable && $mappable < 70);
+
+    $s .= latex_coloured_row("green", "Duplicated sequences", $dups.'\%')  if ( $dups && $dups < 1 );
+    $s .= latex_coloured_row("yellow", "Duplicated sequences", $dups.'\%') if ( $dups && $dups >= 1 && $dups <= 10 );
+    $s .= latex_coloured_row("red", "Duplicated sequences", $dups.'\%')    if ( $dups && $dups > 10 );
+
+    if ( $partial_adaptor ) {
+      $s .= latex_coloured_row("green", 'Partial adaptors ', $partial_adaptor.'\%')  if ( $partial_adaptor < 1 );
+      $s .= latex_coloured_row("yellow", 'Partial adaptors ', $partial_adaptor.'\%') if ( $partial_adaptor >= 1 && $partial_adaptor <= 10 );
+      $s .= latex_coloured_row("red", 'Partial adaptors ', $partial_adaptor.'\%')    if ( $partial_adaptor > 10 );
+    }
+  }
+  elsif ( $platform eq "TORRENT" ) {
+    $s .= latex_coloured_row("green",  'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 > 20);
+    $s .= latex_coloured_row("yellow", 'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 <= 20 && $Q30 >= 15);
+    $s .= latex_coloured_row("red",    'Bases $>=$Q30', $Q30.'\%') if ( $Q30 && $Q30 < 10);
 
     $s .= latex_coloured_row("green", "Mappable prediction", $mappable.'\%')  if ( $mappable && $mappable > 95);
     $s .= latex_coloured_row("yellow", "Mappable prediction", $mappable.'\%') if ( $mappable && $mappable >= 70 && $mappable <= 95);
@@ -286,6 +313,8 @@ sub latex_coloured_row {
 # Kim Brugger (02 Feb 2011)
 sub latex_pam {
   my ($PAM, $partial_adaptor) = @_;
+
+  print "$PAM\n";
 
   return if ( !$PAM || ! -e $PAM );
 

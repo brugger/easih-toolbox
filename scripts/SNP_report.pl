@@ -44,10 +44,11 @@ my $user        = 'anonymous';
 if ( $opts{ Q }  ) {
 
   $opts{ Q } =~ s/\.bam//;
+  $opts{ Q } =~ s/\.snps.vcf//;
 
   $opts{v} = "$opts{Q}.snps.vcf";
   $opts{b} = "$opts{Q}.bam";
-  $opts{o} = "$opts{Q}.snps.tab";
+  $opts{o} = "$opts{Q}.snps.csv";
   $opts{g} = 1;
   $opts{p} = 1;
   $opts{P} = 1;
@@ -1006,6 +1007,7 @@ sub base_dist {
   my %res;
   my $alt_perc = 0;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
+    next if ( ! $total );
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     $alt_perc = $perc if ( $base eq $alt_base );
     my $qual = $qual_stats{$base} || 0;

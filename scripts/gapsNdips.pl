@@ -17,7 +17,7 @@ getopts('b:m:hg:l:L:B:', \%opts);
 usage() if ( $opts{h});
 
 my $bam_file  = $opts{b} || usage();
-my $min_depth = 200;
+my $min_depth = 20;
 $min_depth = $opts{m} if ( defined $opts{m});
 my $gap_file  = $opts{g};
 my $low_file  = $opts{l};
@@ -39,7 +39,6 @@ my $seqs = names_n_lengths( $bam_file );
 my (@gaps, @low_coverage);
 
 if ( $regions ) {
-
   foreach my $name ( keys %$regions ) {
     foreach my $se ( @{$$regions{$name}}) {    
       $name =~ s/chr//i;
@@ -49,6 +48,11 @@ if ( $regions ) {
       open (my $depth, "$bam2depth $bam_file $region | ") || die "Could not open bam2depth pipeline with $bam_file $name: $!\n";
       analyse_depth( $depth, $name, $start, $end);
     }
+
+    print_report(\@gaps, $gout);
+    print_report(\@low_coverage, $lout);
+    @gaps = undef;
+    @low_coverage = undef;
   }
 }
 elsif ( $region ) {
@@ -83,6 +87,8 @@ print_report(\@low_coverage, $lout);
 # Kim Brugger (11 Aug 2010)
 sub analyse_depth {
   my ($fh, $name, $start, $end) = @_;
+
+#  print "Analysing $name:$start-$end\n";
 
   my $pre_end = $start;
   my ($low_start, $low_end, $low_depth) = (-1, undef, 0);
@@ -123,6 +129,7 @@ sub print_report {
   $stream = *STDOUT if ( ! $stream );
 
   foreach my $entry ( @$entries ) {
+    next if ($entry == undef);
     $$entry[3] ||= 0;
     print $stream "$$entry[0]:$$entry[1]-$$entry[2]\t$$entry[3]\n";
 #    print $stream join("\t",@$entry)."\n";
@@ -217,6 +224,8 @@ sub readin_bed {
 
     ($chr, $start, $end) = $_ =~ /(.*?):(\d+)-(\d+)/
 	if ( ! $start );
+
+    next if ( ! $chr);
     
     push @{$res{$chr}}, [$start, $end];
   }

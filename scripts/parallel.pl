@@ -12,21 +12,20 @@ use POSIX ':sys_wait_h';
 use POSIX  'tmpnam';
 use Getopt::Std;
 
+my %opts;
+getopts("c:", \%opts);
 
-my $infile = shift || die "USAGE $0 COMMAND-INFILE (runs on 4 cpus)\n";
+my $cpus = nr_of_cpus();
+my $MAX_NODES = $opts{c} || $cpus;
+my $infile = shift || die "USAGE $0 -c[pus to use, (runs on $cpus cpus by default)] COMMAND-INFILE \n";
 
 # Store the user specifed values in more readable named variables.
-my $MAX_NODES = 4;
 my $INFILE    = $infile;
-my $OUTFILE   = "$infile.out";
 
 my @cpids = ();
 my (@outfiles, @errfiles);
 
 # Splits the infile up so there is one entry pr. file.
-print "       Running the '$INFILE' infile on '$MAX_NODES' CPUs\n";
-print "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n";
-print "     Running:      Total :           Done:               Percent:\n";
 
 my @running = ("|","/","-","\\", "|", "/", "-");
 my $running_counter = 0;
@@ -36,27 +35,42 @@ my $done = 0; # to track the number of files handled
 
 my $total = 0;
 my $running_nodes = 0;
-open INFILE, $infile || die "Could not open '$infile': $!\n";
-while (<INFILE>) {
 
-  next if (/^ *\z/);
+my @commands;
+open (my $in, $infile) || die "Could not open '$infile': $!\n";
+while( <$in>) {
+  next if (/^\s*\z/);
+  next if (/^\#/);
+  chomp;
+  push @commands, $_;
+  $total++;
+}  
+
+print "       Running the '$INFILE' infile on '$MAX_NODES' CPUs\n";
+print "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n";
+print "     Running:      Total :           Done:               Percent:\n";
+printf( "         %1s       %5d           %7d                   %3.2f  \r",
+	$running[$running_counter++ % 7], $total, $done, $done*100/$total);
+
+
+while ($_ = shift @commands ) {
 
  FREE_NODE:
-  if ($running_nodes <  $MAX_NODES) {
+  my $load = load();
+  if ( $load < $cpus && $running_nodes <  $MAX_NODES) {
     
-    chomp;
-    my $command = " $_";
+      my $command = "$_";
 #    $command .= "> /dev/null 2>/dev/null";
-
-    $total++;
-
-    my $cpid = create_child($command);
-    $running_nodes++;
-    push @cpids, $cpid;
+      
+#    $total++;
+      
+      my $cpid = create_child($command);
+      $running_nodes++;
+      push @cpids, $cpid;
   }
   else {
     # loop through the nodes to see when one becomes available ...
-    while ($done < $total) {
+    while ($running_nodes) {
       for (my $i = 0; $i <@cpids; $i++) {
 	next if ($cpids[$i] == -10);
 	
@@ -70,7 +84,7 @@ while (<INFILE>) {
 	  $running_nodes--;
 	}
       }
-      sleep 1;
+      sleep 4;
       printf( "         %1s       %5d           %7d                   %3.2f  \r",
               $running[$running_counter++ % 7], $total, $done, $done*100/$total);
       last if ($running_nodes < $MAX_NODES);
@@ -97,7 +111,7 @@ while ($done < $total) {
   }
   printf( "         %1s       %5d           %7d                   %3.2f \r",
 	  $running[$running_counter++ % 7], $total, $done, $done*100/$total);
-  sleep 1;
+  sleep 4;
 }
 
 print "All done.\n";
@@ -107,6 +121,7 @@ sub create_child {
 
   my $pid;
   if ($pid = fork) {
+    ;
   } 
   else {
     die "cannot fork: $!" unless defined $pid;
@@ -121,3 +136,33 @@ sub create_child {
   
   return \$pid;
 }
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jan 2011)
+sub load {
+  
+  my $uptime = `uptime`;
+  
+  $uptime =~ /load average: (\d+.\d+)/;
+  return $1 || undef;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jan 2011)
+sub nr_of_cpus {
+
+  my $cpus = `cat /proc/cpuinfo | egrep ^proc | wc -l`;
+  chomp $cpus;
+  return $cpus;
+}
+
+

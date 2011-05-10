@@ -10,7 +10,6 @@ use warnings;
 use Data::Dumper;
 
 
-die "program csfasta shift\nif shift is 1, the first base is omitted in the output\n" if (@ARGV < 1);
 
 my $csfasta = shift || die "$0 colour_space_string \n";
 my %colourspace = (

@@ -13,7 +13,7 @@ my $argv_list = "";
 
 
 my @java_paths = ("/usr/local/Cluster-Apps/java/",
-		  "/ifs/software/installed/java/",
+		  "/software/installed/java/",
 		  "/usr/local/java/",
 		  "/usr/bin/");
 
@@ -21,7 +21,7 @@ my @java_paths = ("/usr/local/Cluster-Apps/java/",
 my @gatk_paths = ("/usr/local/installed/",
 		  "/home/easih/installed/",
 		  "/home/kb468/bin/gatk_live/",
-		  "/ifs/software/installed/");
+		  "/software/installed/");
 
 my ($java, $gatk);
 set_paths();
@@ -61,7 +61,7 @@ foreach my $argv ( @ARGV ) {
 
 
 #print "$java -jar $gatk $argv_list\n";
-system "$java -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
+system "$java -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list  -et NO_ET\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

@@ -262,6 +262,8 @@ my ($printed_header) = (0);
 sub print_results {
   my ( $mapping, $effects ) = @_;
 
+#  print Dumper($effects);
+
   my @res;
   if ( ! $printed_header++ ) {
     $0 =~ s/.*\///;
@@ -293,6 +295,8 @@ sub print_results {
 #  print Dumper( $effects );
 
   foreach my $effect ( @$effects ) {
+
+#    print Dumper( $effect);
     
     my $name = $$effect[0]{ name };
     
@@ -305,55 +309,53 @@ sub print_results {
     push @line, $$mapping{$name}{depth};      
     push @line, $$mapping{$name}{genotype};
     if ( $$mapping{$name}{base_dist} ) {
-      #push @line, $$mapping{$name}{base_dist}{total};      
-      #push @line, $$mapping{$name}{genotype};
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
-      
 
     # find the most important/interesting variation effect
-    my $snp_effect = $$mapping{ $name }{ res };
-    my @effect_line;
+    foreach my $snp_effect ( @$effect ) {
+#    my $snp_effect = $$mapping{ $name }{ res };
+      my @effect_line;
 	
-    my $gene_id = "";
-    $gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
-    
-    push @effect_line, $gene_id;
-    
-    my $trans_id = "";
-    $trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
-    
-    push @effect_line, $trans_id;
-    push @effect_line, $$snp_effect{ effect }   || "";
-    push @effect_line, $$snp_effect{ cpos }     || "";
-    push @effect_line, $$snp_effect{ ppos }     || "";
-    push @effect_line, $$snp_effect{ grantham } || "";
-
-
-    push @effect_line, $$snp_effect{ rs_number   } || "";
-    push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
-
-    push @effect_line, $$snp_effect{ HGMD   } || "";
-    push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
-
-    foreach my $tool (qw(SIFT PolyPhen Condel)) {
-      my $lc_tool = lc($tool);
+      my $gene_id = "";
+      $gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
       
-      my $pred_meth   = $lc_tool.'_prediction';
-      my $score_meth  = $lc_tool.'_score';
-      if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
-	push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
+      push @effect_line, $gene_id;
+      
+      my $trans_id = "";
+      $trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
+      
+      push @effect_line, $trans_id;
+      push @effect_line, $$snp_effect{ effect }   || "";
+      push @effect_line, $$snp_effect{ cpos }     || "";
+      push @effect_line, $$snp_effect{ ppos }     || "";
+      push @effect_line, $$snp_effect{ grantham } || "";
+      
+      push @effect_line, $$snp_effect{ rs_number   } || "";
+      push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
+      
+      push @effect_line, $$snp_effect{ HGMD   } || "";
+      push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+      
+      foreach my $tool (qw(SIFT PolyPhen Condel)) {
+	my $lc_tool = lc($tool);
+	
+	my $pred_meth   = $lc_tool.'_prediction';
+	my $score_meth  = $lc_tool.'_score';
+	if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
+	  push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
+	}
+	else {
+	  push @effect_line, "";
+	}
       }
-      else {
-	push @effect_line, "";
-      }
-    }
-    push @effect_line, $$snp_effect{ gerp } || "";
-
+      push @effect_line, $$snp_effect{ gerp } || "";
+      
 #    print Dumper( $snp_effect );
-    
-    push @res, [@line, @effect_line];
-    
+      
+      push @res, [@line, @effect_line];
+      
+    }
   }
     
   
@@ -403,10 +405,6 @@ sub variation_effects {
 
     my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
 
-    my %gene_res;
-    
-    $gene_res{ effect } = "INTERGENIC";
-    $gene_res{ name } = $name;	
     
   # get consequences
   # results are stored attached to reference VF objects
@@ -421,28 +419,22 @@ sub variation_effects {
 	($tv->{'translation_start'}, $tv->{'translation_end'}) = ($tv->{'translation_end'}, $tv->{'translation_start'});
       }
 
-
-
       foreach my $tva (@{$tv->get_all_alternate_TranscriptVariationAlleles}) {
 
-
+    my %gene_res;
+    
+#    $gene_res{ effect } = "INTERGENIC";
+    $gene_res{ name } = $name;	
 	my $gene = ($tv->transcript ? $ga->fetch_by_transcript_stable_id($tv->transcript->stable_id) : undef);
 	my @entries = grep {$_->database eq 'HGNC'} @{$gene->get_all_DBEntries()};
 	my @e = map { $_->display_term } @{$tva->get_all_OverlapConsequences};
 	@e = sort { $effects{ $b } <=> $effects{ $a }} @e;
 
-	
-
-
-	next if ( $gene_res{effect} && $effects{ $gene_res{ effect}} > $effects{ $e[0]});
-
-
+#	next if ( $gene_res{effect} && $effects{ $gene_res{ effect}} > $effects{ $e[0]});
 	
 	$gene_res{ effect } = $e[0];
 	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
 	$gene_res{gerp} = $$cons[0]->score if ( @$cons );
-
-
 
 	if(scalar @entries) {
 	  my @effects = @{$tv->consequence_type};

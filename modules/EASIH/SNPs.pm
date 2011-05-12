@@ -34,7 +34,7 @@ my $sth_phast  = $ppdbi->prepare("SELECT score from phast  where chr=? AND pos =
 # Kim Brugger (12 Jan 2011)
 sub db_info {
 
-  return "connected to $snp_db and  $pp_db at localhost (mgpc17)\n";
+  return "connected to $snp_db at mgpc17";
   
 }
 
@@ -162,7 +162,7 @@ sub fetch_flags {
   return undef if ( ! $result->{flags} );
   my $flags = $result->{flags};
   $flags =~ s/RV;//;
-  $flags =~ s/dbSNPBuildID=\d+;//;
+#  $flags =~ s/dbSNPBuildID=\d+;//;
   $flags =~ s/WGT=\d+;//;
   $flags =~ s/SLO;//;
   $flags =~ s/VC=\w+?;//;
@@ -247,7 +247,7 @@ sub fetch_ref_id {
 # 
 # Kim Brugger (08 Dec 2010)
 BEGIN {
-  $snp_db = "dbsnp_132";
+  $snp_db = "dbsnp_132_human";
   $pp_db  = "phylop_phast";
 
   $dbi = DBI->connect("DBI:mysql:$snp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";

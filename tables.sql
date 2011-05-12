@@ -1,44 +1,34 @@
 #DROP TABLE snp;
 #DROP TABLE reference;
 #DROP TABLE population;
+#DROP TABLE populations;
 #DROP TABLE flags;
+
+CREATE TABLE meta (
+  version               VARCHAR(10),
+  species               VARCHAR(120),
+  reference		VARCHAR(120),  
+  filedata              VARCHAR(30)
+
+);
+
 
 CREATE TABLE snp (
 
-  rs                     VARCHAR(50) PRIMARY KEY,
+  rs                     VARCHAR(50),
   chr                    VARCHAR(6),
   pos			 INT NOT NULL,
-  flags			 VARCHAR(500),
-  ref_id		 INT NOT NULL,
-  ref_base		 VARCHAR(1),
-  alt_base		 VARCHAR(1),
-  multi_genotypes        BOOLEAN,
-  centimorgan            FLOAT,
+  ref_base		 VARCHAR(100),
+  alt_base		 VARCHAR(100),
+  class                  VARCHAR(30),
+  hgmd                   VARCHAR(1),
+  flags			 VARCHAR(200),
 
-  KEY pos_idx (ref_id,chr,pos)
-
-);
-
-CREATE TABLE reference (
-
-  ref_id     INT NOT NULL AUTO_INCREMENT,
-  name     	VARCHAR(10),
-  alias         VARCHAR(500)
-);
-
-CREATE TABLE population (
-
-  pop_id       INT NOT NULL AUTO_INCREMENT,
-  pop          VARCHAR(5) NOT NULL,
-  rs           VARCHAR(15) NOT NULL,
-  sample_size  INT,
-  allele_freq  FLOAT,
-
-  PRIMARY KEY (pop_id),
-  KEY rs_pop_idx (rs, pop)
+  PRIMARY KEY (chr,pos),
+  KEY rs_idx (rs)
 );
 
 CREATE TABLE flags (
-  id  VARCHAR(25) PRIMARY KEY,
-  full VARCHAR(500)
+  short VARCHAR(25) PRIMARY KEY NOT NULL,
+  descr  VARCHAR(200)
 );

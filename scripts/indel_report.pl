@@ -9,6 +9,8 @@ use strict;
 use warnings;
 use Data::Dumper;
 
+die "This script is depreciated, please use the Variation_report.pl instead\n";
+
 
 use lib '/software/lib/ensembl-variation/modules/';
 use lib '/software/lib/ensembl-functgenomics/modules/';

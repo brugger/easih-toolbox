@@ -31,7 +31,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:O:i:', \%opts);
+getopts('b:B:i:l:o:O:Q:s:S:T', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{S} || "human";
@@ -42,19 +42,19 @@ my $user        = "easih_ro";
 #$host = "ensembldb.ensembl.org";
 #$user = "anonymous"; 
 
+EASIH::SNPs->New();
+
 if ( $opts{ Q }  ) {
 
   $opts{ Q } =~ s/\.bam//;
   $opts{ Q } =~ s/\.snps.vcf//;
+  $opts{ Q } =~ s/\.indels.vcf//;
 
   $opts{s} = "$opts{Q}.snps.vcf";
   $opts{i} = "$opts{Q}.indels.vcf";
 #  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var.csv";
   $opts{O} = "$opts{Q}.var_full.csv";
-  $opts{g} = 1;
-#  $opts{p} = 1;
-#  $opts{P} = 1;
 }
   
 
@@ -63,15 +63,8 @@ my $exit_count = 10;
 my $snp_vcf      = $opts{s};
 my $indel_vcf    = $opts{i};
 my $bam          = $opts{b};
-my $pfam         = $opts{p} || 1;
 my $from_36      = $opts{T} || 0;
-my $min_mapq     = undef; #$opts{m} || undef;
-my $no_ensembl   = $opts{n} || 0;
-my $min_qual     = $opts{q} || undef;
 #my $at_ENSEMBL   = $opts{E} || 0;
-my $grantham     = $opts{g} || 0;
-my $pass_only    = 0;#$opts{P} || 0;
-my $hgmd         = $opts{m} || 0;
 
 my $baits        = $opts{B} || "";
 my $leeway       = $opts{l} || 100;
@@ -177,18 +170,16 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     $res{$position}{genotype}  = $SNPs{$chr}{$pos}{genotype};
     $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base}) if ( $bam );
     
-    if ( ! $no_ensembl ) {
-      
-      my $Echr = $chr;
-      $Echr =~ s/chr//;
-      my $Epos = $pos;
-      ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
-      
+    my $Echr = $chr;
+    $Echr =~ s/chr//;
+    my $Epos = $pos;
+    ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
+    
 #	$res{$position}{grcH37} = "$Echr:$Epos";
-      
-      next if ( ! $Echr );
-      $grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
-      my $slice = fetch_slice($Echr);
+    
+    next if ( ! $Echr );
+    $grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
+    my $slice = fetch_slice($Echr);
       my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
       
       # create a new VariationFeature object
@@ -215,11 +206,11 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 #	  exit if ($exit_count-- < 0);
       }
     }
-  }
+  
   
   
   if ( @vfs || keys %res ) {
-    my $effects = variation_effects(\@vfs) if ( ! $no_ensembl);
+    my $effects = variation_effects(\@vfs);
     print_results( \%res, $effects);
     @vfs = ();
     %res = ();
@@ -275,10 +266,10 @@ sub print_results {
     my @annotations = ('Position', 'Change', 'Filter', 'Score', 'Depth', 'Genotype');
     push @annotations, ('', '', '', '', '') if ( $bam );
       
-    push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change') if ( ! $no_ensembl);
+    push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change');
     push @annotations, ('Grantham score');
-    push @annotations, ('dbsnp') if ( ! $no_ensembl);
-    push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
+    push @annotations, ('dbsnp');
+    push @annotations, ('dbsnp flags');
     push @annotations, ('HGMD');
 
     push @annotations, 'pfam';
@@ -402,7 +393,7 @@ sub variation_effects {
     my $name = $vf->variation_name();
 
     my $existing_vf = "";
-    my ($dbsnp_flags, $dbsnp_freq, $HGMD) = ('','', '');
+    my ($dbsnp_flags, $HGMD) = ('','', '');
     if ( $use_local_dbsnp ) {
       my ($chr, $pos);
       if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
@@ -413,12 +404,12 @@ sub variation_effects {
  	($chr, $pos) = split(":", $vf->variation_name());
       }
       
-      my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
+      my $result = EASIH::SNPs::fetch_snp($chr, $pos);
       
       if ( $result->{rs} ) {
  	$existing_vf = $result->{rs};
  	$dbsnp_flags = $result->{flags} || "";
- 	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
+	$dbsnp_flags .= ";VC=$result->{class}" if ($result->{class});
  	$HGMD        = $result->{hgmd};
       }
     }
@@ -459,7 +450,6 @@ sub variation_effects {
 
 
  	$gene_res{ rs_number }   = $existing_vf || "";
- 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
  	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
 
 	if(scalar @entries) {
@@ -977,7 +967,6 @@ sub base_dist {
   while(<$st_pipe>) {
     chomp;
     my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");
-    next if ( defined $min_mapq && $min_mapq > $mapq);
 
     ($sequence, $quality) = patch_alignment($sequence, $quality, $cigar);
 
@@ -1685,20 +1674,16 @@ sub usage {
   
   $0 =~ s/.*\///;
 
-  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -p<fam domains> -m<HGMD lookup> -g<rantham scpre> -p<hylop-phast scores> -B[ait file] -l[eeway, default 10 bp]\n";
+  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 10 bp]\n";
 
-  print "\nor extrapolate the standard <bam, vcf, output file> with the -Q flag, this flag also sets phylop-phast, pfam and grantham flags\n";
-  print "EXAMPLE: $0 -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
+  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+  print "EXAMPLE: $0 -Q [base name] -T<ransform>\n";
   print "\n";
 
   
-  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -H<tml out put> -I<GV links> -p<fam domains> -r<egulation information>\n";
-  print "USAGE: -E[nsembl.ensembl.org databases, SLOOOOOOWWWWWERRRRRR ]\n";  
-  print "USAGE: -g[rantham score]\n";  
   print "USAGE: -o[output file]\n";  
-#  print "USAGE: -m[in mapping qual. for base dist. report]\n";  
-  print "USAGE: -q[uality cutoff for SNPs to report]\n";
-  print "USAGE: -f[ multi line report]\n";
+  print "USAGE: -O[output file, filtered, one line/snp]\n";  
+
   exit;
 }
 

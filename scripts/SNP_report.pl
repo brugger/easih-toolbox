@@ -28,6 +28,9 @@ use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
+
+die "This script is depreciated, please use the Variation_report.pl instead\n";
+
 my @argv = @ARGV;
 
 my %opts;

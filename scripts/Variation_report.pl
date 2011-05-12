@@ -31,7 +31,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:i:', \%opts);
+getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:O:i:', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{S} || "human";
@@ -39,8 +39,8 @@ my $buffer_size = 1;
 my $host        = 'mgpc17';
 my $user        = "easih_ro";
 
-$host = "ensembldb.ensembl.org";
-$user = "anonymous"; 
+#$host = "ensembldb.ensembl.org";
+#$user = "anonymous"; 
 
 if ( $opts{ Q }  ) {
 
@@ -51,6 +51,7 @@ if ( $opts{ Q }  ) {
   $opts{i} = "$opts{Q}.indels.vcf";
 #  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var.csv";
+  $opts{O} = "$opts{Q}.var_full.csv";
   $opts{g} = 1;
 #  $opts{p} = 1;
 #  $opts{P} = 1;
@@ -77,8 +78,7 @@ my $leeway       = $opts{l} || 100;
 
 my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
 my $out          = $opts{o} || undef;
-
-
+my $full_out     = $opts{O} || undef;
 
 my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10, 
 		'STOP_GAINED'            => 10, 
@@ -105,6 +105,7 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
     );
 
 open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
+open( my $full_out_fh, "> $full_out") || die "Could not write to '$full_out': $!\n" if ( $full_out );
   
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
@@ -166,15 +167,8 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
         
-    
     my $position = "$chr:$pos";
     
-    my @keys = keys %{$SNPs{$chr}{$pos}};
-
-    @keys = grep(!/ref_base/, @keys);
-    
-    $res{$position}{callers} = join("/", @keys);
-
     $res{$position}{ref_base}  = $SNPs{$chr}{$pos}{ref_base};
     $res{$position}{alt_base}  = $SNPs{$chr}{$pos}{alt_base};
     $res{$position}{qual}      = $SNPs{$chr}{$pos}{qual};
@@ -260,28 +254,32 @@ my ($printed_header) = (0);
 # 
 # Kim Brugger (08 Jul 2010)
 sub print_results {
-  my ( $mapping, $effects ) = @_;
+  my ( $mapping ) = @_;
 
 #  print Dumper($effects);
 
-  my @res;
+  my (@res, @filtered_res);
   if ( ! $printed_header++ ) {
     $0 =~ s/.*\///;
-    print "#EASIH Variation Report v1.20\n";
-    print "#commandline: $0 @argv\n";
-    print "#dbases: ". EASIH::SNPs::db_info();
+    my @header;
+    push @header, [ "#EASIH Variation Report v1.20"];
+    push @header, [ "#commandline: $0 @argv"];
+    push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
 
-    print "#bait filtering with a leeway of: $leeway and $baits as the bait file\n" if ($baits );
+    push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
+
+    push @res, @header;
+    push @filtered_res, @header;
+    push @filtered_res, ["#filtered for most important snp effect"];
     
     my @annotations = ('Position', 'Change', 'Filter', 'Score', 'Depth', 'Genotype');
     push @annotations, ('', '', '', '', '') if ( $bam );
       
-    push @annotations, ('gene', 'transcript', 'region', 'codon pos', 'AA change') if ( ! $no_ensembl);
+    push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change') if ( ! $no_ensembl);
     push @annotations, ('Grantham score');
     push @annotations, ('dbsnp') if ( ! $no_ensembl);
     push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
     push @annotations, ('HGMD');
-
 
     push @annotations, 'pfam';
     push @annotations, 'PolyPhen';
@@ -290,16 +288,11 @@ sub print_results {
     push @annotations, 'GERP';
 
     push @res, [@annotations];
+    push @filtered_res, [@annotations];
   }
 
-#  print Dumper( $effects );
+  foreach my $name ( sort keys %$mapping ) {
 
-  foreach my $effect ( @$effects ) {
-
-#    print Dumper( $effect);
-    
-    my $name = $$effect[0]{ name };
-    
     my @line;
     push @line, "$name";
     
@@ -312,56 +305,87 @@ sub print_results {
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
 
+
+#    @{$$mapping{$name}{res}} = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} } } @{$$mapping{$name}{res}};
+
+    $$mapping{$name}{res} = sort_effects( $$mapping{$name}{res});
+
+    my $first = 1;
+
+    foreach my $effect ( @{$$mapping{$name}{res}} ) {
+
     # find the most important/interesting variation effect
-    foreach my $snp_effect ( @$effect ) {
+#    foreach my $snp_effect ( @$effect ) {
 #    my $snp_effect = $$mapping{ $name }{ res };
       my @effect_line;
 	
-      my $gene_id = "";
-      $gene_id = "$$snp_effect{ HGNC }" if ($$snp_effect{ HGNC });
+      push @effect_line, $$effect{ gene_id } || "";
       
-      push @effect_line, $gene_id;
+      push @effect_line, $$effect{ transcript_id } || "";
+      push @effect_line, $$effect{ effect }   || "";
+      push @effect_line, $$effect{ cpos }     || "";
+      push @effect_line, $$effect{ ppos }     || "";
+      push @effect_line, $$effect{ grantham } || "";
       
-      my $trans_id = "";
-      $trans_id = "$$snp_effect{ xref }" if ($$snp_effect{ xref });
+      push @effect_line, $$effect{ rs_number   } || "";
+      push @effect_line, $$effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
       
-      push @effect_line, $trans_id;
-      push @effect_line, $$snp_effect{ effect }   || "";
-      push @effect_line, $$snp_effect{ cpos }     || "";
-      push @effect_line, $$snp_effect{ ppos }     || "";
-      push @effect_line, $$snp_effect{ grantham } || "";
-      
-      push @effect_line, $$snp_effect{ rs_number   } || "";
-      push @effect_line, $$snp_effect{ dbsnp_flags } || "" if ( $use_local_dbsnp );
-      
-      push @effect_line, $$snp_effect{ HGMD   } || "";
-      push @effect_line, $$snp_effect{ pfam } || "" if ( $pfam);
+      push @effect_line, $$effect{ HGMD   } || "";
+      push @effect_line, $$effect{ pfam } || "";
       
       foreach my $tool (qw(SIFT PolyPhen Condel)) {
 	my $lc_tool = lc($tool);
-	
-	my $pred_meth   = $lc_tool.'_prediction';
-	my $score_meth  = $lc_tool.'_score';
-	if ($$snp_effect{$pred_meth} &&  $$snp_effect{$score_meth} ) {
-	  push @effect_line, "$$snp_effect{$score_meth}/$$snp_effect{$pred_meth}"
-	}
-	else {
-	  push @effect_line, "";
-	}
+	push @effect_line, $$effect{$tool} || "";
       }
-      push @effect_line, $$snp_effect{ gerp } || "";
-      
-#    print Dumper( $snp_effect );
+
+      push @effect_line, $$effect{ gerp } || "";
       
       push @res, [@line, @effect_line];
       
+      push @filtered_res, [@line, @effect_line] if ( $first-- > 0);
     }
   }
-    
-  
 
-  print text_table(\@res, 1);
+  print $full_out_fh text_table( \@filtered_res          ) if ( $full_out );
+  print STDOUT text_table( \@res );
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (11 May 2011)
+sub sort_effects {
+  my ($in_effects) = @_;
+
+
+  my (@ensembl, @non_ensembl, @part_ensembl);
+
+  foreach my $effect (@$in_effects ) {
+
+
+    if ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
+	 $$effect{ transcript_id} !~ /^ENST\d+/ ) {
+      push @non_ensembl, $effect;
+    }
+    elsif ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
+	    $$effect{ transcript_id} =~ /^ENST\d+/ ) {
+      push @part_ensembl, $effect;
+    }
+    else {
+      push @ensembl, $effect;
+    }
+
+  }    
+
+  @ensembl     = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @ensembl;
+  @part_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @part_ensembl;
+  @non_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @non_ensembl;
+
   
+  return [@non_ensembl, @part_ensembl, @ensembl];
 }
 
 
@@ -373,9 +397,6 @@ sub print_results {
 sub variation_effects {
   my ($vars, $var_features) = @_;
 
-  my @res = ();
-  my $feature = 0;
-  
   foreach my $vf (@$var_features) {    
 
     my $name = $vf->variation_name();
@@ -405,10 +426,9 @@ sub variation_effects {
 
     my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
 
-    
-  # get consequences
-  # results are stored attached to reference VF objects
-  # so no need to capture return value here
+    # get consequences
+    # results are stored attached to reference VF objects
+    # so no need to capture return value here
     foreach my $tv (@{$vf->get_all_TranscriptVariations}) {
 
       if($tv->cdna_start && $tv->cdna_end && $tv->cdna_start > $tv->cdna_end) {
@@ -421,41 +441,36 @@ sub variation_effects {
 
       foreach my $tva (@{$tv->get_all_alternate_TranscriptVariationAlleles}) {
 
-    my %gene_res;
+	my %gene_res;
     
 #    $gene_res{ effect } = "INTERGENIC";
-    $gene_res{ name } = $name;	
+	$gene_res{ name } = $name;	
 	my $gene = ($tv->transcript ? $ga->fetch_by_transcript_stable_id($tv->transcript->stable_id) : undef);
 	my @entries = grep {$_->database eq 'HGNC'} @{$gene->get_all_DBEntries()};
+
 	my @e = map { $_->display_term } @{$tva->get_all_OverlapConsequences};
 	@e = sort { $effects{ $b } <=> $effects{ $a }} @e;
-
-#	next if ( $gene_res{effect} && $effects{ $gene_res{ effect}} > $effects{ $e[0]});
 	
 	$gene_res{ effect } = $e[0];
 	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
 	$gene_res{gerp} = $$cons[0]->score if ( @$cons );
+	$gene_res{ transcript_id }  = $tv->transcript->stable_id;
+	$gene_res{ gene_id       }  = $gene->stable_id;
+
+
+ 	$gene_res{ rs_number }   = $existing_vf || "";
+ 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
+ 	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
 
 	if(scalar @entries) {
 	  my @effects = @{$tv->consequence_type};
 	  $gene_res{ effect } =  $effects[0];
-	  $gene_res{ HGMD } = "Y" if (grep /'HGMD_MUTATION'/, @effects);
-
-	  if ( $tva->transcript && grep /$gene_res{ effect }/, ('ESSENTIAL_SPLICE_SITE', 
-								'STOP_GAINED',
-								'STOP_LOST',
-								'COMPLEX_INDEL',
-								'FRAMESHIFT_CODING',
-								'NON_SYNONYMOUS_CODING', 
-								'INTRONIC',
-								'UPSTREAM',
-								'DOWNSTREAM', 
-								'UTR')) {
-
-	  $gene_res{ HGNC } = $entries[0]->display_id;
-	  my $xref = $tva->transcript->get_all_DBEntries('RefSeq_dna' );
+	  $gene_res{ HGMD } = "Y" if (grep /'HGMD_MUTATION'/, @e);
+	  
+	  $gene_res{ gene_id } = $entries[0]->display_id;
 	
-	  $gene_res{ xref } = $$xref[0]->display_id if ( $$xref[0] );
+	  my $xref = $tva->transcript->get_all_DBEntries('RefSeq_dna' );
+	  $gene_res{ transcript_id } = $$xref[0]->display_id if ( $$xref[0] );
  	  my $gene = $ga->fetch_by_transcript_stable_id($tva->transcript->stable_id);
 	  
  	  $gene_res{ cpos } = "";
@@ -495,11 +510,6 @@ sub variation_effects {
  	}
 	  
 
-	}
-
-	# extra
-	my $extra = "";
-	
 	# HGVS
 	$gene_res{ 'HGVSc' } = $tva->hgvs_coding if defined($tva->hgvs_coding);
 	$gene_res{ 'HGVSp' } = $tva->hgvs_protein if defined($tva->hgvs_protein);
@@ -513,24 +523,15 @@ sub variation_effects {
 	  my $pred = $tva->$pred_meth;
 	  my $score = $tva->$score_meth;
 	  
-	  $gene_res{$pred_meth} = $score if ($score);
-	  $gene_res{$score_meth} = $pred if ($pred);
+	  $gene_res{$tool} = "$pred" if (!$score && $pred);
+	  $gene_res{$tool} = "$score" if ($score && !$pred);
+	  $gene_res{$tool} = "$pred/$score" if (defined $score && defined $pred);
 	}
 	
- 	$gene_res{ rs_number }   = $existing_vf || "";
- 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
- 	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
-
-	push @{$res[$feature]}, \%gene_res;
-	
-	$$vars{ $name }{res} = \%gene_res;
-
-	next;
+	push @{$$vars{ $name }{res}}, \%gene_res;
       }
     }
-    $feature++;
   }
-  return \@res;
 }
 
 

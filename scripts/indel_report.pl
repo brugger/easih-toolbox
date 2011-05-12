@@ -9,7 +9,7 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-die "This script is depreciated, please use the Variation_report.pl instead\n";
+die "This script is deprecated, please use the Variation_report.pl instead\n";
 
 
 use lib '/software/lib/ensembl-variation/modules/';

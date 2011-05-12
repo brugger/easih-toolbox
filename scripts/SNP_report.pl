@@ -29,7 +29,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
 
 
-die "This script is depreciated, please use the Variation_report.pl instead\n";
+die "This script is deprecated, please use the Variation_report.pl instead\n";
 
 my @argv = @ARGV;
 

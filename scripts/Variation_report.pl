@@ -18,7 +18,7 @@ use lib '/software/lib/bioperl/';
 
 use lib '/home/kb468/easih-toolbox/modules/';
 use EASIH::SNPs;
-
+use EASIH::Git;
 
 use strict;
 use Getopt::Long;
@@ -31,7 +31,7 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('b:B:i:l:o:O:Q:s:S:T', \%opts);
+getopts('b:B:hi:l:o:O:Q:s:S:T', \%opts);
 perldoc() if ( $opts{h});
 
 my $species     = $opts{S} || "human";
@@ -53,8 +53,8 @@ if ( $opts{ Q }  ) {
   $opts{s} = "$opts{Q}.snps.vcf";
   $opts{i} = "$opts{Q}.indels.vcf";
 #  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
-  $opts{o} = "$opts{Q}.var.csv";
-  $opts{O} = "$opts{Q}.var_full.csv";
+  $opts{o} = "$opts{Q}.var_full.csv";
+  $opts{O} = "$opts{Q}.var.csv";
 }
   
 
@@ -138,6 +138,8 @@ if ( $from_36 ) {
   $mapper  = $asma->fetch_by_CoordSystems( $cs_from, $cs_to );
 
 }
+
+my $version = EASIH::Git::version();
 
 
 my %SNPs = ();
@@ -256,6 +258,7 @@ sub print_results {
     push @header, [ "#EASIH Variation Report v1.20"];
     push @header, [ "#commandline: $0 @argv"];
     push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
+    push @header, [ "#version: $version"];
 
     push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
 
@@ -356,6 +359,7 @@ sub sort_effects {
 
   foreach my $effect (@$in_effects ) {
 
+    $$effect{ gene_id} ||= "INTERGENIC";
 
     if ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
 	 $$effect{ transcript_id} !~ /^ENST\d+/ ) {
@@ -371,9 +375,9 @@ sub sort_effects {
 
   }    
 
-  @ensembl     = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @ensembl;
+  @ensembl      = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @ensembl;
   @part_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @part_ensembl;
-  @non_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @non_ensembl;
+  @non_ensembl  = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @non_ensembl;
 
   
   return [@non_ensembl, @part_ensembl, @ensembl];

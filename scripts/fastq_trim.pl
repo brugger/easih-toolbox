@@ -1,63 +1,42 @@
 #!/usr/bin/perl 
 # 
-# program to trim off low quality sequence from the ends of 
-# (454) sequences
+# Trims fq entries to the requested length.
 # 
-# Kim Brugger (24 Mar 2010), contact: kim.brugger@easih.ac.uk
+# 
+# Kim Brugger (16 May 2011), contact: kim.brugger@easih.ac.uk
 
 use strict;
 use warnings;
 use Data::Dumper;
-use Getopt::Long;
+use Getopt::Std;
 
+use lib '/home/kb468/easih-toolbox/modules/';
+use EASIH::Git;
 
+my %opts;
+getopts("l:hi:o:", \%opts);
 
-my $fastq_file = "";
-my $min_score  = 0;
-my $length     = 0;
+my $infile   = $opts{i} || "";;
+my $outfile  = $opts{o} || "";;
+my $length   = $opts{l} || Usage();
 
+open (*STDIN,  $infile) || die "Could not open '$infile': $!\n" if ( $infile );
+open (*STDOUT, ">$outfile") || die "Could not write to '$outfile': $!\n" if ( $outfile );
 
-&GetOptions(
-            'fastq_file'  => \$fastq_file,
-            'score:n'     => \$min_score,
-            'length:n'    => \$length,
-           );
+while(my $header = <> ) {
+  my $sequence   = <>;
+  my $strand     = <>;
+  my $quality    = <>;
 
-$fastq_file ||= shift;
-$min_score  += 33;
-
-if (! $fastq_file ) {
-  system "perldoc $0";
-  exit;
-}
-
-open ( my $fastq, "$fastq_file" ) || die "Could not open '$fastq_file': $!\n";
-while(my $header = <$fastq> ) {
-  my $sequence   = <$fastq>;
-  my $strand     = <$fastq>;
-  my $quality    = <$fastq>;
-
-  my @seqs  = split("", $sequence );
-  my @quals = split("", $quality );
+  die "fastq file is either not a fq-file or contains extra lines.\n"  
+      if ( $header !~ /^\@/ || $strand !~ /^[+-]/ );
   
 
-  if ( $min_score > 33 ) {
+  die "Sequence length is shorter than requested length\n" if ( length($sequence) < $length);
 
-    my $start_trim = 0;
-    for (; $start_trim < @quals; $start_trim++) {
-      last if ( ord $quals[ $start_trim ] > $min_score);
-    }
+  $sequence = substr( $sequence, 0, $length);
+  $quality  = substr( $quality,  0, $length);
 
-    my $end_trim = @quals - 1;
-    for (; $end_trim > $start_trim; $end_trim--) {
-      last if ( ord ($quals[ $end_trim ]) > $min_score);
-    }
-    
-    $sequence = substr( $sequence, $start_trim, $end_trim - $start_trim + 1);
-    $quality  = substr( $quality , $start_trim, $end_trim - $start_trim + 1);
-  }
-
-  next if ( $length && $length > length($sequence ));
 
   print "$header$sequence\n$strand$quality\n";
 #  exit;
@@ -65,32 +44,15 @@ while(my $header = <$fastq> ) {
 
 
 
-=pod
+# 
+# 
+# 
+# Kim Brugger (16 May 2011)
+sub Usage {
 
-=head1 NAME
-
-fastq_trim.pl trims a fastq file based on quality and/or sequence length
-
-=head1 OPTIONS
-
-Usage: fastq_trim.pl <options>.
-
-=over
-
-=item B<-fastq_file F<fastq_file>>: 
-    
-The fastq file to analysse
-
-
-=item B<score F<cutoff score>>
-
-Min score to filter on.
-
-
-=item B<length F<min length>>
-
-sequences shorter than this length is dropped. If the sequence is trimmed as 
-well this step is done after the trimming.
-
-
-=cut
+  $0 =~ s/.*\///;
+  print "USAGE: $0 trims the entries of a fastq to a requested length\n";
+  print "USAGE: $0 -l[ength wanted] -i<nfile, default stdin> -o<utfile, default stdout>\n";
+  exit -1;
+  
+}

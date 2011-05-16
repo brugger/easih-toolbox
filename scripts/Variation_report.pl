@@ -1315,13 +1315,12 @@ sub readin_vcf {
       $SNPs{$chr}{$pos}{genotype} = "HET" if ($info_hash{AF} == 0.50);
       $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ($info_hash{AF} != 1 && $info_hash{AF} != 0.5);
     }
-    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ ) || 
-	    ($info_hash{IAC} && $info_hash{IAC} =~ /^(\d+),\d+\z/ )) {
+    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
       my $indels = $1;
       
-      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $depth*100/$indels > 75 );
-      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $depth*100/$indels <= 75 && $depth*100/$indels > 35 );
-      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $depth*100/$indels <= 35 );
+      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
+      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
+      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
     }
     else {
       $SNPs{$chr}{$pos}{genotype} = "unknown $info_hash{IAC}";

@@ -78,6 +78,8 @@ $sample_names{6} = $opts{a} if ($opts{a} && !$opts{'6'});
 $sample_names{7} = $opts{a} if ($opts{a} && !$opts{'7'});
 $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 
+
+
 %sample_names = validate_lane_names(%sample_names);
 my %fhs;
 
@@ -280,8 +282,18 @@ sub readin_sample_sheet {
   my $field_delim = "";
 
   open(my $in, $sample_sheet) || die "Could not open '$sample_sheet': $!\n";
+  my @lines;
   while(<$in>) {
+    $_ =~ s/\r\n/\n/g; 
+    $_ =~ s/\n\r/\n/g; 
+    $_ =~ s/\r/\n/g; 
+    push @lines, split("\n",$_);
+  }
+  close $in;
+
+  while($_ = shift @lines ) {
     chomp;
+    
     
     # As I dont trust they can export the csv file in the same format each time
     # we will use the first line to identify field and text delimiters.

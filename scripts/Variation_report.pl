@@ -156,11 +156,13 @@ my %grch37_remapping = ();
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
 my $counter = 10;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
+
   
   my %res;
   my @vfs;
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
+   
         
     my $position = "$chr:$pos";
     
@@ -359,7 +361,7 @@ sub sort_effects {
 
   foreach my $effect (@$in_effects ) {
 
-    $$effect{ gene_id} ||= "INTERGENIC";
+    $$effect{ effect } ||= "INTERGENIC";
 
     if ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
 	 $$effect{ transcript_id} !~ /^ENST\d+/ ) {
@@ -375,9 +377,9 @@ sub sort_effects {
 
   }    
 
-  @ensembl      = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @ensembl;
-  @part_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @part_ensembl;
-  @non_ensembl  = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @non_ensembl;
+  @ensembl      = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @ensembl;
+  @part_ensembl = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @part_ensembl;
+  @non_ensembl  = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @non_ensembl;
 
   
   return [@non_ensembl, @part_ensembl, @ensembl];
@@ -417,7 +419,6 @@ sub variation_effects {
  	$HGMD        = $result->{hgmd};
       }
     }
-
 
     my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
 

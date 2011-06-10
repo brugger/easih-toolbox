@@ -26,15 +26,18 @@ my $no_mismatches = $opts{n};
 # Kim Brugger (04 Jan 2011)
 sub usage {
   $0 =~ s/.*\///;
-  print "USAGE: $0 extracts data from the illumina Base directory\n";
+  print "USAGE: $0 extracts data from the illumina BaseCalls directory.\n";
   print "USAGE: -1,  -2, .., -8 < the lanes are assigned this name> Overrules the sample_sheet.csv\n";
-  print "USAGE: -a< id, all lanes that are not named specifically gets this id>\n";  
+  print "USAGE: -a< id, all lanes that are not named specifically gets this id>.\n";
   print "USAGE: -h<elp>\n";
-  print "USAGE: -i<nput dir, default BaseCalls>\n";
-  print "USAGE: -l<imited lanes, by default the whole slide is extracted>\n";
-  print "USAGE: -n<o mismatches in barcodes, normal is 1 error>\n";
-  print "USAGE: -o<utput dir, default is /data/<project ID>/raw/, on a sample basis>\n";
-  print "USAGE: for barcoded lanes, please use a sample sheet\n";
+  print "USAGE: -i<nput dir, default BaseCalls>.\n";
+  print "USAGE: -l<imited lanes, by default the whole slide is extracted>.\n";
+  print "USAGE: -n<o mismatches in barcodes, normal is 1 error>.\n";
+  print "USAGE: -o<utput dir, default is /data/<project ID>/raw/, on a sample basis>.\n";
+  print "USAGE: -s<ample shee, normally picked up from cwd or BaseCalls>.\n";
+  print "USAGE: for barcoded lanes, please use a sample sheet.\n";
+  print "USAGE: naming a (or all) lane with switches overrules all sample sheet checking.\n";
+
   exit -1;
 }
 
@@ -82,6 +85,7 @@ $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 
 %sample_names = validate_lane_names(%sample_names);
 my %fhs;
+
 
 for(my $lane = 1; $lane<=8; $lane++) {
  
@@ -313,10 +317,16 @@ sub readin_sample_sheet {
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
 
       if ( $index ) {
+	die "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n" 
+	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});
+
 	$res{$lane}{$index} = $sample_id;
 	$indexed_run++;
       }
       else {
+	die "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n" 
+	    if ($res{$lane}  && !$opts{$lane} && !$opts{'a'});
+
 	$res{$lane} = $sample_id;
       }
     }

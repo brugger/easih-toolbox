@@ -17,9 +17,6 @@ my %opts;
 getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhn", \%opts);
 
 
-usage() if (! $opts{s} &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
-	   ! $opts{5} && ! $opts{6} && ! $opts{7} && ! $opts{8}  ||  $opts{h});
-
 my $limited_lanes = $opts{'l'};
 my $no_mismatches = $opts{n};
 
@@ -41,16 +38,26 @@ sub usage {
   exit -1;
 }
 
-my $indir       = $opts{'i'} || "./BaseCalls";
+my $indir       = $opts{'i'} || "./";
 my $outdir      = $opts{'o'};
-system "mkdir -p $outdir" if ( $outdir && ! -e $outdir );
+
 my $indexed_run = 0;
 my $sample_sheet = $opts{'s'};
 $sample_sheet = "$indir/sample_sheet.csv" if (!$sample_sheet && -e "$indir/sample_sheet.csv");
+if (!$sample_sheet && -e "BaseCalls/sample_sheet.csv") {
+  $indir = "BaseCalls";
+  $sample_sheet = "$indir/sample_sheet.csv";
+}
 if (!$sample_sheet && -e "sample_sheet.csv") {
   $indir = "./";
   $sample_sheet = "sample_sheet.csv";
 }
+
+usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
+	   ! $opts{5} && ! $opts{6} && ! $opts{7} && ! $opts{8}  ||  $opts{h});
+
+
+
 my %sample_names = readin_sample_sheet( $sample_sheet);
 
 $sample_names{1} = $opts{'1'} if ($opts{'1'});
@@ -71,8 +78,6 @@ $sample_names{6} = $opts{a} if ($opts{a} && !$opts{'6'});
 $sample_names{7} = $opts{a} if ($opts{a} && !$opts{'7'});
 $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 
-
-
 %sample_names = validate_lane_names(%sample_names);
 my %fhs;
 
@@ -85,6 +90,7 @@ for(my $lane = 1; $lane<=8; $lane++) {
   else {
     analyse_lane($lane)
   }
+
 }
 
 # 
@@ -94,38 +100,50 @@ for(my $lane = 1; $lane<=8; $lane++) {
 sub analyse_lane {
   my ( $lane_nr) = @_;
 
-  my $basename = $sample_names{ $sample_names{$lane_nr} };
+  my $sample_name = $sample_names{$lane_nr};
+  my $basename = $sample_names{ $sample_name };
+  
   my @files = glob("$indir/s_$lane_nr\_1_*_qseq.txt");
 
   my ($in1, $out1, $in2, $out2) =(0,0,0,0);
 
   my ($fh1, $fh2);
   
-  open ($fhs{"$basename.1.fq.gz"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
-      if (! $fhs{"$basename.1.fq.gz"} );
+  open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
+      if (! $fhs{"$sample_name.1"} );
 
-  open ($fhs{"$basename.2.fq.gz"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
-      if (! $fhs{"$basename.2.fq.gz"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+      if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
-  open ($fhs{"$basename.2.fq.gz"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
-      if (! $fhs{"$basename.2.fq.gz"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
+  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+      if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
   
   foreach my $file (@files) {
-    my ($ti, $to) = analyse_tile( $file, $fhs{"$basename.1.fq.gz"} );
+    my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.1"} );
     $in1  += $ti;
     $out1 += $to;
-    $file =~ s/(s_\d_)1_/$1_3_/ if ( $indexed_run );
-    $file =~ s/(s_\d_)1_/$1_2_/ if ( !$indexed_run );
+    $file =~ s/(s_\d)_1_/$1_3_/ if ( $indexed_run );
+    $file =~ s/(s_\d)_1_/$1_2_/ if ( !$indexed_run );
     if ( -e $file ) {
       # find the next file
 
-      my ($ti, $to) = analyse_tile( $file, $fhs{"$basename.2.fq.gz"} );
+      my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.2"} );
       $in2  += $ti;
       $out2 += $to;
     }
 
     last;
   }
+
+#  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1\n") ;
+#  printf("lane $lane_nr.2\t$sample_name\t$in2\t$out2\n");
+
+
+
+  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
+  printf("lane $lane_nr.2\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
+
+
   return ($in1, $out1, $in2, $out2);
 }
 
@@ -139,18 +157,21 @@ sub analyse_barcoded_lane {
 
   my @files = glob("$indir/s_$lane_nr\_2_*_qseq.txt");
 
+  my %multiplex_stats;
+  
   my %barcodes;
   foreach my $lane (sort keys %sample_names) {
     next if (ref ($sample_names{$lane}) ne "HASH");
 
     foreach my $bcode (keys %{$sample_names{$lane}}) {
 #      print "$lane - $bcode ==  $sample_names{$lane}{$bcode} \n";
-      my $basename = $sample_names{ $sample_names{$lane}{$bcode}};
-      open ($fhs{"$basename.1.fq.gz"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
-	  if (! $fhs{"$basename.1.fq.gz"} );
+      my $sample_name = $sample_names{$lane_nr}{$bcode};
+      my $basename = $sample_names{ $sample_name };
+      open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
+	  if (! $fhs{"$sample_name.1"} );
 
-      open ($fhs{"$basename.2.fq.gz"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
-	  if (! $fhs{"$basename.2.fq.gz"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+      open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+	  if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
     }
   }
@@ -158,14 +179,16 @@ sub analyse_barcoded_lane {
   my ($in1, $out1, $in2, $out2) =(0,0,0,0);
 
   foreach my $file (@files) {
-    my $demultiplexing = demultiplex_tile($file, \%barcodes);
+    my ($demultiplexing, $counts) = demultiplex_tile($file, \%barcodes);
 
-#    __LOST__;
+    map { $multiplex_stats{$_} += $$counts{ $_}} keys %$counts;
+
+    $file =~ s/(s_\d)_2_/$1_1_/;
 
     my ($ti, $to) = analyse_tile( $file, undef, $demultiplexing );
     $in1  += $ti;
     $out1 += $to;
-    $file =~ s/(s_\d_)1_/$1_3_/;
+    $file =~ s/(s_\d)_1_/$1_3_/;
     if ( -e $file  ) {
       # find the next file
 
@@ -174,9 +197,18 @@ sub analyse_barcoded_lane {
       $out2 += $to;
     }
 
-    last;
+#    last;
   }
-  return ($in1, $out1, $in2, $out2);
+
+  printf("lane $lane_nr.1\tMULTIPLEXED\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
+  printf("lane $lane_nr.2\tMULTIPLEXED\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
+
+  foreach my $k ( keys %multiplex_stats ) {
+    next if ($k eq "total");
+    my $sample_name = $sample_names{ $lane_nr }{ $k };
+    printf("lane $lane_nr\t$sample_name\t$k\t$multiplex_stats{$k}\t%.2f %%\n", $multiplex_stats{$k}*100/$multiplex_stats{total});
+  }
+
 }
 
 
@@ -217,11 +249,9 @@ sub analyse_tile {
       my $barcode = $$demultiplexing{ "\@${instr}_$run_id:$lane:$tile:$x:$y"};
       next if ( !$barcode );
       my $sample_name = $sample_names{$lane}{ $barcode };
-      my $basename = $sample_names{ $sample_name }.".$read.fq.gz";
 
-      my $bfout = $fhs{ $basename };
+      my $bfout = $fhs{ "$sample_name.$read" };
       if ( ! $bfout ) {
-	print "$bfout -- $basename\n";
 	print Dumper( \%fhs );
       }
       print $bfout join("", @read);
@@ -304,37 +334,65 @@ sub validate_lane_names {
     }
   }
   
-  
+
+  if ( $outdir ) {
+    if ( -e "$outdir" && ! -d "$outdir") {
+      die "$outdir is not a directory\n";
+    }
+    elsif ( -e "$outdir" && ! -w "$outdir") {
+      die "$outdir is not writeable\n";
+    }
+    if ( $outdir && ! -d $outdir ) {
+      system "mkdir -p $outdir" || die "Could not create directory '$outdir': $!\n";
+    }
+  }
+
+ 
   foreach my $basename ( keys %basenames ) {        
 
     my $root_dir = "/data/";
     my $project = substr($basename, 0, 3);
-    my $file = "$root_dir$project/raw/$basename";
+    my $file = "$root_dir/$project/raw/$basename";
 
     if ( $outdir ) {
       $root_dir = $outdir;
-      $file     = "$root_dir/$basename";
+      $file     = "$outdir/$basename";
     }
     else {
+      if ( -e "$root_dir/$project" && ! -d "$root_dir/$project") {
+	die "$root_dir/$project is not a directory\n";
+      }
+      elsif ( -e "$root_dir/$project" && ! -w "$root_dir/$project") {
+	die "$root_dir/$project is not writeable\n";
+      }
+      
       $root_dir .= "$project/raw/";
-#      system "mkdir -p $root_dir" if ( ! -e "$root_dir" );
-    }
-
-    my @files = `find $root_dir | grep $basename | grep fq`;
-    if ( @files ) {
-      $_ = pop @files;
-	chomp;
-	
-	my $version = 2;
-	if (  /$file\_(\d+).1.fq/ ) {
-	  $version = $1;
-	}
-	
-	$file = "$root_dir$basename\_$version";
+      system "mkdir -p $root_dir" if ( ! -d "$root_dir" );
     }
     
+
+    my @files = `find $root_dir | grep $basename | grep fq`;
+    my $version = 0;
+    if ( @files ) {
+      while ( $_ = pop @files ) {
+	chomp;
+
+	if ( $version == 0 &&  /[A-Z][0-9]{6,7}.\d+.fq/ ) {
+	  $version = 1;
+	}
+	elsif (  /[A-Z][0-9]{6,7}\_(\d+).\d+.fq/ ) {
+	  $version = $1+1 if ($version <= $1 );
+	}
+	
+      }
+
+      $file = "$root_dir/$basename\_$version";
+    }
     $sample_names{$basename} = $file;
   }
+
+#  print Dumper( \%sample_names );
+#  sleep 60;
 
   return %sample_names;
 }
@@ -353,7 +411,7 @@ sub demultiplex_tile {
   my ($in1, $out1, $notmplexed1)  = (0, 0, 0);
   my ($in2, $out2, $notmplexed2)  = (0, 0, 0);
 
-  my %res;
+  my (%res, %counts);
   my @codes;
 
   open (my $input, "$file") || die "Could not open '$file': $!\n";
@@ -368,11 +426,16 @@ sub demultiplex_tile {
     chop($bc);
     $bc = verify_bcode($bc, @codes);
     
-    $res{ "\@${instr}_$run_id:$lane:$tile:$x:$y" } = $bc if ( $bc );
+    $counts{total}++;
+    
+    if ( $bc ) {
+      $res{ "\@${instr}_$run_id:$lane:$tile:$x:$y" } = $bc;
+      $counts{$bc}++;
+    }
   }
   close ($input);
   
-  return \%res;
+  return (\%res, \%counts);
 }
 
 

@@ -65,8 +65,6 @@ sub version {
 
   }
 
-  print STDERR "$file || $module\n";
-
   my $VERSION   = "unknown";
 
   if ($file && $file =~ /(.*)\//) {
@@ -91,6 +89,9 @@ BEGIN {
 
     print STDERR "="x65 . "\n";
     print STDERR "="x5 ." THIS IS NOT THE MASTER BRANCH, NOT FOR PRODUCTION USE " . "="x5 . "\n";
+    print STDERR "="x5 ." "x55 . "="x5 . "\n";
+    print STDERR "="x5 ." Please use either: /software/installed/easih-toolbox  " . "="x5 . "\n";
+    print STDERR "="x5 ." or /home/easih/software/installed/easih-toolbox       " . "="x5 . "\n";
     print STDERR "="x65 . "\n\n";
 
   }

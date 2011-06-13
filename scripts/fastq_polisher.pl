@@ -44,7 +44,7 @@ while( <> ) {
   chomp($quality);
 
   push @{$reads{ $sequence }}, [$name, $quality];
-  last if ( ! $limit--);
+#  last if ( ! $limit--);
 }
 
 

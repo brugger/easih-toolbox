@@ -21,22 +21,25 @@ sub send {
   $to      =~ s/\n//g;
   $subject =~ s/\n//g;
 
-  my $smtp = Net::SMTP->new('ppsw.cam.ac.uk');
-
-  my $username = scalar getpwuid $<;
-  
-  $smtp->mail("$username\@cam.ac.uk");
-  
-  $smtp->to($to);
-  
-  $smtp->data();
-  $smtp->datasend("Subject: $subject\n");
-  $smtp->datasend("To: $to\n");
-  $smtp->datasend("\n");
-  $smtp->datasend("$content\n");
-  $smtp->dataend();
-  
-  $smtp->quit;
+  foreach ( split(/,/, $to) ) {
+    
+    my $smtp = Net::SMTP->new('ppsw.cam.ac.uk');
+    
+    my $username = scalar getpwuid $<;
+    
+    $smtp->mail("$username\@cam.ac.uk");
+    
+    $smtp->to($_);
+    
+    $smtp->data();
+    $smtp->datasend("Subject: $subject\n");
+    $smtp->datasend("To: $_\n");
+    $smtp->datasend("\n");
+    $smtp->datasend("$content\n");
+    $smtp->dataend();
+    
+    $smtp->quit;
+  }
 }
 
 1;

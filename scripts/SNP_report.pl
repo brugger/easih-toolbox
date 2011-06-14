@@ -16,7 +16,8 @@ use lib '/software/lib/ensembl/modules/';
 use lib '/software/lib/bioperl/';
 
 
-use lib '/home/kb468/easih-toolbox/modules/';
+#use lib '/home/kb468/easih-toolbox/modules/';
+use lib '/software/installed/easih-toolbox/modules';
 use EASIH::SNPs;
 
 

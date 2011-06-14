@@ -90,7 +90,7 @@ $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 my %fhs;
 
 
-print  Dumper(\%sample_names);
+#print  Dumper(\%sample_names);
 
 
 for(my $lane = 1; $lane<=8; $lane++) {

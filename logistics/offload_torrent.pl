@@ -143,6 +143,11 @@ while (my @results = $sth->fetchrow_array()) {
   EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_QC");
 
   EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "OFFLOADED");
+
+  EASIH::Mail::send('kim.brugger@easih.ac.uk', 
+		    "[easih-data] Successfully offloaded Ion Torrent data ($run_folder)", 
+		    "$fq_file offloaded to $outfile.gz\n");
+
 }
 
 

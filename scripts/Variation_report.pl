@@ -50,8 +50,8 @@ if ( $opts{ Q }  ) {
   $opts{ Q } =~ s/\.snps.vcf//;
   $opts{ Q } =~ s/\.indels.vcf//;
 
-  $opts{s} = "$opts{Q}.snps.vcf";
-  $opts{i} = "$opts{Q}.indels.vcf";
+  $opts{s} = "$opts{Q}.snps.vcf"   if ( -e "$opts{Q}.snps.vcf");
+  $opts{i} = "$opts{Q}.indels.vcf" if ( -e "$opts{Q}.indels.vcf");
 #  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var_full.csv";
   $opts{O} = "$opts{Q}.var.csv";

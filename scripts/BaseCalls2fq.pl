@@ -14,7 +14,7 @@ use lib '/home/kb468/easih-toolbox/modules/';
 use EASIH::Git;
 
 my %opts;
-getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhn", \%opts);
+getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnb", \%opts);
 
 
 my $limited_lanes = $opts{'l'};
@@ -27,14 +27,17 @@ my $no_mismatches = $opts{n};
 sub usage {
   $0 =~ s/.*\///;
   print "USAGE: $0 extracts data from the illumina BaseCalls directory.\n";
-  print "USAGE: -1,  -2, .., -8 < the lanes are assigned this name> Overrules the sample_sheet.csv\n";
-  print "USAGE: -a< id, all lanes that are not named specifically gets this id>.\n";
   print "USAGE: -h<elp>\n";
   print "USAGE: -i<nput dir, default BaseCalls>.\n";
+  print "USAGE: -s<ample shee, normally picked up from cwd or BaseCalls>.\n";
+
+  print "\nUSAGE: Advanced parameters\n";
+  print "USAGE: -1,  -2, .., -8 < the lanes are assigned this name> Overrules the sample_sheet.csv\n";
+  print "USAGE: -a< id, all lanes that are not named specifically gets this id>.\n";
+  print "USAGE: -b<arcoded run>.\n";
   print "USAGE: -l<imited lanes, by default the whole slide is extracted>.\n";
   print "USAGE: -n<o mismatches in barcodes, normal is 1 error>.\n";
   print "USAGE: -o<utput dir, default is /data/<project ID>/raw/, on a sample basis>.\n";
-  print "USAGE: -s<ample shee, normally picked up from cwd or BaseCalls>.\n";
   print "USAGE: for barcoded lanes, please use a sample sheet.\n";
   print "USAGE: naming a (or all) lane with switches overrules all sample sheet checking.\n";
 
@@ -44,7 +47,7 @@ sub usage {
 my $indir       = $opts{'i'} || "./";
 my $outdir      = $opts{'o'};
 
-my $indexed_run = 0;
+my $indexed_run = $opts{b} || 0;
 my $sample_sheet = $opts{'s'};
 $sample_sheet = "$indir/sample_sheet.csv" if (!$sample_sheet && -e "$indir/sample_sheet.csv");
 if (!$sample_sheet && -e "BaseCalls/sample_sheet.csv") {
@@ -61,7 +64,7 @@ usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opt
 
 
 
-my %sample_names = readin_sample_sheet( $sample_sheet);
+my %sample_names = readin_sample_sheet( $sample_sheet) if ($sample_sheet);
 
 $sample_names{1} = $opts{'1'} if ($opts{'1'});
 $sample_names{2} = $opts{'2'} if ($opts{'2'});
@@ -87,7 +90,12 @@ $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 my %fhs;
 
 
+print  Dumper(\%sample_names);
+
+
 for(my $lane = 1; $lane<=8; $lane++) {
+
+  next if (!$sample_names{ $lane });
  
   # this lane is barcoded...
   if (ref ($sample_names{$lane}) eq "HASH") {
@@ -138,7 +146,7 @@ sub analyse_lane {
       $out2 += $to;
     }
 
-    last;
+#    last;
   }
 
 #  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1\n") ;

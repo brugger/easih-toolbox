@@ -90,7 +90,7 @@ foreach my $file (@homozygous, @heterozygous) {
 my $goodies = 0;
 foreach my $key (keys %all_SNPs) {
   if ( $all_SNPs{ $key} != $inputs ) {
-    print "$all_SNPs{ $key} != $inputs\n";
+#    print "$all_SNPs{ $key} != $inputs\n";
     delete $all_SNPs{ $key};
   }
   else {

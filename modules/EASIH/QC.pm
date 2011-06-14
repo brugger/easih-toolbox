@@ -172,6 +172,10 @@ sub fastQC {
   }
 
 
+  print "$$res{mappable}/$$res{reads}\n";
+  
+#  print Dumper( $res );
+  
   $$res{mappability} = sprintf("%.2f", 100*$$res{mappable}/$$res{reads}) if ($mappable); 
   foreach my $seq ( keys %duplicates ) {
     delete $duplicates{$seq} if ($duplicates{$seq} == 1);
@@ -189,7 +193,7 @@ sub fastQC {
 sub bamQC {
   my ( $infile, $mappable) = @_;
 
-  my (%res1, %res2);
+  my ($res1, $res2);
   my ($read1, $read2) = (0, 0);
   
   $mappable ||= 1;
@@ -205,23 +209,29 @@ sub bamQC {
     
     last if ( $sample_size > 0 && $read1 > $sample_size && $read2 > $sample_size );
 
+    if ($flags & 0x0010 ) {
+      $sequence = reverse($sequence);
+      $sequence =~ tr/[ACGT]/[TGCA]/;
+      $quality = reverse( $quality);
+    }
+
     if ($flags & 0x0080 ) {
       $read2 += length($sequence);
-      analyse( $sequence, $quality, \%res2);
-      mappable( $quality, \%res2) if ($mappable); 
+      $res2 = analyse( $sequence, $quality, $res2);
+      $res2 = mappable( $quality, $res2) if ($mappable); 
     }
     else {
       $read1 += length($sequence);
-      analyse( $sequence, $quality, \%res1);
-      mappable( $quality, \%res1) if ($mappable); 
+      $res1 = analyse( $sequence, $quality, $res1);
+      $res1 = mappable( $quality, $res1) if ($mappable); 
     }
   }
   close( $pipe );
   
 
-  $res1{mappability} = sprintf("%.2f", 100*$res1{mappable}/$res1{quals}) if ($mappable);
-  $res2{mappability} = sprintf("%.2f", 100*$res2{mappable}/$res2{quals}) if ($mappable);
-  return( \%res1, \%res2);
+  $$res1{mappability} = sprintf("%.2f", 100*$$res1{mappable}/$$res1{quals}) if ($mappable);
+  $$res2{mappability} = sprintf("%.2f", 100*$$res2{mappable}/$$res2{quals}) if ($mappable);
+  return( $res1, $res2);
 }
 
 
@@ -800,7 +810,7 @@ sub random_sample_fastq {
       last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
     }
     
-    if ($_ && $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ || $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/) {
+    if ($_ && ($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ || $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
       my $name = $_;
       my $seq  = <$file1>;
       my $str  = <$file1>;

@@ -55,6 +55,7 @@ my (@fhr, @fhw);
 my @fn_suff = ('F3.csfasta', 'F3_QV.qual', 'R3.csfasta', 'R3_QV.qual');
 my $is_mate_paired = (-f "$prefix$fn_suff[2]" || -f "$prefix$fn_suff[2].gz")? 1 : 0;
 
+
 my ($is_paired_ends, $F3_cs, $F3_qual, $F5_cs, $F5_qual) = (0);
 if ( ! $is_mate_paired ) {
   my @files = glob("$prefix*");
@@ -206,6 +207,7 @@ sub read1 {
   my ($key, $seq);
   my ($fhs, $fhq) = ($fhr[$j], $fhr[$j|1]);
   while ($_ = read_line($fhs)) {
+
 	my $t = read_line($fhq);
 	if (/^>(\d+)_(\d+)_(\d+)_[FR][35].*/) {
 	  $key = sprintf("%.4d_%.4d_%.4d", $1, $2, $3); # this line could be improved on 64-bit machines
@@ -235,6 +237,12 @@ sub read1 {
 sub read_line {
   my $fh = shift;
   while (my $line = <$fh>) {
+    if ( $line =~ /\# Title: (.*)/) {
+      $id = $1;
+      chomp( $1 );
+      $id =~ s/solid\d+_\d+_//;
+    }
+
     return $line if ($line !~ /^\#/);
   }
 

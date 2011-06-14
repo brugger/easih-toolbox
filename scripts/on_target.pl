@@ -24,6 +24,8 @@ my $regions = readin_bed( $bed_file, 1 );
 my $samtools = `which samtools`;
 chomp( $samtools);
 
+my $all_on_target = 0;
+
 foreach my $chr ( keys %$regions ) {
 
   my $on_target = 0;
@@ -31,19 +33,21 @@ foreach my $chr ( keys %$regions ) {
   foreach my $se ( @{$$regions{$chr}}) {
     
     $chr =~ s/chr//i;
-    $chr ="chr$chr";
+#    $chr ="chr$chr";
 
     my ($start, $end) = @$se;
     $start = $start - $flanking;
     $end   = $end + $flanking;
 
     my $region = "$chr:$start-$end";
-    open (my $st_pipe, "$samtools view $bam_file $region | ") || die "Could not open samtools pipe: $!\n";
+    open (my $st_pipe, "$samtools view -F 0x0404 $bam_file $region | ") || die "Could not open samtools pipe: $!\n";
 
     while(<$st_pipe>) {
       $on_target++;
     }
   }
+
+  $all_on_target += $on_target;
 
   print "$chr on target: $on_target\n";
 }

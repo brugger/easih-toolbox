@@ -91,8 +91,14 @@ foreach my $chr ( sort {$a cmp $b}  keys %$indels ) {
 
     my @line;
     push @line, $position;
-    push @line, "$$indel{ref}>$$indel{variation}";
-    push @line, $$indel{support} . "/". $$indel{depth};
+    if ( $$indel{ref} ) {
+      push @line, "$$indel{ref}>$$indel{variation}";
+      push @line, $$indel{support} . "/". $$indel{depth};
+    }
+    else {
+      push @line, "$$indel{type}\t$$indel{variation}";
+      push @line, $$indel{support} . "/". $$indel{depth};
+    }      
     
     my $effects = indel_effect($chr, $start, $end, "$$indel{variation}/$$indel{type}");
 
@@ -585,6 +591,8 @@ sub readin_vcf {
 
     $used++;
 
+
+    $info =~ s/IAC=/AC=/;
 
     my %info_hash;
     foreach my $entry (split("\;", $info )) {

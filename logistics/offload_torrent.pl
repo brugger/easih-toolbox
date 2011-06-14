@@ -97,7 +97,6 @@ while (my @results = $sth->fetchrow_array()) {
 
   my ($outfile, $error) = EASIH::Logistics::sample2outfilename("$sample_name");
 
-
   if ($error) {
     EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "WRONG_PERMISSIONS");
     
@@ -131,7 +130,7 @@ while (my @results = $sth->fetchrow_array()) {
     next;
   }
   EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_COMPRESSION");
-  
+
   EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "START_QC");
   if ( system "/software/installed/easih-toolbox/scripts/QC_report.pl -p TORRENT -rf $outfile.gz") {
     EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "QC_FAILED");
@@ -148,7 +147,5 @@ while (my @results = $sth->fetchrow_array()) {
 		    "[easih-data] Successfully offloaded Ion Torrent data ($run_folder)", 
 		    "$fq_file offloaded to $outfile.gz\n");
 
+  EASIH::Logistics::add_file_offload($run_folder, $fq_file, "$outfile.gz");
 }
-
-
-

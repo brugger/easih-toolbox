@@ -25,6 +25,19 @@ sub Connect {
 }
 
 
+
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub add_file_offload {
+  my ($run_folder, $infile, $outfile) = @_;
+  my $sth = $dbi->prepare("INSERT INTO offloads (runfolder, in_file, out_file) VALUES (?,?,?) ");
+  $sth->execute( $run_folder, $infile, $outfile );
+}
+
+
+
 # 
 # 
 # 

@@ -7,49 +7,31 @@
 # sudo apt-get install postgresql-client-8.4 postgresql-client-common libdbd-pg-perl
 # 
 # Kim Brugger (13 Jun 2011), contact: kim.brugger@easih.ac.uk
+# Edited by Sri (16 Jun 2011), contact: sri.deevi@easih.ac.uk
 
 
+use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use warnings;
 use Data::Dumper;
-
 use DBI;
-
-
-# Sets up dynamic paths for EASIH modules...
-# Makes it possible to work with multiple checkouts without setting 
-# perllib/perl5lib in the enviroment. Needs to be prior to the use of EASIH* modules.
-BEGIN {
-  my $path = $0;
-  $path =~ s/^\.\///;
-  if ($path =~ /.*\//) {
-    $path =~ s/(.*)\/.*/$1/;
-    push @INC, "$path/modules" if ( -e "$path/modules");
-    $path =~ s/(.*)\/.*/$1/;
-    push @INC, "$path/modules" if ( -e "$path/modules");
-    
-  }
-  else {
-    push @INC, "../modules" if ( -e "../modules");
-    push @INC, "./modules" if ( -e "./modules");
-  }
-
-}
-
 use EASIH;
 use EASIH::Logistics;
 use EASIH::Mail;
 
-#EASIH::Logistics::connect();
-
 my $res_folder = "/results/analysis/";
+my $CurrentRunDir; # Global ### svvd 
+my $to = 'kim.brugger@easih.ac.uk'; #global
+my $mailcount = 0; #global
 
-
+### Fetch Data from iondb (located on Ion torrent) ###
 my $dbi = DBI->connect("DBI:Pg:dbname=iondb;host=mgion01.medschl.cam.ac.uk", 'ion') || die "Could not connect to database: $DBI::errstr";
 my $q = 'select "fastqLink", "sffLink" ';
 $q .= 'from rundb_results results join rundb_experiment experiments on results.experiment_id = experiments.id where "status" = \'Completed\'';
 my $sth = $dbi->prepare( $q );
 $sth->execute();
+
+
 
 while (my @results = $sth->fetchrow_array()) {
   my ($fq_file, $sff_file ) = @results;
@@ -60,6 +42,8 @@ while (my @results = $sth->fetchrow_array()) {
   my $run_folder = $res_dir;
   $run_folder =~ s/.*\/(.*)\//$1/;
   
+  $Currentrundir = $run_folder;
+
   $fq_file =~ s/.*\/(.*)/$1/;
   $sff_file =~ s/.*\/(.*)/$1/;
 
@@ -79,30 +63,31 @@ while (my @results = $sth->fetchrow_array()) {
   }
 
   # so far things looks good. Update the tracking data base with the new run being finished
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_RUN") if (!$last_status);
+  if(!$last_status)
+  {
+      my $body = "\n\n\t\t *****This is an automated email***** \n\n Run Completed for Ion torrent Run: $runfolder \n\n\t\t\t *****The End***** \n\n";
+      SendEmail("$body"); 
+      RunStatus("RUN_COMPLETED");
+  } ### svvd 
 
   # extract the sample name from the fq file
   my ($sample_name) = $fq_file =~ /_([A-Z]\d{6,7})_/;
-
+  
   # no name? send an email, and skip to the next runfolder.
   if ( ! $sample_name ) {
-    EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "WRONGLY_NAMED");
+      RunStatus("WRONGLY_NAMED"); ### svvd
+      
+      SendMail("Cannot find the EASIH-sample name in run folder $run_folder with the output name: $fq_file\n"); ### svvd
     
-    EASIH::Mail::send('kim.brugger@easih.ac.uk', 
-		      "[easih-data] Failed Ion Torrent offload ($run_folder)", 
-		      "Cannot find the EASIH-sample name in run folder $run_folder with the output name: $fq_file\n");
-    
-    next;
+      next;
   }
 
   my ($outfile, $error) = EASIH::Logistics::sample2outfilename("$sample_name");
 
   if ($error) {
-    EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "WRONG_PERMISSIONS");
+    RunStatus("WRONG_PERMISSIONS"); ### svvd
     
-    EASIH::Mail::send('kim.brugger@easih.ac.uk', 
-		      "[easih-data] Failed Ion Torrent offload ($run_folder)", 
-		      "$error \n");
+    SendEmail("$error"); ### svvd
     next;
   }
 
@@ -111,41 +96,84 @@ while (my @results = $sth->fetchrow_array()) {
 
   $fq_file = $org_fq;
 
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "START_OFFLOADING");
-  if ( system "scp ionadmin\@mgion01:$res_dir/$fq_file $outfile 2> /dev/null" ) {
-    EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "OFFLOADING_FAILED");
-    EASIH::Mail::send('kim.brugger@easih.ac.uk', 
-		      "[easih-data] Offloading error Ion Torrent run ($run_folder)", 
-		      "failed command: 'scp ionadmin\@mgion01:$res_dir/$fq_file $outfile'\n");
-    next;
-  }
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_OFFLOADING");
+  next, if(!GrabAndRun("scp ionadmin\@mgion01:$res_dir/$fq_file $outfile 2> /dev/null",
+		       "OFFLOADING_STARTED",
+		       "OFFLOADING_FAILED",
+		       "OFFLOADING_DONE")); ### svvd
+  
+  
+  next, if(!GrabAndRun("gzip $outfile",
+		       "COMPRESSION_STARTED",
+		       "COMPRESSION_FAILED",
+		       "COMPRESSION_DONE")); ### svvd
 
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "START_COMPRESSION");
-  if ( system "gzip $outfile") {
-    EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "COMPRESSION_FAILED");
-    EASIH::Mail::send('kim.brugger@easih.ac.uk', 
-		      "[easih-data] Data compression error on Ion Torrent data ($run_folder)", 
-		      "failed command: 'gzip $outfile'\n");
-    next;
-  }
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_COMPRESSION");
+  next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p TORRENT -rf $outfile.gz",
+		       "QC_Report_STARTED",
+		       "QC_REPORT_FAILED",
+		       "QC_REPORT_DONE" )); ### svvd
 
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "START_QC");
-  if ( system "/software/installed/easih-toolbox/scripts/QC_report.pl -p TORRENT -rf $outfile.gz") {
-    EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "QC_FAILED");
-    EASIH::Mail::send('kim.brugger@easih.ac.uk', 
-		      "[easih-data] QC report failed on Ion Torrent data ($run_folder)", 
-		      "failed command: '/software/installed/easih-toolbox/scripts/QC_report.pl -p TORRENT -rf $outfile.gz'\n");
-    next;
-  }
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "FINISHED_QC");
 
-  EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "OFFLOADED");
+  #EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "OFFLOADED");
 
-  EASIH::Mail::send('kim.brugger@easih.ac.uk', 
+  #EASIH::Mail::send('kim.brugger@easih.ac.uk', 
 		    "[easih-data] Successfully offloaded Ion Torrent data ($run_folder)", 
 		    "$fq_file offloaded to $outfile.gz\n");
 
   EASIH::Logistics::add_file_offload($run_folder, $fq_file, "$outfile.gz");
+}
+
+
+### svvd ###
+###########################################################
+sub RunStatus
+{
+    my($status) = @_;
+
+    EASIH::Logistics::add_run_folder_status($CurrentRunDir, 
+					    "TORRENT", 
+					    "$status");
+}
+
+
+### svvd ###
+###########################################################
+sub SendEmail
+{
+    my($message) = @_;
+    
+    if($mailcount)
+    {
+	EASIH::Mail::send($to, 
+			  "[easih-data] Ion Torrent Run Completed - $CurrentRunDir", 
+			  "$message");
+    }
+    else
+    {
+	EASIH::Mail::send($to, 
+			  "[easih-data] Ion Torrent Data Processing Failed - $CurrentRunDir!", 
+			  "Failed Command: '$message'\n");
+    }
+    
+    $mailcount++;  
+}
+
+
+### svvd ###
+###########################################################
+sub GrabAndRun
+{
+    my ($command, $pre_status, $fail_status, $post_status) = @_;
+    
+    RunStatus($pre_status);
+    
+    if(system($command))
+    {
+	RunStatus("$fail_status");
+	SendEmail($command);
+	return 0;
+    }
+    
+    RunStatus($post_status);
+    
+    return 1;
 }

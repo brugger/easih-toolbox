@@ -8,6 +8,7 @@ package EASIH::Logistics;
 use strict;
 use warnings;
 use Data::Dumper;
+use Time::HiRes;
 
 my $dbi;
 
@@ -37,6 +38,74 @@ sub add_file_offload {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub fetch_files_from_rundir {
+  my ($run_folder) = @_;
+  my $sth = $dbi->prepare("SELECT out_file FROM offloads WHERE runfolder = ?");
+  $sth->execute( $run_folder );
+  my @res;
+  while ( my @line =  $sth->fetchrow_array()) {
+    push @res, @line;
+  }
+
+  return @res;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub fetch_offloaded_files {
+
+  my $sth = $dbi->prepare("SELECT runfolder, out_file FROM offloads");
+  $sth->execute( ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line =  $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub runfolder_log {
+  my ($run_folder) = @_;
+
+  my $entries = fetch_run_folder_entries($run_folder);
+  my @files    = fetch_files_from_rundir($run_folder);
+
+  print "========================================\n";
+  print "  $run_folder log\n";
+  print "========================================\n";
+
+  use POSIX qw( strftime );
+  foreach my $entry ( @$entries ) {
+    my $microsec = $$entry[0] % 100000;
+    $$entry[0] /= 100000;
+    $$entry[0] = strftime("%Y/%m/%d %H:%M:%S:$microsec", localtime( $$entry[0] ));
+    print "$$entry[0]\t$$entry[1]\n";
+  }
+
+  print "========================================\n";
+  foreach my $file ( @files ) {
+    print "$file\n";
+  }
+  print "========================================\n";
+
+
+
+}
+
+
 
 # 
 # 
@@ -45,8 +114,9 @@ sub add_file_offload {
 sub add_run_folder_status {
 #  return;
   my ($run_folder, $platform, $status) = @_;
-  my $sth = $dbi->prepare("INSERT INTO runs (runfolder, platform, status) VALUES (?,?,?) ");
-  $sth->execute( $run_folder, $platform, $status );
+  my $timestamp = Time::HiRes::gettimeofday()*100000;
+  my $sth = $dbi->prepare("INSERT INTO runs (runfolder, platform, stamp, status) VALUES (?,?,?,?) ");
+  $sth->execute( $run_folder, $platform, $timestamp, $status );
 }
 
 
@@ -63,12 +133,14 @@ sub fetch_run_folder_entries {
   my $sth = $dbi->prepare($q);
   $sth->execute( $run_folder );
   
-  my %res;
+  my @res;
   while ( my $results = $sth->fetchrow_hashref()) {
-    $res{ $$results{ts} } = $$results{status};
+    push @res, [$$results{stamp}, $$results{status}];
   }
 
-  return \%res;
+  @res = sort { $$a[0] <=> $$b[0] } sort @res;
+
+  return \@res;
 }
 
 
@@ -81,23 +153,8 @@ sub fetch_latest_run_folder_status {
   my ($run_folder) = @_;
 
   my $entries = fetch_run_folder_entries( $run_folder);
-  my ($status, $timestamp);  
-
-  use Time::Local;
-
-  foreach my $ts ( keys %$entries ) {
-
-    $ts =~ /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/;
-    my ($year, $month, $day, $hours, $min, $sec) = ( $1, $2, $3, $4, $5, $6);
-
-    my $time = timelocal($sec,$min,$hours,$day,$month,$year); 
-    
-    if ( ! $timestamp || $timestamp < $time ) {
-      $timestamp = $time;
-      $status = $$entries{$ts};
-    }
-  }
-
+  my $status;
+  $status =  $$entries[-1][1] if ($$entries[-1]);
   return $status;
 }
 

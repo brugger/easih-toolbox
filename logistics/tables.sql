@@ -2,10 +2,10 @@
 CREATE TABLE runs (
   runfolder           VARCHAR(200) NOT NULL,
   platform            VARCHAR(100),
-  ts                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  stamp               BIGINT,
   status              VARCHAR(100) NOT NULL,
 
-  PRIMARY KEY (runfolder,ts,status)
+  PRIMARY KEY (runfolder,stamp)
 
 );
 

@@ -14,7 +14,7 @@ CREATE TABLE offloads (
   in_file              TEXT NOT NULL,
   out_file             TEXT NOT NULL,
 
-  PRIMARY KEY (runfolder),
+  PRIMARY KEY (runfolder,out_file),
   KEY in_idx  (in_file(500)),
   KEY out_idx (out_file(500))
 );

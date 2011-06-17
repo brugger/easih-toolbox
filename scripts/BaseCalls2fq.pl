@@ -71,8 +71,11 @@ sub usage {
   exit -1;
 }
 
+my $debug = 0;
+
 my $indir       = $opts{'i'} || "./";
-my $runfolder = id_run_folder();
+# I need to find the run_folder name, for the data mongering things.
+my $runfolder   = id_run_folder();
 my $datamonger  = $opts{'d'} || 0;
 my $outdir      = $opts{'o'};
 
@@ -89,9 +92,6 @@ if (!$sample_sheet && -e "sample_sheet.csv") {
 }
 fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
 
-# I need to find the run_folder name, for the data mongering things.
-
-print "$sample_sheet\n";
 
 usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
 	   ! $opts{5} && ! $opts{6} && ! $opts{7} && ! $opts{8}  ||  $opts{h});
@@ -142,17 +142,21 @@ for(my $lane = 1; $lane<=8; $lane++) {
 }
 
 
+EASIH::Logistics::add_run_folder_status($runfolder, 
+					"ILLUMINA", 
+					"BASECALLS2FQ_DONE");
+
 
 # 
 # 
 # 
 # Kim Brugger (17 Jun 2011)
 sub open_outfile {
-  my ($basename) = @_;
+  my ($filename) = @_;
 
   my $fh;
-  open ($fh, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR");
-  EASIH::Logistics::add_file_offload($run_folder, $sample_sheet, "$basename.1.fq.gz");
+  open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
+  EASIH::Logistics::add_file_offload($runfolder, $sample_sheet, "$filename") if ($datamonger);
   
   return $fh;
 }
@@ -174,14 +178,11 @@ sub analyse_lane {
 
   my ($fh1, $fh2);
   
-  open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
-      if (! $fhs{"$sample_name.1"} );
+  $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" ) if (! $fhs{"$sample_name.1"} );
 
-  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
-      if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
-
-  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
-      if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
+  $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+  
+  $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
   
   foreach my $file (@files) {
     my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.1"} );
@@ -197,7 +198,7 @@ sub analyse_lane {
       $out2 += $to;
     }
 
-    last;
+    last if ($debug);
   }
 
 
@@ -228,11 +229,9 @@ sub analyse_barcoded_lane {
 #      print "$lane - $bcode ==  $sample_names{$lane}{$bcode} \n";
       my $sample_name = $sample_names{$lane_nr}{$bcode};
       my $basename = $sample_names{ $sample_name };
-      open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
-	  if (! $fhs{"$sample_name.1"} );
 
-      open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
-	  if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+      $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" ) if (! $fhs{"$sample_name.1"} );
+      $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
     }
   }
@@ -258,7 +257,7 @@ sub analyse_barcoded_lane {
       $out2 += $to;
     }
 
-#    last;
+    last if ($debug);
   }
 
   printf("lane $lane_nr.1\tMULTIPLEXED\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
@@ -281,7 +280,6 @@ sub analyse_tile {
   my ($input_file, $fout, $demultiplexing) = @_;
 
   my ( $count_in, $count_out ) = (0,0,0);
-
 
   open (my $in, "$input_file") || fail( "Could not open '$input_file': $!\n", "BASECALL2FQ_PATH_ERROR");
 
@@ -604,9 +602,12 @@ sub fail {
   
   if ( $datamonger ) {
     print STDERR "$message\n";
-    EASIH::Logistics::add_run_folder_status($runfolder, 
+    EASIH::Logistics::add_run_folderstatus($runfolder, 
 					    "ILLUMINA", 
 					    "$status");
+    EASIH::Logistics::add_run_folderstatus($runfolder, 
+					    "ILLUMINA", 
+					    "BASECALLS2FQ_FAILED");
     exit -1;
   }
   else {

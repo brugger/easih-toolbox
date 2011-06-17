@@ -10,11 +10,37 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/home/kb468/easih-toolbox/modules/';
-use EASIH::Git;
+
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+
+}
+
+use EASIH;
+use EASIH::Logistics;
 
 my %opts;
-getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnb", \%opts);
+getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
 
 
 my $limited_lanes = $opts{'l'};
@@ -34,6 +60,7 @@ sub usage {
   print "\nUSAGE: Advanced parameters\n";
   print "USAGE: -1,  -2, .., -8 < the lanes are assigned this name> Overrules the sample_sheet.csv\n";
   print "USAGE: -a< id, all lanes that are not named specifically gets this id>.\n";
+  print "USAGE: -d<ata monger mode, oh dont you dare>\n";
   print "USAGE: -b<arcoded run>.\n";
   print "USAGE: -l<imited lanes, by default the whole slide is extracted>.\n";
   print "USAGE: -n<o mismatches in barcodes, normal is 1 error>.\n";
@@ -45,6 +72,8 @@ sub usage {
 }
 
 my $indir       = $opts{'i'} || "./";
+my $runfolder = id_run_folder();
+my $datamonger  = $opts{'d'} || 0;
 my $outdir      = $opts{'o'};
 
 my $indexed_run = $opts{b} || 0;
@@ -58,6 +87,11 @@ if (!$sample_sheet && -e "sample_sheet.csv") {
   $indir = "./";
   $sample_sheet = "sample_sheet.csv";
 }
+fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
+
+# I need to find the run_folder name, for the data mongering things.
+
+print "$sample_sheet\n";
 
 usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
 	   ! $opts{5} && ! $opts{6} && ! $opts{7} && ! $opts{8}  ||  $opts{h});
@@ -107,6 +141,23 @@ for(my $lane = 1; $lane<=8; $lane++) {
 
 }
 
+
+
+# 
+# 
+# 
+# Kim Brugger (17 Jun 2011)
+sub open_outfile {
+  my ($basename) = @_;
+
+  my $fh;
+  open ($fh, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR");
+  EASIH::Logistics::add_file_offload($run_folder, $sample_sheet, "$basename.1.fq.gz");
+  
+  return $fh;
+}
+
+
 # 
 # 
 # 
@@ -123,13 +174,13 @@ sub analyse_lane {
 
   my ($fh1, $fh2);
   
-  open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
+  open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
       if (! $fhs{"$sample_name.1"} );
 
-  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
       if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
-  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+  open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
       if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
   
   foreach my $file (@files) {
@@ -146,12 +197,8 @@ sub analyse_lane {
       $out2 += $to;
     }
 
-#    last;
+    last;
   }
-
-#  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1\n") ;
-#  printf("lane $lane_nr.2\t$sample_name\t$in2\t$out2\n");
-
 
 
   printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
@@ -181,10 +228,10 @@ sub analyse_barcoded_lane {
 #      print "$lane - $bcode ==  $sample_names{$lane}{$bcode} \n";
       my $sample_name = $sample_names{$lane_nr}{$bcode};
       my $basename = $sample_names{ $sample_name };
-      open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || die "Could not open '$basename.1.fq.gz': $!\n"
+      open ($fhs{"$sample_name.1"}, "| gzip -c > $basename.1.fq.gz") || fail( "Could not open '$basename.1.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
 	  if (! $fhs{"$sample_name.1"} );
 
-      open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || die "Could not open '$basename.2.fq.gz': $!\n"
+      open ($fhs{"$sample_name.2"}, "| gzip -c > $basename.2.fq.gz") || fail( "Could not open '$basename.2.fq.gz': $!\n", "BASECALL2FQ_PATH_ERROR") 
 	  if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
     }
@@ -236,7 +283,7 @@ sub analyse_tile {
   my ( $count_in, $count_out ) = (0,0,0);
 
 
-  open (my $in, "$input_file") || die "Could not open '$input_file': $!\n";
+  open (my $in, "$input_file") || fail( "Could not open '$input_file': $!\n", "BASECALL2FQ_PATH_ERROR");
 
   while (my $line = <$in>) {
     chomp $line;
@@ -293,7 +340,7 @@ sub readin_sample_sheet {
   my $text_delim = "";
   my $field_delim = "";
 
-  open(my $in, $sample_sheet) || die "Could not open '$sample_sheet': $!\n";
+  open(my $in, $sample_sheet) || fail("Could not open '$sample_sheet': $!\n", "BASECALL2FQ_PATH_ERROR");
   my @lines;
   while(<$in>) {
     $_ =~ s/\r\n/\n/g; 
@@ -325,14 +372,14 @@ sub readin_sample_sheet {
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
 
       if ( $index ) {
-	die "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n" 
+	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
 	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});
 
 	$res{$lane}{$index} = $sample_id;
 	$indexed_run++;
       }
       else {
-	die "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n" 
+	fail( "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
 	    if ($res{$lane}  && !$opts{$lane} && !$opts{'a'});
 
 	$res{$lane} = $sample_id;
@@ -353,7 +400,12 @@ sub validate_lane_names {
   my (%sample_names) = @_;
 
   my %basenames;
-  foreach my $lane ( keys %sample_names) {
+  for ( my $lane =1; $lane <=8;$lane++) {
+    
+    fail( "no lane information for lane $lane \n", "MALFORMED_SAMPLESHEET")
+	if (! $sample_names{$lane} && ! $limited_lanes);
+    
+  
     if (ref ($sample_names{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$sample_names{$lane}}) {
 	$basenames{ $sample_names{$lane}{$bcode}} = -1;
@@ -367,10 +419,10 @@ sub validate_lane_names {
 
   if ( $outdir ) {
     if ( -e "$outdir" && ! -d "$outdir") {
-      die "$outdir is not a directory\n";
+      fail("$outdir is not a directory\n", "BASECALL2FQ_PATH_ERROR");
     }
     elsif ( -e "$outdir" && ! -w "$outdir") {
-      die "$outdir is not writeable\n";
+      fail("$outdir is not writeable\n", "BASECALL2FQ_PATH_ERROR");
     }
     if ( $outdir && ! -d $outdir ) {
       system "mkdir -p $outdir" || die "Could not create directory '$outdir': $!\n";
@@ -390,10 +442,10 @@ sub validate_lane_names {
     }
     else {
       if ( -e "$root_dir/$project" && ! -d "$root_dir/$project") {
-	die "$root_dir/$project is not a directory\n";
+	fail("$root_dir/$project is not a directory\n", "BASECALL2FQ_PATH_ERROR");
       }
       elsif ( -e "$root_dir/$project" && ! -w "$root_dir/$project") {
-	die "$root_dir/$project is not writeable\n";
+	fail( "$root_dir/$project is not writeable\n", "BASECALL2FQ_PATH_ERROR");
       }
       
       $root_dir .= "$project/raw/";
@@ -444,7 +496,7 @@ sub demultiplex_tile {
   my (%res, %counts);
   my @codes;
 
-  open (my $input, "$file") || die "Could not open '$file': $!\n";
+  open (my $input, "$file") || fail( "Could not open '$file': $!\n", "BASECALL2FQ_PATH_ERROR");
   while (my $line = <$input>) {
 
     my ($instr, $run_id, $lane, $tile, $x, $y, $index, $read, $bc, $q_line, $filter) = split /\t/, $line;
@@ -502,3 +554,64 @@ sub verify_bcode {
 
   return undef;
 }
+
+
+
+
+# 
+# Need the rulfolder for the datamongering. As the script can be
+# called in every possible way this is a tad complicated
+# 
+# Kim Brugger (17 Jun 2011)
+sub id_run_folder {
+
+  my $dir = "";
+
+  our $cwd      = `pwd`;
+  chomp($cwd);
+
+
+  # An absolute path was given to the BaseCalls dir
+  if ( $indir && $indir =~ /^\// ) {
+    $dir = $indir;
+  }
+  elsif( $indir ) {
+    $dir = "$cwd//$indir";
+  }
+  else { 
+    $dir = $cwd;
+  }
+
+  # remove double // in the name
+  $dir =~ s/\/{2,}/\//g;
+
+  if ( $dir  =~ /\.\./ ) {
+    fail("Cannot handle input paths containing: ../\n", "BASECALL2FQ_INPATH_ERROR");
+  }
+
+  my @dirs = split( "/", $dir);
+  return $dirs[3];
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (17 Jun 2011)
+sub fail {
+  my ($message, $status) = @_;
+
+  
+  if ( $datamonger ) {
+    print STDERR "$message\n";
+    EASIH::Logistics::add_run_folder_status($runfolder, 
+					    "ILLUMINA", 
+					    "$status");
+    exit -1;
+  }
+  else {
+    die $message;
+  }
+  
+}
+

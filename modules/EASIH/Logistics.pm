@@ -10,6 +10,8 @@ use warnings;
 use Data::Dumper;
 use Time::HiRes;
 
+use DBI;
+
 my $dbi;
 
 # 

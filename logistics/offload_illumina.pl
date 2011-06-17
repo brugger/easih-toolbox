@@ -3,7 +3,6 @@
 #
 #   File:       offload_illumina.pl
 #   
-#   Version:    V1.0
 #   Date:       16.06.11
 #   Function:   Offloading illumina data - postprocessing - running QC reports.
 #   
@@ -29,15 +28,12 @@
 #   ======
 #   $0 -h<help>
 #*************************************************************************
-#
-#   Revision History:
-#   =================
-#   V1.0  16.06.11 Original.
-#*************************************************************************
+
 
 use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use Getopt::Std;
+use DBI;
 use EASIH;
 use EASIH::Mail;
 use EASIH::Logistics;
@@ -47,28 +43,30 @@ getopts('h', \%opts);
 
 if($opts{h})
 {
-  $0 =~ s/.*\///;
-  print STDERR "\n\nDescription: Checks run complete (not the file Run.completed) status for illumina runs.\n";
-  print STDERR "\nDetails: script for picking recent file in the relevant directory - looking for \"Copying logs to network run folder\" in Events.log file - alert people about run complete status.\n";
-  print STDERR "\nUsage: $0 -h<help>\n\n\n";
-  exit;
+    $0 =~ s/.*\///;
+    print STDERR "\n\nDescription: Checks run complete (not the file Run.completed) status for illumina runs.\n";
+    print STDERR "\nDetails: script for picking recent file in the relevant directory - looking for \"Copying logs to network run folder\" in Events.log file - alert people about run complete status.\n";
+    print STDERR "\nUsage: $0 -h<help>\n\n\n";
+    exit;
 }
 
-my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk';
+my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
 #my $to = 'bics@easih.ac.uk,lab@easih.ac.uk';
 #my $dir = "/seqs/illumina2/";
 my $dir = "/seqs/babraham/";
-my $CurrentRunDir;
-
+my $CurrentRunDir; #global
+my $mailcount = 0; #global
 
 opendir(DIR, "$dir");
-my @files = readdir(DIR);
+my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
 closedir(DIR);
 
- 
-foreach my $file (@files) 
+
+while(my $file = shift @files) 
 {
-    next, if($file =~ /^\.|\.log$/);
+#    print "$file " . @files . " left\n";
+#    next;
+#    next, if($file =~ /^\.|\.log$/);
     
     my $runfolder   = ${dir}.$file;
     my $eventfile   = ${runfolder}."/Events.log"; 
@@ -86,12 +84,22 @@ foreach my $file (@files)
 	
 	chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
 	
+
+	### Update the status for old and unfinished runs ###
+	if((!$checkstring) && (@files)) 
+	{
+	    RunStatus("RUN_ABORTED");
+	    next;
+	}
+
+
+	### Start post processing for new runs ###
 	if($checkstring)
 	{
 	    ### Run Complete ###
-	    my $body = "\n\n\t\t *****This is an automated email***** \n\n Run Completed for Illumina Run: $runfolder \n\n\t\t\t *****The End***** \n\n";
-	    
-	    EASIH::Mail::send($to, "[easih-data]Run Completed - $file", "$body");
+	    my $body = "\n\n\t\t *****This is an automated email***** \n\n Run Completed for Illumina Run: $file \n\n\t\t\t *****The End***** \n\n";
+
+	    SendEmail($body);
 	    RunStatus("RUN_COMPLETED");
 
 
@@ -146,16 +154,31 @@ sub RunStatus
 {
     my($status) = @_;
     
-    EASIH::Logistics::add_run_folder_status($CurrentRunDir, "ILLUMINA", "$status");
+    EASIH::Logistics::add_run_folder_status($CurrentRunDir, 
+					    "ILLUMINA", 
+					    "$status");
 }
 
 
 ###########################################################
-sub FailEmail
+sub SendEmail
 {
-    my($command) = @_;
+    my($message) = @_;
     
-    EASIH::Mail::send($to, "[easih-data] Illumina Data Processing Failed!", "Failed Command: '$command'\n");
+    if($mailcount)
+    {
+	EASIH::Mail::send($to, 
+			  "[easih-data] Illumina Run Completed - $CurrentRunDir", 
+			  "$message");
+    }
+    else
+    {
+	EASIH::Mail::send($to, 
+			  "[easih-data] Illumina Data Processing Failed - $CurrentRunDir!", 
+			  "Failed Command: '$message'");
+    }
+    
+    $mailcount++;  
 }
 
 
@@ -169,7 +192,7 @@ sub GrabAndRun
     if(system($command))
     {
 	RunStatus("$fail_status");
-	FailEmail($command);
+	SendEmail($command);
 	return 0;
     }
     

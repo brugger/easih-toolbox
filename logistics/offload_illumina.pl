@@ -34,7 +34,6 @@ use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use Getopt::Std;
 use DBI;
-use EASIH;
 use EASIH::Mail;
 use EASIH::Logistics;
 
@@ -55,13 +54,12 @@ my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
 #my $dir = "/seqs/illumina2/";
 my $dir = "/seqs/babraham/";
 my $CurrentRunDir; #global
-my $mailcount = 0; #global
 
 opendir(DIR, "$dir");
 my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
 closedir(DIR);
 
-
+   
 while(my $file = shift @files) 
 {
 #    print "$file " . @files . " left\n";
@@ -74,7 +72,6 @@ while(my $file = shift @files)
     my $Intensities = ${Data}."/Intensities"; 
     my $Basecalls   = $Intensities."/BaseCalls"; 
     $CurrentRunDir  = $file;
-
     
     if(-e "$eventfile")
     {
@@ -99,8 +96,11 @@ while(my $file = shift @files)
 	    ### Run Complete ###
 	    my $body = "\n\n\t\t *****This is an automated email***** \n\n Run Completed for Illumina Run: $file \n\n\t\t\t *****The End***** \n\n";
 
-	    SendEmail($body);
+	    #SendEmail($body);
 	    RunStatus("RUN_COMPLETED");
+	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
+	    SendEmail($last_status), if($last_status eq "Run_COMPLETED");
+	 
 
 
             ### BCL2QSEQ ###
@@ -118,7 +118,7 @@ while(my $file = shift @files)
 	    
 
 	    ### BCL2FQ ###
-	    next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls > $Basecalls/BaseCalls2fq.log",
+	    next, if(!GrabAndRun("/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -o /tmp/test/ -di $Basecalls > $Basecalls/BaseCalls2fq.log",
 				 "BCL2QFQ_STARTED", 
 				 "BCL2QFQ_FAILED",
 				 "BCL2QFQ_DONE"));
@@ -139,11 +139,20 @@ while(my $file = shift @files)
 
 	    foreach my $fqfile(@fqfiles)
 	    {
-		next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -f $fqfile.1.fq.gz  -r",
+		next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -f $fqfile -r",
 				     "QC_REPORT_STARTED", 
 				     "QC_REPORT_FAILED",
 				     "QC_REPORT_DONE"));
 	    }
+
+	    
+	    ### QC done email ###
+	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
+	    SendEmail($last_status), if($last_status eq "QC_REPORT_DONE");
+	    
+	    SendEmail("PROCESSING_DONE");
+
+
 	}
     }
 }
@@ -165,7 +174,14 @@ sub SendEmail
 {
     my($message) = @_;
     
-    if($mailcount)
+    #if($mailcount)
+    if($message eq "QC_REPORT_DONE")
+    {
+	EASIH::Mail::send($to, 
+			  "[easih-data] Illumina Data Processing finished - $CurrentRunDir!", 
+			  "$last_status");
+    }
+    elsif($message eq "Run_completed")
     {
 	EASIH::Mail::send($to, 
 			  "[easih-data] Illumina Run Completed - $CurrentRunDir", 
@@ -178,7 +194,8 @@ sub SendEmail
 			  "Failed Command: '$message'");
     }
     
-    $mailcount++;  
+    
+   # $mailcount++;  
 }
 
 

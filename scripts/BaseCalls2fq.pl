@@ -154,6 +154,9 @@ EASIH::Logistics::add_run_folder_status($runfolder,
 sub open_outfile {
   my ($filename) = @_;
 
+  # simplifies ////// to /
+  $filename =~ s/\/{2,}/\//;
+
   my $fh;
   open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
   EASIH::Logistics::add_file_offload($runfolder, $sample_sheet, "$filename") if ($datamonger);

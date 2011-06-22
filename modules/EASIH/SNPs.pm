@@ -247,7 +247,7 @@ sub fetch_ref_id {
 # 
 # Kim Brugger (08 Dec 2010)
 BEGIN {
-  $snp_db = "dbsnp_132_human";
+  $snp_db = "dbsnp_132";
   $pp_db  = "phylop_phast";
 
   $dbi = DBI->connect("DBI:mysql:$snp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";

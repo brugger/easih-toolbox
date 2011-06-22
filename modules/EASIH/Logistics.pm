@@ -93,7 +93,7 @@ sub runfolder_log {
   foreach my $entry ( @$entries ) {
     my $microsec = $$entry[0] % 100000;
     $$entry[0] /= 100000;
-    $$entry[0] = strftime("%Y/%m/%d %H:%M:%S:$microsec", localtime( $$entry[0] ));
+    $$entry[0] = strftime("%d/%m/%Y %H:%M:%S.$microsec", localtime( $$entry[0] ));
     print "$$entry[0]\t$$entry[1]\n";
   }
 
@@ -160,7 +160,37 @@ sub fetch_latest_run_folder_status {
   return $status;
 }
 
+
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub fetch_platform {
+  my ($run_folder) = @_;
+
+  my $q = "SELECT platform from  runs where runfolder = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $run_folder );
+
+  my $platform = undef;
+  my $results = $sth->fetchrow_arrayref();
+  $platform = $$results[0] if ($results);
+  return $platform;
+}
+
   
+# 
+# 
+# 
+# Kim Brugger (22 Jun 2011)
+sub fetch_run_folder_failure {
+  my ($run_folder) = @_;
+
+  my $entries = fetch_run_folder_entries( $run_folder);
+  my $status;
+  $status =  $$entries[-2][1] if ($$entries[-2]);
+  return $status;
+}
 
 
 

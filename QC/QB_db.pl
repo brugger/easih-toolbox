@@ -36,5 +36,10 @@ use EASIH::QC::db;
 
 my $sid = EASIH::QC::db::add_sample('Z980001', 'Z98');
 my $pid = EASIH::QC::db::fetch_project_id('Z98');
-print "$pid --> $sid\n";
+my $fid = EASIH::QC::db::add_file('Z980001.1.fq', 'Z980001', 'Z98');
+print "$fid --> $pid --> $sid\n";
 
+#EASIH::QC::db::add_qvs($fid, [[1,0,1,2,3,4,5],[2,0,1,2,3,4,5], [3,0,1,2,3,4,5]]);
+
+my @qvs = EASIH::QC::db::fetch_qvs($fid);
+print Dumper( \@qvs);

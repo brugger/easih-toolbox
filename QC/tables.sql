@@ -1,3 +1,15 @@
+#DROP TABLE project;
+#DROP TABLE sample;
+#DROP TABLE file;
+#DROP TABLE qv_boxplot;
+#DROP TABLE qv_histogram;
+#DROP TABLE base_distribution;
+#DROP TABLE GC_distribution;
+#DROP TABLE duplicates;
+#DROP TABLE duplicated_seqs;
+#DROP TABLE adaptors;
+
+
 
 CREATE TABLE project (
 
@@ -25,7 +37,7 @@ CREATE TABLE file (
 
   fid                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   sid                 INT NOT NULL ,
-  name                VARCHAR(8) NOT NULL ,
+  name                VARCHAR(50) NOT NULL ,
   platform            VARCHAR(50),
   timestamp           BIGINT,
 
@@ -51,6 +63,7 @@ CREATE TABLE qv_boxplot (
   q3		      float,
   q4		      float,
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 
@@ -60,6 +73,7 @@ CREATE TABLE qv_histogram (
   x            	      INT NOT NULL,
   height	      float,
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 
@@ -73,6 +87,7 @@ CREATE TABLE base_distribution (
   T		      float,
   N		      float,
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 
@@ -82,14 +97,18 @@ CREATE TABLE GC_distribution (
   x            	      INT NOT NULL,
   percent_gc	      float,
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 
 
-CREATE TABLE duplication (
+CREATE TABLE duplicates (
   fid                 INT NOT NULL,
   x            	      INT NOT NULL,
-  observations	      INT
+  observations	      INT,
+
+  PRIMARY KEY (fid, x),
+  KEY fid_idx( fid )
 );
 
 CREATE TABLE duplicated_seqs (
@@ -98,6 +117,7 @@ CREATE TABLE duplicated_seqs (
   percentage	      float,
   source	      varchar(100),
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 
@@ -107,6 +127,7 @@ CREATE TABLE adaptors (
   x            	      INT NOT NULL,
   percent	      float,
   
+  PRIMARY KEY (fid, x),
   KEY fid_idx( fid )
 );
 

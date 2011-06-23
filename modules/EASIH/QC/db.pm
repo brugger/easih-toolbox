@@ -14,6 +14,27 @@ my $dbi;
 
 
 
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_qvs {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x,q0,q1,q2,q3,q4 FROM qv_boxplot where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+
 # 
 # 
 # 
@@ -47,19 +68,22 @@ sub _add_qv_set {
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_file {
-  my ( $file, $sample, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  my ( $file, $sample, $project, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
   
+  my $file_id = fetch_file_id( $file );
+  return $file_id if ( $file_id );
+
   # check to see if it already exists.
   my $sample_id = fetch_sample_id( $sample);
   if ( !$sample_id ) {
-    $sample_id = add_sample( $sample);
+    $sample_id = add_sample( $sample, $project);
   }
 
   my $q = "INSERT INTO file (sid, name, platform, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $sample_id, $file, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
 
-  return $sth->insertid;
+  return $dbi->last_insert_id(undef, undef, qw(file fid));
 }
 
 
@@ -69,6 +93,7 @@ sub add_file {
 # Kim Brugger (23 Jun 2011)
 sub fetch_file_id {
   my ( $file ) = @_;
+  print "$file\n";
   my $q = "SELECT fid FROM file where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $file ) || die "$DBI::errstr";

@@ -22,7 +22,6 @@ use DBI;
 # perllib/perl5lib in the enviroment. Needs to be prior to the use of EASIH* modules.
 BEGIN {
   my $path = $0;
-  $path =~ s/^\.\///;
   if ($path =~ /.*\//) {
     $path =~ s/(.*)\/.*/$1/;
     push @INC, "$path/modules" if ( -e "$path/modules");
@@ -54,7 +53,7 @@ if ( !$runfolder ) {
 else {
   my @data = EASIH::Logistics::fetch_files_from_rundir( $runfolder );
   foreach my $line ( @data ) {
-    print "$runfolder --> $line\n";
+#    print "$runfolder --> $line\n";
   }
 
   EASIH::Logistics::runfolder_log( $runfolder );

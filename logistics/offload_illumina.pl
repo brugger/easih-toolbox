@@ -3,7 +3,7 @@
 #
 #   File:       offload_illumina.pl
 #   
-#   Date:       16.06.11
+#   Date:       22.06.11
 #   Function:   Offloading illumina data - postprocessing - running QC reports.
 #   
 #   Copyright:  (c) University of Cambridge / S.V.V. Deevi 2011
@@ -49,11 +49,13 @@ if($opts{h})
     exit;
 }
 
+
 my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
-#my $to = 'bics@easih.ac.uk,lab@easih.ac.uk';
-#my $dir = "/seqs/illumina2/";
-my $dir = "/seqs/babraham/";
+#my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
+my $dir = "/seqs/illumina2/";
+#my $dir = "/seqs/babraham/";
 my $CurrentRunDir; #global
+
 
 opendir(DIR, "$dir");
 my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
@@ -62,22 +64,41 @@ closedir(DIR);
    
 while(my $file = shift @files) 
 {
-#    print "$file " . @files . " left\n";
-#    next;
-#    next, if($file =~ /^\.|\.log$/);
-    
     my $runfolder   = ${dir}.$file;
     my $eventfile   = ${runfolder}."/Events.log"; 
     my $Data        = ${runfolder}."/Data";
     my $Intensities = ${Data}."/Intensities"; 
     my $Basecalls   = $Intensities."/BaseCalls"; 
-    $CurrentRunDir  = $file;
+    $CurrentRunDir  = $file;    
     
+
+    my %Execute = ('01-BCL2QSEQ'  => {'01-command'    => "cd $Intensities; /software/bin/setupBclToQseq.py --in-place --overwrite -o BaseCalls -b BaseCalls", 
+				      '02-prestatus'  => "BCL2QSEQ_SETUP", 
+				      '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
+				      '04-poststatus' => "BCL2QSEQ_DONE"},
+		   
+		   '02-MAKE'      => {'01-command'    => "cd $Basecalls; make;", 
+				      '02-prestatus'  => "MAKE_STARTED", 
+				      '03-failstatus' => "MAKE_FAILED", 
+				      '04-poststatus' => "MAKE_DONE"},
+		   
+		   '03-BCL2FQ'    => {'01-command'    => "/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls > $Basecalls/BaseCalls2fq.log", 
+				      '02-prestatus'  => "BCL2QFQ_STARTED", 
+				      '03-failstatus' => "BCL2QFQ_FAILED", 
+				      '04-poststatus' => "BCL2QFQ_DONE"},
+		   
+		   '04-QC_Report' => {'01-command'    => "/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
+				      '02-prestatus'  => "QC_REPORT_STARTED", 
+				      '03-failstatus' => "QC_REPORT_FAILED", 
+				      '04-poststatus' => "QC_REPORT_DONE"},
+	);
+
+        
     if(-e "$eventfile")
     {
 	my $last_status = EASIH::Logistics::fetch_latest_run_folder_status("$file"); 
 	
-	next, if($last_status);
+	next, if($last_status && $last_status ne "RETRY_OFFLOAD");
 	
 	chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
 	
@@ -90,73 +111,85 @@ while(my $file = shift @files)
 	}
 
 
+	my $failed_status = EASIH::Logistics::fetch_run_folder_failure( $file ) if ( $last_status );
+	my $fixed_failed_program = 0;
+
+
 	### Start post processing for new runs ###
 	if($checkstring)
 	{
 	    ### Run Complete ###
-	    my $body = "\n\n\t\t *****This is an automated email***** \n\n Run Completed for Illumina Run: $file \n\n\t\t\t *****The End***** \n\n";
-
-	    #SendEmail($body);
-	    RunStatus("RUN_COMPLETED");
+	    RunStatus("RUN_COMPLETED") if ( ! $failed_status );
 	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    SendEmail($last_status), if($last_status eq "Run_COMPLETED");
-	 
+	    SendEmail($last_status,1), if($last_status eq "RUN_COMPLETED");
 
 
-            ### BCL2QSEQ ###
-	    next, if(!GrabAndRun("cd $Intensities; /software/bin/setupBclToQseq.py --in-place --overwrite -o BaseCalls -b BaseCalls", 
-				 "BCL2QSEQ_SETUP", 
-				 "BCL2QSEQ_SETUP_FAILED", 
-				 "BCL2QSEQ_DONE"));
-
+            ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
 	    
-            ### MAKE ###
-	    next, if(!GrabAndRun("cd $Basecalls; make;",
-				 "MAKE_STARTED", 
-				 "MAKE_FAILED",
-				 "MAKE_DONE"));
-	    
+	    for my $program(sort keys %Execute)
+	    {
+		
+		next, if($program =~ /QC_Report/);
 
-	    ### BCL2FQ ###
-	    next, if(!GrabAndRun("/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -o /tmp/test/ -di $Basecalls > $Basecalls/BaseCalls2fq.log",
-				 "BCL2QFQ_STARTED", 
-				 "BCL2QFQ_FAILED",
-				 "BCL2QFQ_DONE"));
+		if ( $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
+		    next if ($failed_status ne $Execute{$program}{'03-failstatus'});
+		    $fixed_failed_program++;
+		}
+
+		my @GARstring;
+		
+		for my $info(sort keys %{$Execute{$program}})
+		{
+		    push @GARstring, $Execute{$program}{$info};
+		}
 	
+		goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
+	    }         
+	    
 
 	    ### Something Bad ###
-	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    
-	    if($last_status =~ /WRONG|FAIL/)
+	    $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
+	    #if($last_status =~ /WRONG|FAIL/)
+	    if( $last_status ne "BASECALLS2FQ_DONE" )
 	    {
 		next;
 	    }
 	    
 
-	    
 	    ### QC_Report ###
 	    my @fqfiles = EASIH::Logistics::fetch_files_from_rundir($file);
-
+	    
 	    foreach my $fqfile(@fqfiles)
 	    {
-		next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -f $fqfile -r",
-				     "QC_REPORT_STARTED", 
-				     "QC_REPORT_FAILED",
-				     "QC_REPORT_DONE"));
+		
+		my @GARstring;
+		
+		push @GARstring, $Execute{'04-QC_Report'}{'01-command'} . "$fqfile";
+		push @GARstring, $Execute{'04-QC_Report'}{'02-prestatus'};
+		push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
+		push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
+		
+		next, if(!GrabAndRun(@GARstring));
 	    }
 
+    
 	    
 	    ### QC done email ###
-	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    SendEmail($last_status), if($last_status eq "QC_REPORT_DONE");
+	    $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
 	    
-	    SendEmail("PROCESSING_DONE");
-
-
+	    if($last_status eq "QC_REPORT_DONE")
+	    {
+		SendEmail($last_status,1), 
+		
+                ### Processing done status and email ###
+		my $end = "PROCESSING_DONE";
+		RunStatus($end);
+		SendEmail($end,1);
+	    }
 	}
     }
+  NEXT_RUNFOLDER:
 }
-
 
 ###########################################################
 sub RunStatus
@@ -172,30 +205,26 @@ sub RunStatus
 ###########################################################
 sub SendEmail
 {
-    my($message) = @_;
-    
-    #if($mailcount)
-    if($message eq "QC_REPORT_DONE")
+    my($message,$success) = @_;
+ 
+    my $subject = $message;
+
+    $message = "Failed Command: $message", if(! $success);
+
+    if($success && $message eq "PROCESSING_DONE")
     {
-	EASIH::Mail::send($to, 
-			  "[easih-data] Illumina Data Processing finished - $CurrentRunDir!", 
-			  "$last_status");
+	#chomp(my $log = `~kb468/easih-toolbox/logistics/logistics_log.pl $CurrentRunDir`), 
+
+	my $log = EASIH::Logistics::runfolder_log($CurrentRunDir);
+	$message = "$message \n\n $log";
     }
-    elsif($message eq "Run_completed")
-    {
-	EASIH::Mail::send($to, 
-			  "[easih-data] Illumina Run Completed - $CurrentRunDir", 
-			  "$message");
-    }
-    else
-    {
-	EASIH::Mail::send($to, 
-			  "[easih-data] Illumina Data Processing Failed - $CurrentRunDir!", 
-			  "Failed Command: '$message'");
-    }
+
+    my $body = "\n\n\t\t *****This is an automated email***** \n\n $message \n\n\t\t\t *****The End***** \n\n";
+         
     
-    
-   # $mailcount++;  
+    EASIH::Mail::send($to, 
+		      "[easih-data] Illumina Data Processing [Return Code = $success]: $subject - $CurrentRunDir", 
+		      "$body");
 }
 
 
@@ -203,13 +232,13 @@ sub SendEmail
 sub GrabAndRun
 {
     my ($command, $pre_status, $fail_status, $post_status) = @_;
-    
+
     RunStatus($pre_status);
     
     if(system($command))
     {
 	RunStatus("$fail_status");
-	SendEmail($command);
+	SendEmail($command,0);
 	return 0;
     }
     

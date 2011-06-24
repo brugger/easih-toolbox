@@ -14,12 +14,329 @@ my $dbi;
 
 
 
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_adaptors {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x, percent FROM adaptors where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
 
 # 
 # 
 # 
 # Kim Brugger (23 Jun 2011)
-sub fetch_qvs {
+sub add_adaptors {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_adaptor( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_adaptor {
+  my ( $fid, $x, $perc ) = @_;
+
+  my $q = "INSERT INTO adaptors (fid, x, percent) VALUES (?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
+}
+
+
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_duplicate_seqs {
+  my ($fid) = @_;
+  
+  my $q = "SELECT sequence, percentage, source FROM duplicated_seqs where fid = ? ORDER BY percentage";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_duplicate_seqs {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_duplicate_seq( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_duplicate_seq {
+  my ( $fid, $sequence, $perc, $source ) = @_;
+
+  my $q = "INSERT INTO duplicated_seqs (fid, sequence, percentage, source) VALUES (?,?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute(  $fid, $sequence, $perc, $source ) || die "$DBI::errstr";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_duplicates {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x,observations FROM duplicates where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_duplicates {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_duplicate( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_duplicate {
+  my ( $fid, $x, $dups ) = @_;
+
+  my $q = "INSERT INTO duplicates (fid, x, observations) VALUES (?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid, $x, $dups ) || die "$DBI::errstr";
+}
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_gc_distribution {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x,percent_gc FROM GC_distribution where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_gc_distribution {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_gc_dist( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_gc_dist {
+  my ( $fid, $x, $perc ) = @_;
+
+  my $q = "INSERT INTO GC_distribution (fid, x, percent_gc) VALUES (?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_base_distribution {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x,A,C,G,T,N FROM base_distribution where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_basedists {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_basedist( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_basedist {
+  my ( $fid, $x, $A, $C, $G, $T, $N ) = @_;
+
+  my $q = "INSERT INTO base_distribution (fid, x, A, C, G, T, N) VALUES (?,?,?,?,?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid, $x, $A, $C, $G, $T, $N ) || die "$DBI::errstr";
+}
+
+
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_qvs_histogram {
+  my ($fid) = @_;
+  
+  my $q = "SELECT x,height FROM qv_histogram where fid = ? ORDER BY x";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @res;
+  while ( my @line = $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+
+  return @res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_qvs_histogram {
+  my ( $fid, $values ) = @_;
+
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
+  foreach my $value ( @$values ) {
+    _add_qv_hist( $fid, @$value);
+  }
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub _add_qv_hist {
+  my ( $fid, $x, $height ) = @_;
+
+  my $q = "INSERT INTO qv_histogram (fid, x, height) VALUES (?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid, $x, $height ) || die "$DBI::errstr";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_qvs_boxplot {
   my ($fid) = @_;
   
   my $q = "SELECT x,q0,q1,q2,q3,q4 FROM qv_boxplot where fid = ? ORDER BY x";
@@ -39,11 +356,17 @@ sub fetch_qvs {
 # 
 # 
 # Kim Brugger (23 Jun 2011)
-sub add_qvs {
+sub add_qvs_boxplot {
   my ( $fid, $values ) = @_;
 
+  my $check_file_name = fetch_filename( $fid );
+  if ( ! $check_file_name ) {
+    print "'$fid' does not exist in the database\n";
+    return 0;
+  }
+
   foreach my $value ( @$values ) {
-    _add_qv_set( $fid, @$value);
+    _add_qv_boxplot( $fid, @$value);
   }
 }
 
@@ -52,13 +375,14 @@ sub add_qvs {
 # 
 # 
 # Kim Brugger (23 Jun 2011)
-sub _add_qv_set {
+sub _add_qv_boxplot {
   my ( $fid, $x, $q0, $q1, $q2, $q3, $q4 ) = @_;
 
   my $q = "INSERT INTO qv_boxplot (fid, x, q0, q1, q2, q3, q4) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $q0, $q1, $q2, $q3, $q4 ) || die "$DBI::errstr";
 }
+
 
 
 
@@ -91,9 +415,22 @@ sub add_file {
 # 
 # 
 # Kim Brugger (23 Jun 2011)
+sub fetch_filename {
+  my ( $fid ) = @_;
+  my $q = "SELECT name FROM file where fid = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @line =  $sth->fetchrow_array();
+  return $line[0] || undef;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
 sub fetch_file_id {
   my ( $file ) = @_;
-  print "$file\n";
   my $q = "SELECT fid FROM file where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $file ) || die "$DBI::errstr";

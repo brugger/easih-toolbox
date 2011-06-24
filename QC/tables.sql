@@ -117,7 +117,7 @@ CREATE TABLE duplicated_seqs (
   percentage	      float,
   source	      varchar(100),
   
-  PRIMARY KEY (fid, x),
+  PRIMARY KEY (fid, sequence),
   KEY fid_idx( fid )
 );
 

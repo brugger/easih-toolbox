@@ -385,6 +385,132 @@ sub _add_qv_boxplot {
 
 
 
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_mapping_stats {
+  my ( $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) = @_;
+
+  
+  my $q = "INSERT INTO mapping_stats ( fid1, fid2, reference, unique_hits, non_unique_hits, duplicates) VALUES (?,?,?,?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute(  $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) || die "$DBI::errstr";
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_mapping_stats {
+  my ( $fid1, $fid2 ) = @_;
+  my $sth;
+  if ( $fid2 ) {
+    my $q = "SELECT * FROM  mapping_stats where fid1 = ? AND fid2 = ?";
+    $sth = $dbi->prepare($q);
+    $sth->execute( $fid1, $fid2 ) || die "$DBI::errstr";
+  }
+  else {
+    my $q = "SELECT reference, unique_hits, non_unique_hits, duplicates FROM  mapping_stats where fid1 = ?";
+    $sth = $dbi->prepare($q);
+    $sth->execute( $fid1 ) || die "$DBI::errstr";
+  }
+  my @res;
+  while(my @line =  $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+  return @res;
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_illumina_multiplex_stats {
+  my ( $rid, $fid, $lane, $sample, $bcode, $ratio ) = @_;
+
+  my $q = "INSERT INTO illumina_multiplex_stats ( rid, fid, lane, sample, bcode, ratio) VALUES (?,?,?,?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $rid, $fid, $lane, $sample, $bcode, $ratio ) || die "$DBI::errstr";
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_illumina_multiplex_stats_by_rid {
+  my ( $rid ) = @_;
+  my $q = "SELECT * FROM  illumina_multiplex_stats where rid = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $rid ) || die "$DBI::errstr";
+  my @res;
+  while(my @line =  $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+  return @res;
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_illumina_lane_stats {
+  my ( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) = @_;
+  
+
+  my $q = "INSERT INTO illumina_lane_stats ( rid, fid, lane, read_nr, sample, total_reads, pass_filter) VALUES (?,?,?,?,?,?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) || die "$DBI::errstr";
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_illumina_lane_stats_by_rid {
+  my ( $rid ) = @_;
+  my $q = "SELECT * FROM  illumina_lane_stats where rid = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $rid ) || die "$DBI::errstr";
+  my @res;
+  while(my @line =  $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+  return @res;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub update_file {
+  my ( $fid, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  
+  my $q = "UPDATE file SET ";
+  my @updates;
+  push @updates, "sample_size = 'sample_size' "            if ( $sample_size );
+  push @updates, "Q30bases = '$Q30bases' "                 if ( $Q30bases );
+  push @updates, "duplicates = '$duplicates' "             if ( $duplicates );
+  push @updates, "partial_adaptors = '$partial_adaptors' " if ( $partial_adaptors );
+  push @updates, "Avg_AC = '$Avg_AC' "                     if ( $Avg_AC );
+
+  $q .= join(", ", @updates);
+
+  my $sth = $dbi->prepare($q);
+  $sth->execute( ) || die "$DBI::errstr";
+
+}
 
 
 # 
@@ -392,7 +518,13 @@ sub _add_qv_boxplot {
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_file {
-  my ( $file, $sample, $project, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  my ( $file, $sample, $project, $run, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+
+#  $sample_size      ||= 'NULL';
+#  $Q30bases         ||= 'NULL';
+#  $duplicates       ||= 'NULL';
+#  $partial_adaptors ||= 'NULL';
+#  $Avg_AC           ||= 'NULL';
   
   my $file_id = fetch_file_id( $file );
   return $file_id if ( $file_id );
@@ -403,9 +535,14 @@ sub add_file {
     $sample_id = add_sample( $sample, $project);
   }
 
-  my $q = "INSERT INTO file (sid, name, platform, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?)";
+  my ($run_id, undef) = fetch_run_id( $run);
+  if ( !$run_id ) {
+    $run_id = add_run( $run, $platform);
+  }
+
+  my $q = "INSERT INTO file (sid, rid, name, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $sample_id, $file, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
+  $sth->execute( $sample_id, $run_id, $file, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
 
   return $dbi->last_insert_id(undef, undef, qw(file fid));
 }
@@ -479,6 +616,38 @@ sub fetch_sample_id {
   return $line[0] || undef;
 }
 
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub add_run {
+  my ( $run, $platform ) = @_;
+  
+  # check to see if it already exists.
+  my ($run_id, undef) = fetch_run_id( $run);
+  return $run_id if ( $run_id );
+
+  my $q = "INSERT INTO run (name, platform) VALUES (?,?)";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $run, $platform ) || die "$DBI::errstr";
+
+  return $dbi->last_insert_id(undef, undef, qw(run rid));
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (24 Jun 2011)
+sub fetch_run_id {
+  my ( $run ) = @_;
+  my $q = "SELECT rid, platform FROM run where name = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $run ) || die "$DBI::errstr";
+  my @line =  $sth->fetchrow_array();
+  return @line || undef;
+}
 
 # 
 # 

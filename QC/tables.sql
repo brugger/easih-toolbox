@@ -8,7 +8,9 @@
 #DROP TABLE duplicates;
 #DROP TABLE duplicated_seqs;
 #DROP TABLE adaptors;
-
+#DROP TABLE illumina_multiplex_stats;
+#DROP TABLE illumina_lane_stats;
+#DROP TABLE run;
 
 
 CREATE TABLE project (
@@ -32,14 +34,53 @@ CREATE TABLE sample (
   KEY pid_idx  (pid)
 );
 
+CREATE TABLE illumina_lane_stats (
+
+  rid                 INT NOT NULL,
+  fid                 INT NOT NULL,
+  lane		      INT NOT NULL,
+  read_nr	      INT NOT NULL,
+  sample              VARCHAR(20) NOT NULL ,
+  total_reads	      INT,
+  pass_filter	      INT,
+
+  PRIMARY KEY (rid, lane, read_nr),
+  KEY rid_idx (rid),
+  KEY fid_idx (fid)
+
+);
+
+CREATE TABLE illumina_multiplex_stats (
+  rid                 INT NOT NULL,
+  fid                 INT NOT NULL,
+  lane		      INT NOT NULL,
+  sample	      VARCHAR(20),
+  bcode		      VARCHAR(20),
+  ratio		      float,
+
+  PRIMARY KEY (rid, fid),
+  KEY rid_idx (rid),
+  KEY fid_idx (fid)
+  
+);
+
+CREATE TABLE run (
+
+  rid                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name                VARCHAR(8) NOT NULL ,
+  platform            VARCHAR(50),
+
+  KEY name_idx (name)
+);
+
 
 CREATE TABLE file (
 
   fid                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   sid                 INT NOT NULL ,
   name                VARCHAR(50) NOT NULL ,
-  platform            VARCHAR(50),
   timestamp           BIGINT,
+  rid		      INT NOT NULL,
 
   sample_size	      int,
   Q30bases	      float,
@@ -47,10 +88,20 @@ CREATE TABLE file (
   partial_adaptors    float,
   Avg_AC	      float,
   
-
-
   KEY name_idx (name),
   KEY sid_idx  (sid)
+);
+
+CREATE TABLE mapping_stats (
+
+  fid1                INT NOT NULL PRIMARY KEY,
+  fid2                INT,
+  reference           VARCHAR(100) NOT NULL,
+  unique_hits	      INT,
+  non_unique_hits     INT,
+  duplicates          INT,
+  
+  KEY f12_idx (fid1, fid2)
 );
 
 

@@ -85,26 +85,33 @@ sub runfolder_log {
   my $entries = fetch_run_folder_entries($run_folder);
   my @files    = fetch_files_from_rundir($run_folder);
 
-  print "========================================\n";
-  print "  $run_folder log\n";
-  print "========================================\n";
+  my $printstring;
+  
+  $printstring .= "========================================\n";
+  $printstring .= "  $run_folder log\n";
+  $printstring .= "========================================\n";
+
+
 
   use POSIX qw( strftime );
   foreach my $entry ( @$entries ) {
     my $microsec = $$entry[0] % 100000;
     $$entry[0] /= 100000;
     $$entry[0] = strftime("%d/%m/%Y %H:%M:%S.$microsec", localtime( $$entry[0] ));
-    print "$$entry[0]\t$$entry[1]\n";
+
+    $printstring .=   "$$entry[0]\t$$entry[1]\n";
   }
 
-  print "========================================\n";
+
+  $printstring .=   "========================================\n";
   foreach my $file ( @files ) {
-    print "$file\n";
+
+      $printstring .=    "$file\n";
   }
-  print "========================================\n";
 
+  $printstring .=   "========================================\n";
 
-
+  return($printstring);
 }
 
 

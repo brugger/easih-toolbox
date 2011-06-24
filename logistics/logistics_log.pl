@@ -56,6 +56,7 @@ else {
 #    print "$runfolder --> $line\n";
   }
 
-  EASIH::Logistics::runfolder_log( $runfolder );
+  my $printstring = EASIH::Logistics::runfolder_log( $runfolder );
 
+  print $printstring;
 }

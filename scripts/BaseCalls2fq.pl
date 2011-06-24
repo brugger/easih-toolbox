@@ -82,6 +82,9 @@ my $outdir      = $opts{'o'};
 my $indexed_run = $opts{b} || 0;
 my $sample_sheet = $opts{'s'};
 $sample_sheet = "$indir/sample_sheet.csv" if (!$sample_sheet && -e "$indir/sample_sheet.csv");
+$sample_sheet = "$indir/Sample_sheet.csv" if (!$sample_sheet && -e "$indir/Sample_sheet.csv");
+$sample_sheet = "$indir/sample_Sheet.csv" if (!$sample_sheet && -e "$indir/sample_Sheet.csv");
+$sample_sheet = "$indir/Sample_Sheet.csv" if (!$sample_sheet && -e "$indir/Sample_Sheet.csv");
 if (!$sample_sheet && -e "BaseCalls/sample_sheet.csv") {
   $indir = "BaseCalls";
   $sample_sheet = "$indir/sample_sheet.csv";
@@ -605,10 +608,10 @@ sub fail {
   
   if ( $datamonger ) {
     print STDERR "$message\n";
-    EASIH::Logistics::add_run_folderstatus($runfolder, 
+    EASIH::Logistics::add_run_folder_status($runfolder, 
 					    "ILLUMINA", 
 					    "$status");
-    EASIH::Logistics::add_run_folderstatus($runfolder, 
+    EASIH::Logistics::add_run_folder_status($runfolder, 
 					    "ILLUMINA", 
 					    "BASECALLS2FQ_FAILED");
     exit -1;

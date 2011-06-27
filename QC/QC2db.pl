@@ -39,6 +39,7 @@ my $fid = EASIH::QC::db::add_file('Z980001.1.fq', 'Z980001', 'Z98', '110609_MGIL
 
 EASIH::QC::db::update_file(2, undef, 98.8, 72, 0, 50.1);
 print "$fid --> $pid --> $sid\n";
+my $fid = EASIH::QC::db::add_file('Z980001.1.fq', 'Z980001', 'Z98', '110609_MGILLUMINA2_00033_FC', 'ILLUMINA', 32000);
 
 #EASIH::QC::db::add_mapping_stats(2, undef, "hg19", 22000, 10000, 2000);
 my @ms = EASIH::QC::db::fetch_mapping_stats(2 );
@@ -56,6 +57,7 @@ print Dumper( \@ms );
 #EASIH::QC::db::add_basedists($fid, [[1, 25,25,25,25,0], [2, 27,23,20,30,0]]);
 
 EASIH::QC::db::add_run('110609_MGILLUMINA2_00033_FC', 'ILLUMINA');
+
 
 
 # and fetch the data again

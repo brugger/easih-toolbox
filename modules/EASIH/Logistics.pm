@@ -292,6 +292,38 @@ sub sample2outfilename {
 
 
 
+
+# 
+# 
+# 
+# Kim Brugger (27 Jun 2011)
+sub filename2information {
+  my ($filename) = @_;
+
+  # remove the path
+  $filename =~ s/.*\///;
+
+  print "$filename\n";
+
+  # extract the sample name
+  my ($sample) = $filename =~ /^([A-Z]\d{6,7})/;
+  if ( ! $sample ) {
+    print STDERR "$sample does not comply with the sample naming scheme\n";
+    return (undef,undef);
+  }
+
+  # should _never_ happen as is should have been caught above.
+  my ($project) = $sample =~ /^([A-Z]\d{2})/;
+  if ( ! $project ) {
+    print STDERR "$project does not comply with the sample naming scheme\n";
+    return (undef, undef);
+  }
+
+  return ($sample, $project);
+}
+
+
+
 BEGIN{ 
   Connect();
 }

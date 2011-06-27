@@ -433,7 +433,7 @@ sub fetch_mapping_stats {
 sub add_illumina_multiplex_stats {
   my ( $rid, $fid, $lane, $sample, $bcode, $ratio ) = @_;
 
-  my $q = "INSERT INTO illumina_multiplex_stats ( rid, fid, lane, sample, bcode, ratio) VALUES (?,?,?,?,?,?)";
+  my $q = "INSERT IGNORE INTO illumina_multiplex_stats ( rid, fid, lane, sample, bcode, ratio) VALUES (?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid, $fid, $lane, $sample, $bcode, $ratio ) || die "$DBI::errstr";
 }
@@ -464,9 +464,9 @@ sub fetch_illumina_multiplex_stats_by_rid {
 # Kim Brugger (23 Jun 2011)
 sub add_illumina_lane_stats {
   my ( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) = @_;
-  
 
-  my $q = "INSERT INTO illumina_lane_stats ( rid, fid, lane, read_nr, sample, total_reads, pass_filter) VALUES (?,?,?,?,?,?,?)";
+
+  my $q = "INSERT IGNORE INTO illumina_lane_stats ( rid, fid, lane, read_nr, sample, total_reads, pass_filter) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) || die "$DBI::errstr";
 }
@@ -625,7 +625,7 @@ sub add_run {
   my ( $run, $platform ) = @_;
   
   # check to see if it already exists.
-  my ($run_id, undef) = fetch_run_id( $run);
+  my $run_id = fetch_run_id( $run );
   return $run_id if ( $run_id );
 
   my $q = "INSERT INTO run (name, platform) VALUES (?,?)";
@@ -642,11 +642,11 @@ sub add_run {
 # Kim Brugger (24 Jun 2011)
 sub fetch_run_id {
   my ( $run ) = @_;
-  my $q = "SELECT rid, platform FROM run where name = ?";
+  my $q = "SELECT rid FROM run where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $run ) || die "$DBI::errstr";
   my @line =  $sth->fetchrow_array();
-  return @line || undef;
+  return $line[0];
 }
 
 # 

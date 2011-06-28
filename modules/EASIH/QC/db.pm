@@ -495,11 +495,12 @@ sub fetch_illumina_lane_stats_by_rid {
 # 
 # Kim Brugger (23 Jun 2011)
 sub update_file {
-  my ( $fid, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  my ( $fid, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
   
   my $q = "UPDATE file SET ";
   my @updates;
-  push @updates, "sample_size = 'sample_size' "            if ( $sample_size );
+  push @updates, "total_reads = '$total_reads' "           if ( $total_reads );
+  push @updates, "sample_size = '$sample_size' "           if ( $sample_size );
   push @updates, "Q30bases = '$Q30bases' "                 if ( $Q30bases );
   push @updates, "duplicates = '$duplicates' "             if ( $duplicates );
   push @updates, "partial_adaptors = '$partial_adaptors' " if ( $partial_adaptors );
@@ -518,7 +519,7 @@ sub update_file {
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_file {
-  my ( $file, $sample, $project, $run, $platform, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  my ( $file, $sample, $project, $run, $platform, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
 
 #  $sample_size      ||= 'NULL';
 #  $Q30bases         ||= 'NULL';
@@ -540,9 +541,9 @@ sub add_file {
     $run_id = add_run( $run, $platform);
   }
 
-  my $q = "INSERT INTO file (sid, rid, name, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?)";
+  my $q = "INSERT INTO file (sid, rid, name, total_reads, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $sample_id, $run_id, $file, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
+  $sth->execute( $sample_id, $run_id, $file, $total_reads,$sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
 
   return $dbi->last_insert_id(undef, undef, qw(file fid));
 }

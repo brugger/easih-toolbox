@@ -37,7 +37,7 @@ CREATE TABLE sample (
 CREATE TABLE illumina_lane_stats (
 
   rid                 INT NOT NULL,
-  fid                 INT NOT NULL,
+  fid                 INT ,
   lane		      INT NOT NULL,
   read_nr	      INT NOT NULL,
   sample              VARCHAR(20) NOT NULL ,
@@ -58,7 +58,7 @@ CREATE TABLE illumina_multiplex_stats (
   bcode		      VARCHAR(20),
   ratio		      float,
 
-  PRIMARY KEY (rid, fid),
+  PRIMARY KEY (rid, fid, lane, bcode),
   KEY rid_idx (rid),
   KEY fid_idx (fid)
   
@@ -67,7 +67,7 @@ CREATE TABLE illumina_multiplex_stats (
 CREATE TABLE run (
 
   rid                 INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  name                VARCHAR(8) NOT NULL ,
+  name                VARCHAR(100) NOT NULL ,
   platform            VARCHAR(50),
 
   KEY name_idx (name)
@@ -82,6 +82,7 @@ CREATE TABLE file (
   timestamp           BIGINT,
   rid		      INT NOT NULL,
 
+  total_reads	      int,
   sample_size	      int,
   Q30bases	      float,
   duplicates	      float,

@@ -14,16 +14,16 @@ use strict;
 use Data::Dumper;
 
 
-my $start_dir = "modules/";
-my $shared_dir = "shared_modules/";
+my $modules_dir = "modules/";
+my $script_dir  = shift || "scripts/";
 
 my %modules = ();
 my %functions = ();
 
 
-&parse_modules($start_dir);
+&parse_modules($modules_dir);
 #&parse_modules($shared_dir);
-&check_modulecalls("logistics/");
+&check_modulecalls($script_dir);
 
 
 #
@@ -55,8 +55,11 @@ sub check_modulecalls {
 
       open (FILE, $file) || die "Could not open '$file': $!\n";
       my $sub_function = "";
+      my $line = 0;
       while (<FILE>) {
+	$line++;
 	next if ($file =~ /~$/);
+	
 	
 	$_ =~ s/#.*//;
 	
@@ -72,7 +75,7 @@ sub check_modulecalls {
 #	  next if ($function_call =~ /^[A-Z]/ || $functino);
 
 	  if (! $functions{$function_call}) {
-	    print "FUNCTION: $function_call in $file is missing\n";
+	    print "FUNCTION: $function_call in $file is missing, line $line\n";
 	  }
 	  else {
 	    $functions{$function_call}++;
@@ -126,8 +129,7 @@ sub parse_modules {
 
       while (<FILE>) {
 	my $file2 = $file;
-	$file2 =~ s/$shared_dir//;
-	$file2 =~ s/$start_dir//;
+	$file2 =~ s/$modules_dir//;
 
 	next if ($file2 =~ /template.pm/);
 	next if ($file2 =~ /\~/);

@@ -30,10 +30,35 @@
 #*************************************************************************
 
 
-use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use Getopt::Std;
-use DBI;
+
+
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+}
+
+use EASIH;
 use EASIH::Mail;
 use EASIH::Logistics;
 

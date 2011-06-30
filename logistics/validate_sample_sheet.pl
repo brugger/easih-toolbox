@@ -35,7 +35,7 @@ BEGIN {
 
 use EASIH;
 use EASIH::Mail;
-use EASIH::Logistics;
+use EASIH::Sample;
 
 my %opts;
 getopts('h', \%opts);
@@ -162,11 +162,11 @@ sub validate_sample_sheet {
   
     if (ref ($res{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$res{$lane}}) {
-	fail("$res{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n") if ( !EASIH::Logistics::validate_sample_name($res{$lane}{$bcode}));
+	fail("$res{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}{$bcode}));
       }
     }
     else {
-	fail("$res{$lane} for lane $lane is not an  EASIH sample name\n") if ( !EASIH::Logistics::validate_sample_name($res{$lane}));
+	fail("$res{$lane} for lane $lane is not an  EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}));
     }
   }
   

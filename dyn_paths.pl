@@ -23,6 +23,7 @@ BEGIN {
       push @INC, "../modules" if ( -e "../modules");
       push @INC, "./modules" if ( -e "./modules");
     }
+  }
   else {
     use lib '/home/kb468/easih-toolbox/modules/';
   }

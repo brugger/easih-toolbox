@@ -415,6 +415,9 @@ sub readin_sample_sheet {
       }
 
 
+
+      fail( "Index should be a base sequence, not '$index'\n", "MALFORMED_SAMPLESHEET")  if ( $index && $index !~ /^[ACGT]\z/i);
+
       if ( $index ) {
 	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
 	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});

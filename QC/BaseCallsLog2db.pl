@@ -32,7 +32,7 @@ BEGIN {
 
 use EASIH;
 use EASIH::QC::db;
-use EASIH::Logistics;
+use EASIH::Sample;
 
 
 my $infile = shift || die "Needs an infile\n";
@@ -98,7 +98,7 @@ sub find_or_create_fid {
 
   return $fid_cache{ $filename } if ( $fid_cache{ $filename });
 
-  my ($sample, $project) = EASIH::Logistics::filename2information($filename);
+  my ($sample, $project) = EASIH::Sample::filename2sampleNproject($filename);
   
   if (! $sample ) {
     return undef;

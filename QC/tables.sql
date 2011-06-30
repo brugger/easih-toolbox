@@ -57,6 +57,8 @@ CREATE TABLE illumina_multiplex_stats (
   sample	      VARCHAR(20),
   bcode		      VARCHAR(20),
   ratio		      float,
+  total_reads	      INT,
+  pass_filter	      INT,
 
   PRIMARY KEY (rid, fid, lane, bcode),
   KEY rid_idx (rid),

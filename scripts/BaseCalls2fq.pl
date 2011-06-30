@@ -38,6 +38,9 @@ BEGIN {
 
 use EASIH;
 use EASIH::Logistics;
+use EASIH::QC; #svvd 28 jun 2011
+use EASIH::QC::db; #svvd 28 jun 2011
+
 
 my %opts;
 getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
@@ -71,7 +74,8 @@ sub usage {
   exit -1;
 }
 
-my $debug = 0;
+#my $debug = 0;
+my $debug = 1;
 
 my $indir       = $opts{'i'} || "./";
 # I need to find the run_folder name, for the data mongering things.
@@ -149,6 +153,16 @@ EASIH::Logistics::add_run_folder_status($runfolder,
 					"ILLUMINA", 
 					"BASECALLS2FQ_DONE");
 
+my $run_id;
+
+if($datamonger)                                       
+{
+    $run_id = EASIH::QC::db::add_run($runfolder, 'ILLUMINA');    #svvd 28 Jun 2011
+}
+else
+{
+    print "Rundir: $runfolder --> $run_id\n";                       #svvd 28 Jun 2011
+}
 
 # 
 # 
@@ -208,9 +222,28 @@ sub analyse_lane {
   }
 
 
-  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
-  printf("lane $lane_nr.2\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
+#  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
+#  printf("lane $lane_nr.2\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
 
+  my $pass_filter = $out1;
+
+  if($datamonger)
+  {
+      my $project = $sample_name =~ /^(\w{3})/;
+       
+      my $fid = find_or_create_fid("$sample_name.1.fq");
+
+      EASIH::QC::db::add_illumina_lane_stats( $run_id, $fid, $lane, $read_nr, $sample_name, $total_reads, $pass_filter )
+  }
+  else
+  {
+      #print "$lane_nr, 1\n";
+      #print "$lane_nr, 2\n", if($in2);
+
+      printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
+      printf("lane $lane_nr.2\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
+
+  }
 
   return ($in1, $out1, $in2, $out2);
 }
@@ -369,11 +402,18 @@ sub readin_sample_sheet {
       my @F = split($field_delim, $_);
       my (undef, $lane, $sample_id, undef, $index, undef) = @F;
 
+      $index = "" if (!$index);
+
       $index ||= "";
 
       $lane      =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
+      
+      if ( $index !~ /^[ACGT]]\z/i) {
+	  
+      }
+
 
       if ( $index ) {
 	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
@@ -622,3 +662,23 @@ sub fail {
   
 }
 
+
+sub find_or_create_fid {
+  my ($filename ) = @_;
+
+  $filename =~ s/.*\///;
+  print "$filename\n";
+
+  return $fid_cache{ $filename } if ( $fid_cache{ $filename });
+
+  my ($sample, $project) = EASIH::Logistics::filename2information($filename);
+  
+  if (! $sample ) {
+    return undef;
+  }
+
+
+  my $fid = EASIH::QC::db::add_file($filename, $sample, $project, $run_folder, 'ILLUMINA');
+  $fid_cache{ $filename } = $fid;
+  return $fid;
+}

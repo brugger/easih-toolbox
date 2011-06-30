@@ -63,7 +63,7 @@ while( <$in> ) {
     $multiplex_counter{$sample} += $count;
     $perc =~ s/[\% ]//;
     
-    EASIH::QC::db::add_illumina_multiplex_stats( $run_id, $fid, $lane, $sample, $bcode, $perc);
+    EASIH::QC::db::add_illumina_multiplex_stats( $run_id, $fid, $lane, $sample, $bcode, $total_reads, undef, $perc);
 
   }
   else {

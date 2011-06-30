@@ -109,8 +109,6 @@ sub filename2sampleNproject {
   # remove the path
   $filename =~ s/.*\///;
 
-  print "$filename\n";
-
   # extract the sample name
   my ($sample) = $filename =~ /^([A-Z]\d{6,7})/;
   if ( ! $sample ) {

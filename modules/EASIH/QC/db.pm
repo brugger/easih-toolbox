@@ -506,7 +506,7 @@ sub update_file {
   push @updates, "partial_adaptors = '$partial_adaptors' " if ( $partial_adaptors );
   push @updates, "Avg_AC = '$Avg_AC' "                     if ( $Avg_AC );
 
-  $q .= join(", ", @updates);
+  $q .= join(", ", @updates) . " WHERE fid='$fid'";
 
   my $sth = $dbi->prepare($q);
   $sth->execute( ) || die "$DBI::errstr";

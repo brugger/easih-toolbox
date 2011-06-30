@@ -22,7 +22,7 @@ use EASIH::Mail;
 my $res_folder = "/results/analysis/";
 my $CurrentRunDir; # Global ### svvd 
 my $to = 'kim.brugger@easih.ac.uk'; #global
-my $mailcount = 0; #global
+my $mailcount; #global
 
 ### Fetch Data from iondb (located on Ion torrent) ###
 my $dbi = DBI->connect("DBI:Pg:dbname=iondb;host=mgion01.medschl.cam.ac.uk", 'ion') || die "Could not connect to database: $DBI::errstr";
@@ -43,6 +43,7 @@ while (my @results = $sth->fetchrow_array()) {
   $run_folder =~ s/.*\/(.*)\//$1/;
   
   $Currentrundir = $run_folder;
+  $mailcount = 0;
 
   $fq_file =~ s/.*\/(.*)/$1/;
   $sff_file =~ s/.*\/(.*)/$1/;
@@ -77,7 +78,7 @@ while (my @results = $sth->fetchrow_array()) {
   if ( ! $sample_name ) {
       RunStatus("WRONGLY_NAMED"); ### svvd
       
-      SendMail("Cannot find the EASIH-sample name in run folder $run_folder with the output name: $fq_file\n"); ### svvd
+      SendEmail("Cannot find the EASIH-sample name in run folder $run_folder with the output name: $fq_file\n"); ### svvd
     
       next;
   }
@@ -107,11 +108,16 @@ while (my @results = $sth->fetchrow_array()) {
 		       "COMPRESSION_FAILED",
 		       "COMPRESSION_DONE")); ### svvd
 
-  next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p TORRENT -rf $outfile.gz",
-		       "QC_Report_STARTED",
-		       "QC_REPORT_FAILED",
-		       "QC_REPORT_DONE" )); ### svvd
+  EASIH::Logistics::add_file_offload($run_folder, $fq_file, "$outfile.gz");
+  my @fqfiles = EASIH::Logistics::fetch_files_from_rundir($file);
 
+  foreach my $fqfile(@fqfiles)
+  {
+      next, if(!GrabAndRun("/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -f $fqfile -r",
+			   "QC_REPORT_STARTED", 
+			   "QC_REPORT_FAILED",
+			   "QC_REPORT_DONE"));
+  }
 
   #EASIH::Logistics::add_run_folder_status($run_folder, "TORRENT", "OFFLOADED");
 
@@ -119,7 +125,6 @@ while (my @results = $sth->fetchrow_array()) {
 		    "[easih-data] Successfully offloaded Ion Torrent data ($run_folder)", 
 		    "$fq_file offloaded to $outfile.gz\n");
 
-  EASIH::Logistics::add_file_offload($run_folder, $fq_file, "$outfile.gz");
 }
 
 
@@ -144,14 +149,14 @@ sub SendEmail
     if($mailcount)
     {
 	EASIH::Mail::send($to, 
-			  "[easih-data] Ion Torrent Run Completed - $CurrentRunDir", 
-			  "$message");
+			  "[easih-data] Ion Torrent Data Processing Failed - $CurrentRunDir!", 
+			  "Failed Command: '$message'\n");
     }
     else
     {
 	EASIH::Mail::send($to, 
-			  "[easih-data] Ion Torrent Data Processing Failed - $CurrentRunDir!", 
-			  "Failed Command: '$message'\n");
+			  "[easih-data] Ion Torrent Run Completed - $CurrentRunDir", 
+			  "$message");
     }
     
     $mailcount++;  

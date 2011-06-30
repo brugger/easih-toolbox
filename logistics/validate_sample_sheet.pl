@@ -136,7 +136,7 @@ sub validate_sample_sheet {
       $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
 
-      fail( "Index should be a base sequence, not '$index' for lane $lane\n")  if ( $index && $index !~ /^[ACGT]\z/i);
+      fail( "Index should be a base sequence, not '$index' for lane $lane\n")  if ( $index && $index !~ /^[ACGT]+\z/i);
 
       if ( $index ) {
 	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n") 

@@ -210,7 +210,7 @@ sub validate_sample_name {
   my ($sample_name) = @_;
 
   # Takes the old names into consideration as well.
-  return 1 if ($sample_name =~ /[A-Z]\d{6,7}/);
+  return 1 if ($sample_name =~ /^[A-Z]\d{6,7}\z/);
 
   return 0;
 }

@@ -14,9 +14,9 @@ use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use warnings;
 use Data::Dumper;
-use DBI;
 use EASIH;
 use EASIH::Logistics;
+use EASIH::Sample;
 use EASIH::Mail;
 
 my $res_folder = "/results/analysis/";
@@ -82,7 +82,7 @@ while (my @results = $sth->fetchrow_array()) {
       next;
   }
 
-  my ($outfile, $error) = EASIH::Logistics::sample2outfilename("$sample_name");
+  my ($outfile, $error) = EASIH::Sample::sample2outfilename("$sample_name");
 
   if ($error) {
     RunStatus("WRONG_PERMISSIONS"); ### svvd

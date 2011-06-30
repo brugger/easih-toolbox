@@ -452,6 +452,7 @@ sub fetch_illumina_multiplex_stats_by_rid {
   while(my @line =  $sth->fetchrow_array()) {
     push @res, [@line];
   }
+
   return @res;
 }
 
@@ -634,6 +635,26 @@ sub add_run {
   $sth->execute( $run, $platform ) || die "$DBI::errstr";
 
   return $dbi->last_insert_id(undef, undef, qw(run rid));
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_runs {
+  
+  my $q = "SELECT * FROM run";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( ) || die "$DBI::errstr";
+
+  my @res;
+  while (  my @line =  $sth->fetchrow_array()) {
+    push @res, [@line];
+  }
+  
+  return @res;
 }
 
 

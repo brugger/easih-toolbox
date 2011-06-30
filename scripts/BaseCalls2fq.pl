@@ -45,7 +45,6 @@ use EASIH::QC::db;
 my %opts;
 getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
 
-
 my $limited_lanes = $opts{'l'};
 my $no_mismatches = $opts{n};
 
@@ -232,6 +231,7 @@ sub analyse_lane {
     EASIH::QC::db::add_illumina_lane_stats( $rid, $fids{"$sample_name.2"}, $lane_nr, 2, $sample_name, $in2, $out2 ) if($in2);
 
     $reads_pr_sample{$fids{"$sample_name.1"}} += $out1;
+    $reads_pr_sample{$fids{"$sample_name.2"}} += $out2 if ( $out2 );
 
   }
 					    
@@ -313,6 +313,7 @@ sub analyse_barcoded_lane {
     EASIH::QC::db::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc);
 
     $reads_pr_sample{$fids{"$sample_name.1"}} += $multiplex_stats{pass}{$k};
+    $reads_pr_sample{$fids{"$sample_name.2"}} += $multiplex_stats{pass}{$k};
 
   }
 

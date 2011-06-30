@@ -5,11 +5,35 @@
 # 
 # Kim Brugger (30 Jun 2011), contact: kim.brugger@easih.ac.uk
 
-use lib "/home/kb468/easih-toolbox/modules/";
 use strict;
 use Getopt::Std;
 use Data::Dumper;
 
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+}
+
+use EASIH;
 use EASIH::Mail;
 use EASIH::Logistics;
 
@@ -18,7 +42,6 @@ getopts('h', \%opts);
 
 if($opts{h})
 {
-    $0 =~ s/.*\///;
     print STDERR "\n\nDescription: Checks for sample sheet in the most recent illumina run folder, and validates that it is correct\n";
     print STDERR "\n\nDescription: if not correct, will send an notification email\n";
     exit -1;
@@ -64,7 +87,7 @@ foreach my $dir ( @input_dirs ) {
   }
 
 
-  SendEmail("sample sheet error in runfolder: $file", $error_message);
+  SendEmail("sample sheet error in runfolder: $file", $error_message) if ($error_message);
   
 }
 

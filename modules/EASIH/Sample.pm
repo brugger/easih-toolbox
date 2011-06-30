@@ -128,12 +128,6 @@ sub filename2sampleNproject {
   return ($sample, $project);
 }
 
-
-
-BEGIN{ 
-  Connect();
-}
-
 1;
 
 

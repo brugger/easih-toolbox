@@ -83,9 +83,9 @@ while(my $file = shift @files)
 				      '04-poststatus' => "MAKE_DONE"},
 		   
 		   '03-BCL2FQ'    => {'01-command'    => "/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls > $Basecalls/BaseCalls2fq.log", 
-				      '02-prestatus'  => "BCL2QFQ_STARTED", 
-				      '03-failstatus' => "BCL2QFQ_FAILED", 
-				      '04-poststatus' => "BCL2QFQ_DONE"},
+				      '02-prestatus'  => "BCL2FQ_STARTED", 
+				      '03-failstatus' => "BCL2FQ_FAILED", 
+				      '04-poststatus' => "BCL2FQ_DONE"},
 		   
 		   '04-QC_Report' => {'01-command'    => "/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
 				      '02-prestatus'  => "QC_REPORT_STARTED", 
@@ -93,6 +93,10 @@ while(my $file = shift @files)
 				      '04-poststatus' => "QC_REPORT_DONE"},
 	);
 
+
+#    if ( $file =~ /0035/) {
+#	1;
+#    }
         
     if(-e "$eventfile")
     {
@@ -150,7 +154,8 @@ while(my $file = shift @files)
 	    ### Something Bad ###
 	    $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
 	    #if($last_status =~ /WRONG|FAIL/)
-	    if( $last_status ne "BASECALLS2FQ_DONE" )
+	    #if( $last_status ne "BASECALLS2FQ_DONE" )
+	    if( $last_status ne "BCL2FQ_DONE" )
 	    {
 		next;
 	    }

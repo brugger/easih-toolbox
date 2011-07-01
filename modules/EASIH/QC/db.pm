@@ -59,13 +59,10 @@ sub add_adaptors {
 sub _add_adaptor {
   my ( $fid, $x, $perc ) = @_;
 
-  my $q = "INSERT INTO adaptors (fid, x, percent) VALUES (?,?,?)";
+  my $q = "INSERT IGNORE INTO adaptors (fid, x, percent) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
 }
-
-
-
 
 
 
@@ -114,7 +111,7 @@ sub add_duplicate_seqs {
 sub _add_duplicate_seq {
   my ( $fid, $sequence, $perc, $source ) = @_;
 
-  my $q = "INSERT INTO duplicated_seqs (fid, sequence, percentage, source) VALUES (?,?,?,?)";
+  my $q = "INSERT IGNORE INTO duplicated_seqs (fid, sequence, percentage, source) VALUES (?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute(  $fid, $sequence, $perc, $source ) || die "$DBI::errstr";
 }
@@ -166,7 +163,7 @@ sub add_duplicates {
 sub _add_duplicate {
   my ( $fid, $x, $dups ) = @_;
 
-  my $q = "INSERT INTO duplicates (fid, x, observations) VALUES (?,?,?)";
+  my $q = "INSERT IGNORE INTO duplicates (fid, x, observations) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $dups ) || die "$DBI::errstr";
 }
@@ -217,7 +214,7 @@ sub add_gc_distribution {
 sub _add_gc_dist {
   my ( $fid, $x, $perc ) = @_;
 
-  my $q = "INSERT INTO GC_distribution (fid, x, percent_gc) VALUES (?,?,?)";
+  my $q = "INSERT IGNORE INTO GC_distribution (fid, x, percent_gc) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
 }
@@ -269,7 +266,7 @@ sub add_basedists {
 sub _add_basedist {
   my ( $fid, $x, $A, $C, $G, $T, $N ) = @_;
 
-  my $q = "INSERT INTO base_distribution (fid, x, A, C, G, T, N) VALUES (?,?,?,?,?,?,?)";
+  my $q = "INSERT IGNORE INTO base_distribution (fid, x, A, C, G, T, N) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $A, $C, $G, $T, $N ) || die "$DBI::errstr";
 }
@@ -325,7 +322,7 @@ sub add_qvs_histogram {
 sub _add_qv_hist {
   my ( $fid, $x, $height ) = @_;
 
-  my $q = "INSERT INTO qv_histogram (fid, x, height) VALUES (?,?,?)";
+  my $q = "INSERT IGNORE INTO qv_histogram (fid, x, height) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $height ) || die "$DBI::errstr";
 }
@@ -378,7 +375,7 @@ sub add_qvs_boxplot {
 sub _add_qv_boxplot {
   my ( $fid, $x, $q0, $q1, $q2, $q3, $q4 ) = @_;
 
-  my $q = "INSERT INTO qv_boxplot (fid, x, q0, q1, q2, q3, q4) VALUES (?,?,?,?,?,?,?)";
+  my $q = "INSERT IGNORE INTO qv_boxplot (fid, x, q0, q1, q2, q3, q4) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $q0, $q1, $q2, $q3, $q4 ) || die "$DBI::errstr";
 }
@@ -393,7 +390,7 @@ sub add_mapping_stats {
   my ( $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) = @_;
 
   
-  my $q = "INSERT INTO mapping_stats ( fid1, fid2, reference, unique_hits, non_unique_hits, duplicates) VALUES (?,?,?,?,?,?)";
+  my $q = "INSERT IGNORE INTO mapping_stats ( fid1, fid2, reference, unique_hits, non_unique_hits, duplicates) VALUES (?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute(  $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) || die "$DBI::errstr";
 }
@@ -465,7 +462,6 @@ sub fetch_illumina_multiplex_stats_by_rid {
 # Kim Brugger (23 Jun 2011)
 sub add_illumina_lane_stats {
   my ( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) = @_;
-
 
   my $q = "INSERT IGNORE INTO illumina_lane_stats ( rid, fid, lane, read_nr, sample, total_reads, pass_filter) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
@@ -542,12 +538,29 @@ sub add_file {
     $run_id = add_run( $run, $platform);
   }
 
-  my $q = "INSERT INTO file (sid, rid, name, total_reads, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?,?)";
+  my $q = "INSERT IGNORE INTO file (sid, rid, name, total_reads, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC) VALUES (?,?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $sample_id, $run_id, $file, $total_reads,$sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) || die "$DBI::errstr";
 
   return $dbi->last_insert_id(undef, undef, qw(file fid));
 }
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (23 Jun 2011)
+sub fetch_file_info {
+  my ( $fid ) = @_;
+  my $q = "SELECT name, total_reads, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC FROM file where fid = ?";
+  my $sth = $dbi->prepare($q);
+  $sth->execute( $fid ) || die "$DBI::errstr";
+  my @line =  $sth->fetchrow_array();
+  return @line;
+}
+  
 
 
 # 
@@ -597,7 +610,7 @@ sub add_sample {
     $project_id = add_project( $project);
   }
 
-  my $q = "INSERT INTO sample (pid, name) VALUES (?,?)";
+  my $q = "INSERT IGNORE INTO sample (pid, name) VALUES (?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $project_id, $sample ) || die "$DBI::errstr";
 
@@ -630,7 +643,7 @@ sub add_run {
   my $run_id = fetch_run_id( $run );
   return $run_id if ( $run_id );
 
-  my $q = "INSERT INTO run (name, platform) VALUES (?,?)";
+  my $q = "INSERT IGNORE INTO run (name, platform) VALUES (?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $run, $platform ) || die "$DBI::errstr";
 
@@ -682,7 +695,7 @@ sub add_project {
   my $project_id = fetch_project_id( $project);
   return $project_id if ( $project_id );
 
-  my $q = "INSERT INTO project (name) VALUES (?)";
+  my $q = "INSERT IGNORE INTO project (name) VALUES (?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $project ) || die "$DBI::errstr";
 

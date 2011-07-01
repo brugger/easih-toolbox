@@ -13,8 +13,24 @@ use Compress::Zlib;
 use IO::Uncompress::Gunzip('$GunzipError');
 use IO::Seekable;
 
+use EASIH::QC::db;
+
 my $sample_size   = 0;
 my $random_sample = 0;
+my $fid           = -1;
+my $_QC           = undef;
+
+# 
+# If doing random sampling the number of MB to look at. If -1 or 0 the whole dataset is used 
+# 
+# Kim Brugger (26 Jan 2011)
+sub fid {
+  my ($file_id) = @_;
+  $fid = $file_id;
+  return $fid;
+}
+
+
 
 # 
 # If doing random sampling the number of MB to look at. If -1 or 0 the whole dataset is used 
@@ -74,6 +90,7 @@ sub csfastaQC  {
     }
   }
 
+  
   return $res;
 }
 
@@ -172,7 +189,6 @@ sub fastQC {
   }
 
 
-  print "$$res{mappable}/$$res{reads}\n";
   
 #  print Dumper( $res );
   
@@ -182,6 +198,8 @@ sub fastQC {
   }
   $$res{ duplicates } = \%duplicates;
 
+
+  my $_QC = $res;
   return $res;
 }
 
@@ -508,6 +526,204 @@ sub _plot_base_qual {
 }
 
 
+
+# 
+# 
+# 
+# Kim Brugger (26 Jan 2011)
+sub base_dist2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  return if !($$QC_data{'base_dist'});
+
+  my $data  = $$QC_data{'base_dist'};
+  my $reads = $$QC_data{'reads'};
+  
+  my (@As, @Cs, @Gs, @Ts, @Ns, @pos);
+
+  my $ACsplit = 0;
+  my $bases;
+  my @res;
+  for(my $i = 0; $i < @{$data}; $i++ ) {
+    push @res, [$i, ($$data[ $i ]{A} || $$data[ $i ]{0} || 0)/$reads*100,
+   		    ($$data[ $i ]{C} || $$data[ $i ]{1} || 0)/$reads*100,
+		    ($$data[ $i ]{G} || $$data[ $i ]{2} || 0)/$reads*100,
+		    ($$data[ $i ]{T} || $$data[ $i ]{3} || 0)/$reads*100,
+		    ($$data[ $i ]{N} || $$data[ $i ]{'.'} || 0)/$reads*100];
+
+    $ACsplit += ($$data[ $i ]{A} || $$data[ $i ]{0} || 0)/$reads*100;
+    $ACsplit += ($$data[ $i ]{T} || $$data[ $i ]{3} || 0)/$reads*100;
+    $bases++;
+  }
+
+
+  print Dumper( \@res );
+
+  EASIH::QC::db::add_basedists($fid, \@res);
+
+  $ACsplit = sprintf("%.2f",$ACsplit/$bases);
+  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, undef, undef, undef, $ACsplit);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (26 Jan 2011)
+sub base_qual2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  use Statistics::Descriptive;
+
+  my @res;
+  for(my $x = 0; $x < @{$$QC_data{'base_qual'}}; $x++ ) {
+    my @counts;
+    foreach my $score ( keys %{$$QC_data{'base_qual'}[$x]}) {
+      for( my $k = 0; $k < $$QC_data{'base_qual'}[$x]{$score}; $k++) {
+	push @counts, $score;
+      }
+    }
+
+    my $stat = Statistics::Descriptive::Full->new();
+    $stat->add_data(@counts);
+    push @res, [$x, 
+		$stat->quantile(0),
+		$stat->quantile(1),
+		$stat->quantile(2),
+		$stat->quantile(3),
+		$stat->quantile(4)];
+  }
+
+  EASIH::QC::db::add_qvs_boxplot( $fid, \@res );
+
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (01 Jul 2011)
+sub base_qual_dist2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  my @res;
+  my ( $q30 ) = (0);
+  foreach my $x ( keys %{$$QC_data{'base_qual_dist'}}) {
+    push @res, [$x, $$QC_data{base_qual_dist}{ $x }];
+    $q30 += $$QC_data{'base_qual_dist'}{$x} if ( $x >= 30 );
+  }
+
+  EASIH::QC::db::add_qvs_histogram( $fid, \@res );
+  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, sprintf("%2.f", 100*$q30/$$QC_data{'reads'}), undef, undef, undef);
+ 
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (01 Jul 2011)
+sub GC2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  my $bucket = 5;
+  
+  my %binned;
+  my $total = 0;
+  foreach my $x (keys %{$$QC_data{ GC }} ) {
+    $binned{ int( $x/$bucket)} += $$QC_data{ GC }{$x};
+    $total += $$QC_data{ GC }{$x};
+  }
+
+  my @res;
+  foreach my $x (keys %binned ) {
+    push @res, [$x, sprintf("%.2f", 100*$binned{ $x }/$total)];
+  }
+
+  EASIH::QC::db::add_gc_distribution( $fid, \@res );
+
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (01 Jul 2011)
+sub duplicates2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  my %counts;
+  my %dup_seqs;
+  my $duplicates = 0;
+  foreach my $seq ( keys %{$$QC_data{duplicates}} ) {
+    if ($seq =~ /^N*\z/ || $$QC_data{duplicates}{$seq} == 1 ) {
+      delete $$QC_data{duplicates}{$seq};
+      next;
+    }
+
+    $counts{$$QC_data{duplicates}{$seq}}++;
+    $dup_seqs{ $seq }++;
+    $duplicates += $$QC_data{duplicates}{$seq};
+  }
+
+  my @res;
+  foreach my $seq (  keys %dup_seqs ) {
+    push @res, [ $seq, sprintf("%.2f", 100*$dup_seqs{ $seq }/ $$QC_data{reads}), check_for_adaptors( $seq )];
+  }
+
+  EASIH::QC::db::add_duplicate_seqs( $fid, \@res);
+  
+  my $perc_dup = sprintf("%.2f", 100*$duplicates/($$QC_data{reads}+1));
+  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, undef, $perc_dup, undef, undef);
+
+
+  @res = ();
+  foreach my $count (  keys %counts ) {
+    push @res, [ $count, $counts{$count}];
+  }
+  
+  EASIH::QC::db::add_duplicates( $fid, \@res);
+  
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (01 Jul 2011)
+sub partial_adaptor2db {
+  my ($QC_data) = @_;
+  $QC_data ||= $_QC;
+
+  my $pam_count = 0;
+
+  print Dumper($$QC_data{partial_adaptor_mapping});
+
+  my @res;
+  foreach my $pos ( keys %{$$QC_data{partial_adaptor_mapping}} ) {
+    push @res, [$pos, sprintf("%.2f", $$QC_data{partial_adaptor_mapping}{$pos}*100/$$QC_data{reads})];
+    $pam_count += $$QC_data{partial_adaptor_mapping}{$pos};
+  }
+
+  print Dumper(\@res);
+
+
+  EASIH::QC::db::add_adaptors( $fid, \@res);
+  $pam_count /= int(keys %{$$QC_data{partial_adaptor_mapping}} );
+  $pam_count = sprintf("%.2f", $pam_count*100/$$QC_data{reads});
+  print "$pam_count\n";
+  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, undef, undef, $pam_count, undef);
+  
+}
 
 
 # 

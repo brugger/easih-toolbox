@@ -145,8 +145,6 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
 #    print Dumper( $QC );
 
     EASIH::QC::base_qual2db( $QC );
-
-    exit;
     EASIH::QC::base_dist2db( $QC );
     EASIH::QC::base_qual_dist2db( $QC );
     EASIH::QC::GC2db( $QC );

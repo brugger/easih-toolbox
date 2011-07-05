@@ -12,7 +12,7 @@ use Data::Dumper;
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
-my $DYNAMIC_LIB_PATHS = 1;
+my $DYNAMIC_LIB_PATHS = 0;
 BEGIN {
   if ( $DYNAMIC_LIB_PATHS ) {
     my $path = $0;
@@ -83,7 +83,7 @@ foreach my $dir ( @input_dirs ) {
 
     fail("No sample sheet present in $indir\n") if ( ! -e $sample_sheet );
     
-    validate_sample_sheet( $sample_sheet );
+    validate_sample_sheet( $sample_sheet )  if (  -e $sample_sheet );
   }
 
 

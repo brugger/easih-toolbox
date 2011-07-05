@@ -16,9 +16,9 @@ use IO::Seekable;
 use EASIH::QC::db;
 
 my $sample_size   = 0;
+my $max_counts    = 0;
 my $random_sample = 0;
 my $fid           = -1;
-my $_QC           = undef;
 
 # 
 # If doing random sampling the number of MB to look at. If -1 or 0 the whole dataset is used 
@@ -31,7 +31,6 @@ sub fid {
 }
 
 
-
 # 
 # If doing random sampling the number of MB to look at. If -1 or 0 the whole dataset is used 
 # 
@@ -41,6 +40,18 @@ sub sample_size {
   $sample_size = $size*1048576 if (defined  $size );
 
   return $sample_size;
+}
+
+
+# 
+# If doing random sampling the number of MB to look at. If -1 or 0 the whole dataset is used 
+# 
+# Kim Brugger (26 Jan 2011)
+sub sample_reads {
+  my ($counts) = @_;
+  $max_counts = $counts if (defined  $counts );
+
+  return $max_counts;
 }
 
 
@@ -143,65 +154,83 @@ sub qualQC  {
 # 
 # Kim Brugger (03 Aug 2010)
 sub fastQC {
-  my ( $infile1, $mappable, $res) = @_;
+  my ( $infile1, $infile2, $res) = @_;
 
-  $mappable ||= 0;
+  my $mappable ||= 0;
   my %duplicates;
   my $dup_count = 1;
   my $read = 0;
   my $file1;
   
+  my ($res1, $res2);
+
   if ( $random_sample ) {
     if ( $infile1 =~ /gz/) {
-      $res = random_sample_fastq_gz( $infile1, $res);
-#      print Dumper( $res );
+      ($res1, $res2) = random_sample_fastq_gz_files( $infile1, $infile2);
     }
     else {
-      $res = random_sample_fastq( $infile1, $res);
+      ($res1, $res2) = random_sample_fastq_files( $infile1, $infile2);
     }
   }
   else {
-    if ( $infile1 =~ /gz/) {
-    open ( $file1, "gunzip -c $infile1 | ") || die "Could not open '$infile1': $!\n";
-    }
-    else {
-      open ( $file1, "$infile1") || die "Could not open '$infile1': $!\n";
-    }
-    while (<$file1>) { 
-      my $sequence = <$file1>;
-      my $strand  = <$file1>;
-      my $quality  = <$file1>;
-      chomp( $sequence); 
-      chomp( $strand );
-      chomp( $quality);
-      $read += length( $sequence );
-      $duplicates{$sequence}++;
-      if ( $read > 1048576*$dup_count) {
-	foreach my $seq ( keys %duplicates ) {
-	  delete $duplicates{$seq} if ($duplicates{$seq} == 1);
-	}
-	$dup_count++;
-      }
-      last if ( $sample_size > 0 && $read > $sample_size );
-      $res = analyse( $sequence, $quality, $res);
-      $res = mappable( $quality, $res) if ($mappable); 
-    }
+    ($res1, $res2) = sample_fastq_files( $infile1, $infile2);
   }
 
+  my ($QC1, $QC2) = analysis( $res1, $res2 );
 
-  
-#  print Dumper( $res );
-  
-  $$res{mappability} = sprintf("%.2f", 100*$$res{mappable}/$$res{reads}) if ($mappable); 
-  foreach my $seq ( keys %duplicates ) {
-    delete $duplicates{$seq} if ($duplicates{$seq} == 1);
-  }
-  $$res{ duplicates } = \%duplicates;
-
-
-  my $_QC = $res;
-  return $res;
+  return ($QC1, $QC2);
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (04 Jul 2011)
+sub sample_fastq_files {
+  my ($infile1, $infile2) = @_;
+  
+  my ($i1, $i2, @res1, @res2);
+
+  if ($infile1 =~ /gz/) {
+    open ($i1, "gunzip -c $infile1 | ") || die "Could not open pipeline: $!\n";
+  } 
+  else {
+    open ($i1, "$infile1 ") || die "Could not open '$infile1': $!\n";
+  } 
+
+  if ($infile2 && $infile2 =~ /gz/) {
+    open ($i2, "gunzip -c $infile2 | ") || die "Could not open pipeline: $!\n";
+  } 
+  else {
+    open ($i2, "$infile2 ") || die "Could not open '$infile2': $!\n";
+  } 
+
+  my $read   = 0;
+  my $counts = 0;
+  while (<$i1>) { 
+    my $name1   = $_;
+    my $seq1    = <$i1>;
+    my $strand1 = <$i1>;
+    my $qual1   = <$i1>;
+    $read += length( $seq1 );
+    push @res1, [$name1, $seq1, $strand1, $qual1];
+
+    last if ( $sample_size > 0 && $read > $sample_size );
+    last if ( $counts++ > $max_counts);
+    
+    if ( $infile2 ) {
+      my $name2   = <$i2>;
+      my $seq2    = <$i2>;
+      my $strand2 = <$i2>;
+      my $qual2   = <$i2>;
+      push @res2, [$name2, $seq2, $strand2, $qual2];
+    }
+  }
+
+  return (\@res1, \@res2);
+}
+
 
 
 # 
@@ -273,6 +302,167 @@ sub mappable {
   $$res{mappable}++ if ( $count < $maximum);
   return $res;
 }
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (16 Jul 2010)
+sub analysis {
+  my ( $data, $data2 ) = @_;
+
+  use EASIH::Misc;
+
+  my ($res1, $res2);
+  my (%duplicates1,%duplicates2);
+
+  my $tmp_file1 = EASIH::Misc::tmp_file();
+  my $tmp_file2 = EASIH::Misc::tmp_file();
+  open( my $t1, "> $tmp_file1") || die "Could not open '$tmp_file1': $!\n";
+  foreach my $entry ( @$data ) {
+    
+    $duplicates1{ $$entry[1] }++;
+    $res1 = analyse( $$entry[1], $$entry[3], $res1);
+    $$entry[1] = substr($$entry[1], 0, 36)."\n";
+    $$entry[3] = substr($$entry[3], 0, 36)."\n";
+    print $t1 join("", @$entry);
+  }
+
+  foreach my $seq ( keys %duplicates1 ) {
+    delete $duplicates1{$seq} if ($duplicates1{$seq} == 1);
+  }
+  $$res1{ duplicates } = \%duplicates1;
+
+  if ( $data2 ) {
+    open( my $t2, "> $tmp_file2") || die "Could not open '$tmp_file2': $!\n";
+    foreach my $entry ( @$data2 ) {
+      $$entry[1] = substr($$entry[1], 0, 36)."\n";
+      $$entry[3] = substr($$entry[3], 0, 36)."\n";
+      print $t2 join("", @$entry);
+      $res2 = analyse( $$entry[1], $$entry[2], $res2);
+      $duplicates2{ $$entry[1] }++;
+    }
+    
+    foreach my $seq ( keys %duplicates2 ) {
+      delete $duplicates2{$seq} if ($duplicates2{$seq} == 1);
+    }
+    $$res2{ duplicates } = \%duplicates2;
+  }
+
+
+  my $mappings = mappings($tmp_file1) if ( ! $data2 );
+  $mappings = mappings($tmp_file1, $tmp_file2) if ( $data2 );
+
+  $$res1{mappings} = $mappings if ($mappings);
+  $$res2{mappings} = $mappings if ($mappings && $data2);
+  
+
+#  system "rm -f $tmp_file1";
+#  system "rm -f $tmp_file2";
+#  print "rm -f $tmp_file1\n";
+#  print "rm -f $tmp_file2\n";
+
+  return ($res1, $res2);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (04 Jul 2011)
+sub mappings {
+  my ($file1, $file2) = @_;
+
+  my %res;
+
+  my %libraries = (
+    Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
+    NCBI_ref       => "/data/refs/archive/human_genomic_transcript/ref_contig",
+    NCBI_alt       => "/data/refs/archive/human_genomic_transcript/alt_contig_HuRef",
+    NCBI_rna       => "/data/refs/archive/human_genomic_transcript/rna",
+    Mouse          => "/data/refs/mm9/bowtie/mm9",
+    Rat            => "/data/refs/archive/rn4/bowtie/rn4",
+    Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
+    MyRDB_bact     => "/data/refs/archive/bacteria/myRDP-bacteria",
+    GreenGenes     => "/data/refs/archive/greengenes/greengenes_unaligned",
+    Yeast          => "/data/refs/archive/Scerevisiae/yeast",
+    Pombe          => "/data/refs/archive/pombe/pombe",
+    Viruses        => "/data/refs/archive/viruses/gb_virus_seq",
+    PhiX           => "/data/refs/archive/PhiX/PhiX",
+    Adapters       => "/data/refs/archive/fastqc_contaminants/Contaminants",
+    Vectors        => "/data/refs/archive/UniVec/UniVec",
+    Pichia         => "/data/refs/archive/pichia/SO/bowtie/pichia",
+    Trypanosoma    => "/data/refs/archive/trypanosoma/Tb927_genome_230210",
+    Tryp_gamb      => "/data/refs/archive/trypanosoma/Tbgamb_02_v2",
+    Leishmania     => "/data/refs/archive/leishmania/leishmania",
+    Ribo_ARB_SSU   => "/data/refs/archive/ribo/hs_ssu_r106_embl",
+    Ribo_ARB_LSU   => "/data/refs/archive/ribo/hs_lsu_r106_embl",
+    Ribo_UNI       => "/data/refs/archive/ribo/mart_uniprot_ribosomal",
+    Ribo_ENS       => "/data/refs/archive/ribo/ens_all_ribo",
+    Ribo_GO        => "/data/refs/archive/ribo/amigo_ens_anno_mf",
+    MART_RNA_GENES => "/data/refs/archive/ribo/mart_rna_genes",
+    MART_RRNA_ONLY => "/data/refs/archive/ribo/mart_rrna_only",
+    MART_RRNA_PLUS => "/data/refs/archive/ribo/mart_rrna_mtrrna_pseudorrna",);
+  
+ 
+  foreach my $library ( keys %libraries) {
+    $library = "Human";
+    
+    
+    my $btie;
+    if ($file2) {
+      print  "bowtie -S -m 1 --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |\n";
+      open ($btie, "bowtie -S -m 1 --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |") or die "Can't launch bowtie: $!";
+    }
+    else {
+      open ($btie, "bowtie -S -m 1 --chunkmbs 512 $libraries{ $library } $file1 |") or die "Can't launch bowtie: $!";
+    }
+    
+    my %dup_counts;
+    my ($single, $multiple, $paired) = (0,0,0,0);
+    while(<$btie>) {
+      next if (/^\@/);
+      my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");
+      
+      next if ( $flags & 0x0004);
+
+      
+      # the read is mapped in a proper pair
+      if ($flags & 0x0002 ) {
+	$paired++;
+	my ($p1, $p2) = sort ($pos, $mate_pos);
+	$dup_counts{"$p1-$p2"}++;
+      }
+      
+      if ($opts =~ /NM:i:2/) {
+	$multiple++;
+      }
+      else {
+	$single++;
+      }
+    }
+    close($btie);
+
+    my $dups = 0;
+    map {$dups += $dup_counts{$_} if ( $dup_counts{$_}> 2)} keys %dup_counts;
+    $res{ $library }{ single   } = $single;
+    $res{ $library }{ multiple } = $multiple;
+    $res{ $library }{ paired   } = $paired if ($file2);
+    $res{ $library }{ dups     } = $dups   if ($file2);
+    last;
+  }
+
+  print Dumper( \%res );
+
+
+  return \%res;
+
+
+}
+
 
 
 
@@ -533,7 +723,6 @@ sub _plot_base_qual {
 # Kim Brugger (26 Jan 2011)
 sub base_dist2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   return if !($$QC_data{'base_dist'});
 
@@ -558,8 +747,6 @@ sub base_dist2db {
   }
 
 
-  print Dumper( \@res );
-
   EASIH::QC::db::add_basedists($fid, \@res);
 
   $ACsplit = sprintf("%.2f",$ACsplit/$bases);
@@ -573,7 +760,6 @@ sub base_dist2db {
 # Kim Brugger (26 Jan 2011)
 sub base_qual2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   use Statistics::Descriptive;
 
@@ -601,6 +787,22 @@ sub base_qual2db {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (26 Jan 2011)
+sub mappings2db {
+  my ($QC_data, $fid2) = @_;
+
+  print Dumper($$QC_data{'mappings'});
+
+  foreach my $db (keys %{$$QC_data{mappings}}) {
+    EASIH::QC::db::add_mapping_stats( $fid, $fid2, $db, $$QC_data{mappings}{$db}{single}, $$QC_data{mappings}{$db}{multiple}, $$QC_data{mappings}{$db}{dups} );
+  }
+
+}
+
+
 
 
 # 
@@ -609,17 +811,18 @@ sub base_qual2db {
 # Kim Brugger (01 Jul 2011)
 sub base_qual_dist2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   my @res;
-  my ( $q30 ) = (0);
+  my ( $q30, $total ) = (0, 0);
   foreach my $x ( keys %{$$QC_data{'base_qual_dist'}}) {
     push @res, [$x, $$QC_data{base_qual_dist}{ $x }];
-    $q30 += $$QC_data{'base_qual_dist'}{$x} if ( $x >= 30 );
+    $q30   += $$QC_data{'base_qual_dist'}{$x} if ( $x >= 30 );
+    $total += $$QC_data{'base_qual_dist'}{$x};
   }
 
   EASIH::QC::db::add_qvs_histogram( $fid, \@res );
-  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, sprintf("%2.f", 100*$q30/$$QC_data{'reads'}), undef, undef, undef);
+  $q30 = sprintf("%.2f", 100*$q30/$total);
+  EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, sprintf("%2.f", $q30), undef, undef, undef);
  
 }
 
@@ -631,7 +834,6 @@ sub base_qual_dist2db {
 # Kim Brugger (01 Jul 2011)
 sub GC2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   my $bucket = 5;
   
@@ -659,7 +861,6 @@ sub GC2db {
 # Kim Brugger (01 Jul 2011)
 sub duplicates2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   my %counts;
   my %dup_seqs;
@@ -702,7 +903,6 @@ sub duplicates2db {
 # Kim Brugger (01 Jul 2011)
 sub partial_adaptor2db {
   my ($QC_data) = @_;
-  $QC_data ||= $_QC;
 
   my $pam_count = 0;
 
@@ -716,13 +916,12 @@ sub partial_adaptor2db {
 
   print Dumper(\@res);
 
-
   EASIH::QC::db::add_adaptors( $fid, \@res);
   $pam_count /= int(keys %{$$QC_data{partial_adaptor_mapping}} );
   $pam_count = sprintf("%.2f", $pam_count*100/$$QC_data{reads});
   print "$pam_count\n";
   EASIH::QC::db::update_file($fid, undef, $$QC_data{reads}, undef, undef, $pam_count, undef);
-  
+ 
 }
 
 
@@ -961,6 +1160,67 @@ sub check_for_partial_adaptors {
 #
 #
 # Kim Brugger (03 Aug 2010)
+sub random_sample_fastq_gz_files {
+  my ($infile1, $infile2 ) = @_;
+
+  my $z1 = new IO::Uncompress::Gunzip($infile1) or die "gunzip failed: $GunzipError\n";
+  my $z2 = new IO::Uncompress::Gunzip($infile2) or die "gunzip failed: $GunzipError\n" if ( $infile2 );
+
+  my $read   = 0;
+  my $counts = 0;
+  my $random_pos = int(rand(1048576));
+  
+  my (@res1, @res2);
+
+
+  while( $sample_size > $read && $max_counts > $counts++ ) {
+    
+    $random_pos = $z1->tell() + int(rand(5120));
+    if ( ! $z1->seek($random_pos, SEEK_SET) ) {
+      close($z1);
+      close($z2) if ( $infile2 );
+      $z1 = new IO::Uncompress::Gunzip($infile1) or die "gunzip failed: $GunzipError\n";
+      $z2 = new IO::Uncompress::Gunzip($infile2) or die "gunzip failed: $GunzipError\n" if ( $infile2 );
+      $random_pos = int(rand(1048576));
+      next;
+    }
+    $z2->seek($random_pos, SEEK_SET) if ( $infile2 );
+
+    while ( $_ =  $z1->getline() ) {
+      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
+      $z2->getline();
+    }
+
+    next if (! $_);
+
+    if ($_ && 
+	($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  
+	 $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
+      my $name1 = $_;
+      my $seq1  = $z1->getline();
+      my $str1  = $z1->getline();
+      my $qual1 = $z1->getline();
+      
+      push @res1, [$name1, $seq1, $str1, $qual1];
+      $read += length($seq1);
+
+      if ( $infile2 ) {
+	my $name2 = $z2->getline();;
+	my $seq2  = $z2->getline();
+	my $str2  = $z2->getline();
+	my $qual2 = $z2->getline();
+	push @res2, [$name2, $seq2, $str2, $qual2];
+      }
+    }
+  }
+
+  close($z1);
+  close($z2) if ( $infile2 );
+
+  return (\@res1, \@res2);
+}
+
+
 sub random_sample_fastq_gz {
   my ($infile, $res ) = @_;
 
@@ -987,8 +1247,8 @@ sub random_sample_fastq_gz {
     next if (! $_);
 
     if ($_ && 
-	($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  
-	 $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
+        ($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  
+         $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
       my $name = $_;
       my $seq  = $z->getline();
       my $str  = $z->getline();
@@ -1006,40 +1266,57 @@ sub random_sample_fastq_gz {
 }
 
 
+
 #
 #
 #
 # Kim Brugger (03 Aug 2010)
-sub random_sample_fastq {
-  my ($infile1, $res) = @_;
+sub random_sample_fastq_files {
+  my ($infile1, $infile2) = @_;
+
+  my (@res1, @res2);
 
   my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile1);
   
   open (my $file1, $infile1) || die "Could not open '$infile1': $!\n";
+  open (my $file2, $infile2) || die "Could not open '$infile2': $!\n" if ( $infile2);
   my $read = 0;
-  while( $sample_size > $read ) {
+  my $counts = 0;
+  while( $sample_size > $read  && $max_counts > $counts) {
+
 
     my $random_pos = int(rand($size));
     seek( $file1, $random_pos, 0);
-    
+    seek( $file2, $random_pos, 0) if ( $infile2 );
     while ( <$file1> ) {
       last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
+      <$file2> if ( $infile2 );
     }
     
     if ($_ && ($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ || $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
-      my $name = $_;
-      my $seq  = <$file1>;
-      my $str  = <$file1>;
-      my $qual = <$file1>;
-
-      analyse( $seq, $qual, $res);
-      mappable( $qual, $res);
+      my $name1 = $_;
+      my $seq1  = <$file1>;
+      my $str1  = <$file1>;
+      my $qual1 = <$file1>;
       
-      $read += length($seq);
+      push @res1, [$name1, $seq1, $str1, $qual1];
+
+      if ( $infile2 ) {
+
+	my $name2 = <$file2>;
+	my $seq2  = <$file2>;
+	my $str2  = <$file2>;
+	my $qual2 = <$file2>;
+
+	push @res2, [$name2, $seq2, $str2, $qual2];
+      }
+      
+      $read += length($seq1);
     }
   }
 
-  return $res;
+
+  return (\@res1, \@res2);
 }
 
 

@@ -71,6 +71,8 @@ sub tmp_dir {
 
 sub tmp_file {
   my ($tmp_dir) = @_;
+
+  $tmp_dir ||= '/tmp/';
   
   my ($tmp_fh, $tmp_file) = File::Temp::tempfile(DIR => "$tmp_dir" ) if ( $tmp_dir );
   close ($tmp_fh);

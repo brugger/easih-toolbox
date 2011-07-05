@@ -41,9 +41,9 @@ use EASIH::Misc;
 use EASIH::Sample;
 
 my %opts;
-getopts('b:c:f:q:hs:p:r', \%opts);
+getopts('b:c:f:q:hs:p:r1:2:', \%opts);
 
-my $fastq_file    = $opts{f};
+my $fastq_file    = $opts{f} || $opts{1};
 my $csfasta_file  = $opts{c};
 my $qual_file     = $opts{q};
 my $bam_file      = $opts{b};
@@ -53,7 +53,6 @@ my $random_sample = $opts{r} || 0;
 #sample limit MB
 EASIH::QC::sample_size($sample_size);
 EASIH::QC::random_sample(1) if ( $random_sample );
-
 
 my ( $tmp_dir, $tmp_file) = EASIH::Misc::tmp_dir_file();
 
@@ -80,7 +79,7 @@ my %platforms = ( "ILLUMINA" => "Illumina GA2X",
 # Kim Brugger (03 Feb 2011)
 sub usage {
   $0 =~ s/.*\///;
-  print "USAGE: $0 -f[astq file] -c[sfasta file] -q[ual file] -b[am file] -p[latform, either SOLID or ILLUMINA or TORRENT] -s<ample size (in Mbases)> -r<andom sampling>\n";
+  print "USAGE: $0 -1[fastq file] -2[fastq file] -p[latform, either SOLID or ILLUMINA or TORRENT] -s<ample size (in Mbases)> -r<andom sampling>\n";
   exit -1;
 }
 
@@ -114,9 +113,13 @@ my @orf = ("101021_SOLEXA2_00011_FC",
 	   "110628_MGILLUMINA2_00039_FC");
 
 
-if ( $fastq_file || $csfasta_file || $qual_file ) {
+if ( $opts{1} || $fastq_file || $csfasta_file || $qual_file ) {
 
   if ( $fastq_file ) {
+
+    EASIH::QC::sample_reads(30000);
+
+    my $fastq_file2 = $opts{2};
 
     my $sname = `zcat -f $fastq_file | head -n1`;
     chomp $sname;
@@ -126,107 +129,55 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
     $runfolder ||= $sname;
 
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($fastq_file);
-    my $fid = EASIH::QC::db::add_file($fastq_file, $sample, $project, $runfolder, $platform);
-    EASIH::QC::fid($fid);
+    my $fid1 = EASIH::QC::db::add_file($fastq_file, $sample, $project, $runfolder, $platform);
+    my $fid2 = EASIH::QC::db::add_file($fastq_file2, $sample, $project, $runfolder, $platform) if ( $fastq_file2);
+    EASIH::QC::fid( $fid1 );
 
-    my ( $name, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::QC::db::fetch_file_info( $fid );
+    my ( $name, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::QC::db::fetch_file_info( $fid1 );
     
     if ( ! $total_reads ) {
       my $fq_lines = `zcat -f $fastq_file | wc -l`;
       chomp $fq_lines;
       $fq_lines /= 4;
       print "$fq_lines in $fastq_file\n";
-      EASIH::QC::db::update_file($fid, $fq_lines, undef, undef, undef, undef, undef);
+      EASIH::QC::db::update_file($fid1, $fq_lines, undef, undef, undef, undef, undef);
     }
 
-
-    $QC = EASIH::QC::fastQC( $fastq_file, 1 );
-
-#    print Dumper( $QC );
-
-    EASIH::QC::base_qual2db( $QC );
-    EASIH::QC::base_dist2db( $QC );
-    EASIH::QC::base_qual_dist2db( $QC );
-    EASIH::QC::GC2db( $QC );
-    EASIH::QC::duplicates2db( $QC );
-    EASIH::QC::partial_adaptor2db( $QC );
-
+    if ( $fid2 ) {
+      my ( $name, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::QC::db::fetch_file_info( $fid2 );
     
-
-  }
-
-  if ( $csfasta_file ) {
-    die "does not do csfasta files\n";
-    $QC = EASIH::QC::csfastaQC( $csfasta_file);
-    $base_name = $csfasta_file;
-    $infile    = $csfasta_file;
-    if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
-      $base_name =~ s/\.\///;
-      my $cwd = `pwd`;
-      chomp $cwd;
-      $base_name = "$cwd/$base_name";
+      if ( ! $total_reads ) {
+	my $fq_lines = `zcat -f $fastq_file | wc -l`;
+	chomp $fq_lines;
+	$fq_lines /= 4;
+	print "$fq_lines in $fastq_file\n";
+	EASIH::QC::db::update_file($fid2, $fq_lines, undef, undef, undef, undef, undef);
+      }
     }
-    $base_name =~ s/(.*?)\..*/$1/;
-    $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
-    EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
-  }
 
-  if ( $qual_file ) {
-    die "does not do qual files\n";
-    $QC = EASIH::QC::qualQC( $qual_file );
+    my ( $QC1, $QC2 ) = EASIH::QC::fastQC( $fastq_file, $fastq_file2 );
 
-
-    $base_name = $qual_file;
-    $infile    = $qual_file;
-    if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
-      $base_name =~ s/\.\///;
-      my $cwd = `pwd`;
-      chomp $cwd;
-      $base_name = "$cwd/$base_name";
+    if ( $fid2 ) { 
+      EASIH::QC::fid( $fid2 );
+      EASIH::QC::base_qual2db( $QC2 );
+      EASIH::QC::base_dist2db( $QC2 );
+      EASIH::QC::base_qual_dist2db( $QC2 );
+      EASIH::QC::GC2db( $QC2 );
+      EASIH::QC::duplicates2db( $QC2 );
+      EASIH::QC::partial_adaptor2db( $QC2 );
     }
-    $base_name =~ s/(.*?)\..*/$1/;
-    $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
 
-    EASIH::QC::make_plots($QC, "$tmp_dir/$tmp_file", $base_name);
+    EASIH::QC::fid( $fid1 );
+    EASIH::QC::base_qual2db( $QC1 );
+    EASIH::QC::base_dist2db( $QC1 );
+    EASIH::QC::base_qual_dist2db( $QC1 );
+    EASIH::QC::GC2db( $QC1 );
+    EASIH::QC::duplicates2db( $QC1 );
+    EASIH::QC::partial_adaptor2db( $QC1 );
+    
+    EASIH::QC::mappings2db( $QC1, $fid2 );
+
   }
-
-
-}
-elsif ( $bam_file ) {
-  my ($QC1, $QC2) = EASIH::QC::bamQC( $bam_file );
-  die "does not do bam files\n";
-
-  $base_name = $bam_file;
-  $infile    = $bam_file;
-  $base_name =~ s/(.*?)\..*/$1/;
-  $base_name = "$cwd/$base_name" if ( $base_name !~ /\//);
-  
-  EASIH::QC::make_plots($QC1, "$tmp_dir/$tmp_file", $base_name);
-
-  open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
-  print $out latex_header();
-  print $out latex_summary($infile, uc($platform), $sample_size, $$QC1{reads} || $$QC1{quals}, $$QC1{Q30}, $$QC1{perc_dup}, $$QC1{mappability}, $$QC1{ACsplit}, $$QC{partial_adaptor} );
-  print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
-  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC1{duplicates});
-  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
-  print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
-  print $out latex_tail();
-  make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.1.pdf");
-  system "rm -rf $tmp_dir/*";
-  print "Report: $base_name.1.pdf\n";
-
-  EASIH::QC::make_plots($QC2, "$tmp_dir/$tmp_file", $base_name);
-  open ( $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
-  print $out latex_header();
-  print $out latex_summary($infile, uc($platform), $sample_size, $$QC2{reads} || $$QC2{quals}, $$QC2{Q30}, $$QC2{perc_dup}, $$QC2{mappability}, $$QC2{ACsplit}, $$QC{partial_adaptor} );
-  print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");
-  print $out latex_dups("$tmp_dir/$tmp_file\_DupHist.pdf", $$QC2{duplicates});
-  print $out latex_pam("$tmp_dir/$tmp_file\_PAM.pdf", $$QC{partial_adaptor});
-  print $out latex_GC("$tmp_dir/$tmp_file\_BaseDist.pdf", "$tmp_dir/$tmp_file\_GC.pdf");
-  print $out latex_tail();
-  make_pdf($tmp_dir, "$tmp_file.tex", "$base_name.2.pdf");
-  system "rm -rf $tmp_dir";
-  print "Report: $base_name.2.pdf\n";
 }
 
 

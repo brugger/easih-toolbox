@@ -34,6 +34,16 @@ CREATE TABLE sample (
   KEY pid_idx  (pid)
 );
 
+
+CREATE TABLE offloading (
+  rid                 INT NOT NULL,
+  stamp               BIGINT,
+  status              VARCHAR(100) NOT NULL,
+
+  PRIMARY KEY (rid,stamp)
+
+);
+
 CREATE TABLE illumina_lane_stats (
 
   rid                 INT NOT NULL,

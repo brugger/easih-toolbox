@@ -19,8 +19,15 @@ usage() if ( $opts{h});
 my $infile    = $opts{i};
 my $outfile   = $opts{o};
 my $readgroup = $opts{r} || usage();
+$readgroup    =~ s/.*\///;
+my $reference = $opts{R} || "";
+$reference =~ s/.*\///;
+$reference =~ s/^(.*?)\..*/$1/;
+
 my $sample    = $opts{s} || $readgroup;
+$sample =~ s/.*\///;
 my $library   = $opts{l} || $readgroup;
+$library =~ s/.*\///;
 my $platform  = $opts{p} || usage();
 my $center    = $opts{c} || "EASIH";
 
@@ -82,6 +89,12 @@ while(<STDIN>) {
       next;
     }
   }
+
+  if ($reference && /^\@SQ/ && !/\tAN:/) {
+    chomp;
+    $_ .= "\tAN:$reference\n";
+  }
+    
     
 
   if ( ! /^\@/ ) {

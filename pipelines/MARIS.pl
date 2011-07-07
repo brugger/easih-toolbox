@@ -136,8 +136,8 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'std-aln'           => 'std-generate',
 	      'std-generate'      => 'std-tag_sam',
 	      'std-tag_sam'       => 'std-sam2bam',
-	      'std-sam2bam'       => 'std-merge',
-	      'std-merge'         => 'std-sort',
+	      'std-sam2bam'       => 'std-sort',
+	      'std-sort'          => 'std-merge',
 	      'std-sort'          => 'std-calmd',
 	      'std-mark_dup'      => 'std-calmd',
 	      'std-calmd'         => 'std-index',
@@ -339,6 +339,7 @@ $extra_report .= "Picard: " . EASIH::JMS::Picard->version() ."\n";
 $extra_report .= "Command line: $0 ".EASIH::JMS::args() ."\n";
 
 
+$bam_file =~ s/.*\///;
 EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
 #EASIH::JMS::delete_tmp_files();
@@ -446,6 +447,7 @@ sub sam_add_tags {
     $readgroup =~ s/.fastq//;
     $readgroup =~ s/.fq//;
     $readgroup =~ s/.gz//;
+    $readgroup =~ s/.*\///;
   }
 
   my $cmd = "$tag_sam -R $input -p $platform -r $readgroup -a bwa -A '$align_param' ";

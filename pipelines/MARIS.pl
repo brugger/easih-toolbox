@@ -450,7 +450,7 @@ sub sam_add_tags {
     $readgroup =~ s/.*\///;
   }
 
-  my $cmd = "$tag_sam -R $input -p $platform -r $readgroup -a bwa -A '$align_param' ";
+  my $cmd = "$tag_sam -RO $input -p $platform -r $readgroup -a bwa -A '$align_param' ";
   EASIH::JMS::submit_job($cmd, $input);
 }
 

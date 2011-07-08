@@ -13,7 +13,7 @@ use File::Temp qw/ tempfile /;
 
 
 my %opts;
-getopts('i:o:r:s:l:p:c:a:A:R:', \%opts);
+getopts('i:o:Or:s:l:p:c:a:A:R:', \%opts);
 usage() if ( $opts{h});
 
 my $infile    = $opts{i};
@@ -34,7 +34,7 @@ my $center    = $opts{c} || "EASIH";
 my $aligner   = $opts{a};
 my $a_line    = $opts{A};
 
-my $replace   = $opts{R};
+my $replace   = $opts{O};
 $infile = $replace if ( ! $infile && $replace );
 open (*STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
 
@@ -160,7 +160,7 @@ sub usage {
 
   $0 =~ s/.*\///;
   print "$0 adds/replaces the readgroup/library/sample/platform/center tags in a sam file/stream\n";
-  print "$0 -i[nfile (or stdin] -o[utfile (or stdout)] -r[eadgroup] -s[ample] -l[ibrary] -p[latform] -c[enter] -a[ligner] -A[ligner param] -R[eplace infile with fixed file]\n";
+  print "$0 -i[nfile (or stdin] -o[utfile (or stdout)] -r[eadgroup] -s[ample] -l[ibrary] -p[latform] -c[enter] -a[ligner] -A[ligner param] -O[verwrite the original file] -R[eference]\n";
 
   exit 1;
 }

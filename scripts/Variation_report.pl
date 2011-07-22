@@ -184,7 +184,8 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     next if ( ! $Echr );
     $grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
     my $slice = fetch_slice($Echr);
-      my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
+    next if ( ! $slice);
+    my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
       
       # create a new VariationFeature object
       my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
@@ -420,6 +421,10 @@ sub variation_effects {
       }
     }
 
+    if (! $vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand) ) {
+      print STDERR "should this be hg18? cannot get slice: ". $vf->start .":". $vf->end ."-". $vf->strand . "\n";
+      next;
+    }
     my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
 
     # get consequences
@@ -492,10 +497,10 @@ sub variation_effects {
  	    while (my $prot_feat = shift @{ $prot_feats }) {
  	      my $logic_name = $prot_feat->analysis()->logic_name();
 	      
- 	      next if ( $logic_name ne 'Pfam');
+ 	      next if ( $logic_name ne 'pfam');
 	      
- 	      if ($tva->translation_start >= $prot_feat->start() and
- 		  $tva->translation_end <= $prot_feat->end() ) {
+ 	      if ($tv->translation_start >= $prot_feat->start() and
+ 		  $tv->translation_end <= $prot_feat->end() ) {
 		
  		$gene_res{ pfam }     = $prot_feat->idesc();
  		$gene_res{ interpro } = $prot_feat->interpro_ac();
@@ -818,6 +823,8 @@ sub variation_effects_old {
 	    
 	    while (my $prot_feat = shift @{ $prot_feats }) {
 	      my $logic_name = $prot_feat->analysis()->logic_name();
+
+	      print STDERR "LN :: $logic_name\n";
 	      
 	      next if ( $logic_name ne 'Pfam');
 	      

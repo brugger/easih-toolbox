@@ -36,7 +36,7 @@ BEGIN {
 
 use EASIH;
 use EASIH::QC;
-use EASIH::QC::db;
+use EASIH::DONE;
 use EASIH::Misc;
 use EASIH::Sample;
 
@@ -110,15 +110,21 @@ my @orf = ("101021_SOLEXA2_00011_FC",
 	   "110627_MGILLUMINA2_00036_FC",
 	   "110627_MGILLUMINA2_00037_FC",
 	   "110627_MGILLUMINA2_00038_FC",
-	   "110628_MGILLUMINA2_00039_FC");
+	   "110628_MGILLUMINA2_00039_FC",
+	   "110704_MGILLUMINA2_00040_FC",
+	   "110715_MGILLUMINA2_00041_FC");
 
 
 if ( $opts{1} || $fastq_file || $csfasta_file || $qual_file ) {
 
   if ( $fastq_file ) {
 
-    EASIH::QC::sample_reads(30000);
 
+    die "$opts{1} and $opts{2} points to the  same file\n" if ( $fastq_file && $opts{2} && 
+								$fastq_file eq $opts{2} );
+    
+    EASIH::QC::sample_reads( 1000000 );
+    EASIH::QC::random_sample(1);
     my $fastq_file2 = $opts{2};
 
     my $sname = `zcat -f $fastq_file | head -n1`;
@@ -129,34 +135,45 @@ if ( $opts{1} || $fastq_file || $csfasta_file || $qual_file ) {
     $runfolder ||= $sname;
 
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($fastq_file);
-    my $fid1 = EASIH::QC::db::add_file($fastq_file, $sample, $project, $runfolder, $platform);
-    my $fid2 = EASIH::QC::db::add_file($fastq_file2, $sample, $project, $runfolder, $platform) if ( $fastq_file2);
-    EASIH::QC::fid( $fid1 );
+    my $fid1 = EASIH::DONE::add_file($fastq_file,  $sample, $project, $runfolder, $platform);
+    my $fid2 = EASIH::DONE::add_file($fastq_file2, $sample, $project, $runfolder, $platform) if ( $fastq_file2);
 
-    my ( $name, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::QC::db::fetch_file_info( $fid1 );
+    my ( $name, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::DONE::fetch_file_info( $fid1 );
     
     if ( ! $total_reads ) {
       my $fq_lines = `zcat -f $fastq_file | wc -l`;
       chomp $fq_lines;
       $fq_lines /= 4;
       print "$fq_lines in $fastq_file\n";
-      EASIH::QC::db::update_file($fid1, $fq_lines, undef, undef, undef, undef, undef);
+      EASIH::DONE::update_file($fid1, $fq_lines, undef, undef, undef, undef, undef, undef);
     }
 
+    if (! $read_length ) {
+      my $read_length = find_read_length( $fastq_file );
+      EASIH::DONE::update_file($fid1, undef, $read_length, undef, undef, undef, undef, undef);
+    }
+
+
     if ( $fid2 ) {
-      my ( $name, $total_reads, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::QC::db::fetch_file_info( $fid2 );
+      my ( $name, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC) = EASIH::DONE::fetch_file_info( $fid2 );
     
       if ( ! $total_reads ) {
-	my $fq_lines = `zcat -f $fastq_file | wc -l`;
+	my $fq_lines = `zcat -f $fastq_file2 | wc -l`;
 	chomp $fq_lines;
 	$fq_lines /= 4;
-	print "$fq_lines in $fastq_file\n";
-	EASIH::QC::db::update_file($fid2, $fq_lines, undef, undef, undef, undef, undef);
+	print "$fq_lines in $fastq_file2\n";
+	EASIH::DONE::update_file($fid2, $fq_lines, undef, undef, undef, undef, undef, undef);
+      }
+
+      if (! $read_length ) {
+	my $read_length = find_read_length( $fastq_file2 );
+	EASIH::DONE::update_file($fid2, undef, $read_length, undef, undef, undef, undef, undef);
       }
     }
 
     my ( $QC1, $QC2 ) = EASIH::QC::fastQC( $fastq_file, $fastq_file2 );
 
+    
     if ( $fid2 ) { 
       EASIH::QC::fid( $fid2 );
       EASIH::QC::base_qual2db( $QC2 );
@@ -178,6 +195,36 @@ if ( $opts{1} || $fastq_file || $csfasta_file || $qual_file ) {
     EASIH::QC::mappings2db( $QC1, $fid2 );
 
   }
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (22 Jul 2011)
+sub find_read_length {
+  my ($name) = @_;
+  
+  my $f1;
+  if ( $name =~ /gz/) {
+    open ( $f1, "gunzip -c $name | ") || die "Could not open '$name': $!\n";
+  }
+  else {
+    open ( $f1, "$name") || die "Could not open '$name': $!\n";
+  }
+  
+  my $id   = <$f1>;
+  my $seq  = <$f1>;
+  my $str  = <$f1>;
+  my $qual = <$f1>;
+
+  close ($f1);
+  chomp($seq);
+  
+  my $read_length = length($seq);
+
+  return $read_length;
 }
 
 

@@ -9,8 +9,6 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-
-
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment. Needs to be prior to the use of EASIH* modules.
@@ -29,9 +27,8 @@ BEGIN {
   }
 }
 
-
 use EASIH;
-use EASIH::QC::db;
+use EASIH::DONE;
 use EASIH::Sample;
 
 
@@ -39,7 +36,7 @@ my $infile = shift || die "Needs an infile\n";
 
 my @path = split("/", $infile);
 my $run_folder = $path[3];
-my $run_id = EASIH::QC::db::add_run($run_folder, 'ILLUMINA');
+my $run_id = EASIH::DONE::add_run($run_folder, 'ILLUMINA');
 
 my %fid_cache = ();
 
@@ -50,7 +47,7 @@ my %multiplex_counter;
 open (my $in, "$infile") || die "Could not open '$infile': $!\n";
 while( <$in> ) {
   chomp;
-  my @f = split("\t");
+  my @f = split(/\s{3,}/);
   
   my ($lane, $read_nr) = $f[0] =~ /lane (\d).(\d)/;
   my ($sample, $total_reads, $pass_filter) = ($f[1],$f[2],$f[3]);
@@ -63,7 +60,7 @@ while( <$in> ) {
     $multiplex_counter{$sample} += $count;
     $perc =~ s/[\% ]//;
     
-    EASIH::QC::db::add_illumina_multiplex_stats( $run_id, $fid, $lane, $sample, $bcode, $total_reads, undef, $perc);
+    EASIH::DONE::add_illumina_multiplex_stats( $run_id, $fid, $lane, $sample, $bcode, $total_reads, undef, $perc);
 
   }
   else {
@@ -77,7 +74,7 @@ while( <$in> ) {
     
     print "$run_id, $fid, $lane, $read_nr\n";
     
-    EASIH::QC::db::add_illumina_lane_stats( $run_id, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter )
+    EASIH::DONE::add_illumina_lane_stats( $run_id, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter )
 	
   }
 
@@ -99,13 +96,16 @@ sub find_or_create_fid {
   return $fid_cache{ $filename } if ( $fid_cache{ $filename });
 
   my ($sample, $project) = EASIH::Sample::filename2sampleNproject($filename);
+
   
   if (! $sample ) {
     return undef;
   }
 
+  $filename = "/data/$project/raw/$filename.gz";
 
-  my $fid = EASIH::QC::db::add_file($filename, $sample, $project, $run_folder, 'ILLUMINA');
+
+  my $fid = EASIH::DONE::add_file($filename, $sample, $project, $run_folder, 'ILLUMINA');
   $fid_cache{ $filename } = $fid;
   return $fid;
 }

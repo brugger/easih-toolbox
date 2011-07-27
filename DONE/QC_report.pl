@@ -53,6 +53,7 @@ my $random_sample = $opts{r} || 0;
 #sample limit MB
 EASIH::QC::sample_size($sample_size);
 EASIH::QC::random_sample(1) if ( $random_sample );
+EASIH::QC::do_mappings(1);
 
 my ( $tmp_dir, $tmp_file) = EASIH::Misc::tmp_dir_file();
 

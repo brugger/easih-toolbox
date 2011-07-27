@@ -11,6 +11,7 @@ use Data::Dumper;
 use POSIX qw(ceil floor);
 
 use EASIH::Barcodes::ill9;
+use EASIH::Barcodes::illumina;
 
 
 my $bc_module   = undef;

@@ -60,10 +60,10 @@ BEGIN {
 
 use EASIH;
 use EASIH::Mail;
-use EASIH::Logistics;
+use EASIH::DONE;
 
 my %opts;
-getopts('h', \%opts);
+getopts('hv', \%opts);
 
 if($opts{h})
 {
@@ -74,83 +74,97 @@ if($opts{h})
     exit;
 }
 
+my $verbose = $opts{v} || 0;
 
-my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
-#my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
+
+my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
+$to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
+#$to = 'kim.brugger@easih.ac.uk'; #global
 my $dir = "/seqs/illumina2/";
 #my $dir = "/seqs/babraham/";
-my $CurrentRunDir; #global
-
+my $RunDir; #global
+my $rid;
 
 opendir(DIR, "$dir");
 my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
 closedir(DIR);
 
-   
-while(my $file = shift @files) 
-{
-    my $runfolder   = ${dir}.$file;
-    my $eventfile   = ${runfolder}."/Events.log"; 
-    my $Data        = ${runfolder}."/Data";
-    my $Intensities = ${Data}."/Intensities"; 
-    my $Basecalls   = $Intensities."/BaseCalls"; 
-    $CurrentRunDir  = $file;    
+ 
+while( $RunDir = shift @files) {
     
+    print "RID:: $RunDir --> $rid\n" if ( $verbose );
+    
+    my $runfolder   = ${dir}.$RunDir;
+    my $eventfile   = "$runfolder/Events.log"; 
+    my $Intensities = "$runfolder/Data/Intensities"; 
+    my $Basecalls   = "$runfolder/Data/Intensities/BaseCalls"; 
 
     my %Execute = ('01-BCL2QSEQ'  => {'01-command'    => "cd $Intensities; /software/bin/setupBclToQseq.py --in-place --overwrite -o BaseCalls -b BaseCalls", 
-				      '02-prestatus'  => "BCL2QSEQ_SETUP", 
-				      '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
-				      '04-poststatus' => "BCL2QSEQ_DONE"},
-		   
-		   '02-MAKE'      => {'01-command'    => "cd $Basecalls; make;", 
-				      '02-prestatus'  => "MAKE_STARTED", 
-				      '03-failstatus' => "MAKE_FAILED", 
-				      '04-poststatus' => "MAKE_DONE"},
-		   
-		   '03-BCL2FQ'    => {'01-command'    => "/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls > $Basecalls/BaseCalls2fq.log", 
-				      '02-prestatus'  => "BCL2FQ_STARTED", 
-				      '03-failstatus' => "BCL2FQ_FAILED", 
-				      '04-poststatus' => "BCL2FQ_DONE"},
-		   
-		   '04-QC_Report' => {'01-command'    => "/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
-				      '02-prestatus'  => "QC_REPORT_STARTED", 
-				      '03-failstatus' => "QC_REPORT_FAILED", 
-				      '04-poststatus' => "QC_REPORT_DONE"},
-	);
+				  '02-prestatus'  => "BCL2QSEQ_SETUP", 
+				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
+				  '04-poststatus' => "BCL2QSEQ_DONE"},
+	       
+	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 4;", 
+				  '02-prestatus'  => "MAKE_STARTED", 
+				  '03-failstatus' => "MAKE_FAILED", 
+				  '04-poststatus' => "MAKE_DONE"},
+	       
+	       '03-BCL2FQ'    => {'01-command'    => "/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
+				  '02-prestatus'  => "BCL2FQ_STARTED", 
+				  '03-failstatus' => "BCL2FQ_FAILED", 
+				  '04-poststatus' => "BCL2FQ_DONE"},
+	       
+	       '04-QC_Report' => {'01-command'    => "/home/kb468/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
+				  '02-prestatus'  => "QC_REPORT_STARTED", 
+				  '03-failstatus' => "QC_REPORT_FAILED", 
+				  '04-poststatus' => "QC_REPORT_DONE"},
 
 
-#    if ( $file =~ /0035/) {
-#	1;
-#    }
+	       '05-QC_DB' => {'01-command'    => "/home/kb468/easih-toolbox/DONE/QC_report.pl -p illumina -r ",
+			      '02-prestatus'  => "QC_DB_STARTED", 
+			      '03-failstatus' => "QC_DB_FAILED", 
+			      '04-poststatus' => "QC_DB_DONE"},
+    );
+
         
-    if(-e "$eventfile")
-    {
-	my $last_status = EASIH::Logistics::fetch_latest_run_folder_status("$file"); 
-	
-	next, if($last_status && $last_status ne "RETRY_OFFLOAD");
-	
-	chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
-	
+    if(-e "$eventfile") {
 
-	### Update the status for old and unfinished runs ###
-	if((!$checkstring) && (@files)) 
-	{
-	    RunStatus("RUN_ABORTED");
-	    next;
+
+      chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
+      
+      ### Update the status for old and unfinished runs ###
+      if(!$checkstring) {
+	print "$RunDir: Run not finished\n" if ($verbose);
+	if ( @files ) {
+	  $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
+	  my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
+	  print "$RunDir setting status to RUN_ABORTED\n" if ($verbose);
+	  
+	  RunStatus("RUN_ABORTED") if (! $last_status);
+	  next;
 	}
+      }
 
+      $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
 
-	my $failed_status = EASIH::Logistics::fetch_run_folder_failure( $file ) if ( $last_status );
+      my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
+
+      print "$RunDir last status: $last_status\n" if ($verbose && $last_status);
+      
+      next, if($last_status && $last_status ne "RETRY_OFFLOAD");
+
+	my $failed_status = EASIH::DONE::fetch_offloading_failure( $rid ) if ( $last_status );
 	my $fixed_failed_program = 0;
 
 
 	### Start post processing for new runs ###
 	if($checkstring)
 	{
-	    ### Run Complete ###
-	    RunStatus("RUN_COMPLETED") if ( ! $failed_status );
-	    my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    SendEmail($last_status,1), if($last_status eq "RUN_COMPLETED");
+	  ### Run Complete ###
+	  if ( ! $failed_status ) {
+	    RunStatus("RUN_COMPLETED");
+	    SendEmail("RUN_COMPLETED","",1);
+	  }
 
 
             ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
@@ -158,9 +172,9 @@ while(my $file = shift @files)
 	    for my $program(sort keys %Execute)
 	    {
 		
-		next, if($program =~ /QC_Report/);
+		next, if($program =~ /QC_/);
 
-		if ( $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
+		if ( $last_status && $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
 		    next if ($failed_status ne $Execute{$program}{'03-failstatus'});
 		    $fixed_failed_program++;
 		}
@@ -174,21 +188,20 @@ while(my $file = shift @files)
 	
 		goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
 	    }         
+
+	  print "$failed_status $fixed_failed_program\n";
 	    
 
-	    ### Something Bad ###
-	    $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    #if($last_status =~ /WRONG|FAIL/)
-	    #if( $last_status ne "BASECALLS2FQ_DONE" )
-	    if( $last_status ne "BCL2FQ_DONE" )
-	    {
-		next;
-	    }
-	    
+	  if (! $last_status || 
+	      $last_status ne "RETRY_OFFLOAD" ||
+	      ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
+	       $failed_status eq $Execute{'04-QC_Report'}{'03-failstatus'})) {
+
+
 
 	    ### QC_Report ###
-	    my @fqfiles = EASIH::Logistics::fetch_files_from_rundir($file);
-	    
+	    my @fqfiles = EASIH::DONE::fetch_files_from_rid( $rid );
+
 	    foreach my $fqfile(@fqfiles)
 	    {
 		
@@ -202,20 +215,46 @@ while(my $file = shift @files)
 		next, if(!GrabAndRun(@GARstring));
 	    }
 
-    
-	    
-	    ### QC done email ###
-	    $last_status = EASIH::Logistics::fetch_latest_run_folder_status($file);
-	    
-	    if($last_status eq "QC_REPORT_DONE")
-	    {
-		SendEmail($last_status,1), 
+	  }
+	  
+	  if (! $last_status || 
+	      $last_status ne "RETRY_OFFLOAD" ||
+	      ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
+	       $failed_status eq $Execute{'05-QC_DB'}{'03-failstatus'})) {
+
+
+	    ### QC_Report ###
+	    my %fqfiles = EASIH::DONE::fetch_files_from_rid_by_sample( $rid );
+	    use Data::Dumper;
+	    if (1) {
+	      foreach my $sample (keys %fqfiles)  {
 		
-                ### Processing done status and email ###
-		my $end = "PROCESSING_DONE";
-		RunStatus($end);
-		SendEmail($end,1);
+		my $param = " -1 $fqfiles{ $sample }[0] ";
+		$param   .= " -2 $fqfiles{ $sample }[1] " if ($fqfiles{ $sample }[1]);
+		
+		my @GARstring;
+		
+		push @GARstring, $Execute{'05-QC_DB'}{'01-command'} . "$param";
+		push @GARstring, $Execute{'05-QC_DB'}{'02-prestatus'};
+		push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
+		push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
+		
+		next if( !GrabAndRun(@GARstring) );
+	      }
 	    }
+	  }
+	  
+	  
+	  ### QC done email ###
+	  $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
+	    
+	  if($last_status eq "QC_REPORT_DONE") {
+		
+	    ### Processing done status and email ###
+	    my $end = "PROCESSING_DONE";
+	    RunStatus($end);
+	    SendEmail($end,$end,1);
+	  }
 	}
     }
   NEXT_RUNFOLDER:
@@ -226,18 +265,17 @@ sub RunStatus
 {
     my($status) = @_;
     
-    EASIH::Logistics::add_run_folder_status($CurrentRunDir, 
-					    "ILLUMINA", 
-					    "$status");
+    EASIH::DONE::add_offloading_status($rid, 
+				       "$status");
 }
 
 
 ###########################################################
 sub SendEmail
 {
-    my($message,$success) = @_;
+    my($subject, $message,$success) = @_;
  
-    my $subject = $message;
+    $subject = "ERROR:  $subject" if ( ! $success );
 
     $message = "Failed Command: $message", if(! $success);
 
@@ -245,7 +283,7 @@ sub SendEmail
     {
 	#chomp(my $log = `~kb468/easih-toolbox/logistics/logistics_log.pl $CurrentRunDir`), 
 
-	my $log = EASIH::Logistics::runfolder_log($CurrentRunDir);
+	my $log = EASIH::DONE::run_log( $rid );
 	$message = "$message \n\n $log";
     }
 
@@ -253,7 +291,7 @@ sub SendEmail
          
     
     EASIH::Mail::send($to, 
-		      "[easih-data] Illumina Data Processing [Return Code = $success]: $subject - $CurrentRunDir", 
+		      "[easih-done] $subject - $RunDir", 
 		      "$body");
 }
 
@@ -268,7 +306,7 @@ sub GrabAndRun
     if(system($command))
     {
 	RunStatus("$fail_status");
-	SendEmail($command,0);
+	SendEmail($fail_status, $command,0);
 	return 0;
     }
     

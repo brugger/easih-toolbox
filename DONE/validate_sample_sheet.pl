@@ -87,8 +87,7 @@ foreach my $dir ( @input_dirs ) {
   }
 
 
-  SendEmail("sample sheet error in runfolder: $file", $error_message) if ($error_message);
-  
+#  SendEmail("sample sheet error in runfolder: $file", $error_message) if ($error_message);
 }
 
 
@@ -105,7 +104,7 @@ sub validate_sample_sheet {
   my $text_delim = "";
   my $field_delim = "";
 
-  open(my $in, $sample_sheet) || fail("Could not open '$sample_sheet': $!\n", "BASECALL2FQ_PATH_ERROR");
+  open(my $in, $sample_sheet) || fail("Could not open '$sample_sheet': $!\n");
   my @lines;
   while(<$in>) {
     $_ =~ s/\r\n/\n/g; 
@@ -130,46 +129,78 @@ sub validate_sample_sheet {
       my @F = split($field_delim, $_);
       my (undef, $lane, $sample_id, undef, $index, undef) = @F;
 
-      $index ||= "";
+      $index ||= "default";
 
       $lane      =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
 
-      fail( "Index should be a base sequence, not '$index' for lane $lane\n")  if ( $index && $index !~ /^[ACGT]+\z/i);
-
-      if ( $index ) {
-	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n") 
-	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});
-
-	$res{$lane}{$index} = $sample_id;
+      if ($res{$lane}{$index} && $res{$lane}{$index} ne $sample_id) {
+	if ($index eq "") {
+	  fail( "Lane $lane without an indexing has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n");
+	}
+	else {
+	  fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n");
+	}
+	next;
       }
-      else {
-	fail( "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n") 
-	    if ($res{$lane}  && !$opts{$lane} && !$opts{'a'});
 
-	$res{$lane} = $sample_id;
-      }
+
+      $res{$lane}{$index} = $sample_id;
+    }
+
+  }
+
+#  print  Dumper( \%res );
+
+  foreach my $lane ( keys %res ) {
+    if (keys %{$res{$lane}} == 1 && $res{$lane}{'default'}) {
+      $res{$lane} = $res{$lane}{'default'};
     }
   }
 
-  my %basenames;
   for ( my $lane =1; $lane <=8;$lane++) {
     
-    fail( "no lane information for lane $lane \n")
-	if (! $res{$lane});
+    if (! $res{$lane}) {
+      fail( "no lane information for lane $lane \n");
+      next;
+    }
+
     
-  
+    use EASIH::Barcodes;
+    EASIH::Barcodes::barcode_set('illumina');
+    EASIH::Barcodes::error_correct_barcodes(0);    
+
     if (ref ($res{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$res{$lane}}) {
-	fail("$res{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}{$bcode}));
+	
+	fail("$res{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n") 
+	    if ( !EASIH::Sample::validate_name($res{$lane}{$bcode}));
+
+	next if ($bcode eq 'default');
+
+
+	if ( $bcode =~ /^[ACGT]+\z/ ) {
+	  ($bcode, my $valid) = EASIH::Barcodes::validate_barcode( $bcode );
+	  fail("$bcode  in lane $lane is not an valid illumina barcode\n") if ( ! $valid );
+	}
+	elsif($bcode =~ /^(\w+?)_(\w+)([F|R]{1,2})/) {
+	  my $barcode_set = $1;
+	  my $tag = $2;
+	  my $directions = $3;
+	  
+	  print "$barcode_set barcodes using the $tag tag for direction(s): $directions\n";
+	}
+	else {
+	  fail("'$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n") 
+	}
       }
     }
     else {
 	fail("$res{$lane} for lane $lane is not an  EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}));
     }
   }
-  
+
 }
 
 
@@ -182,6 +213,8 @@ sub validate_sample_sheet {
 sub fail {
   my ($message) = @_;
 
+
+  print $message;
   $error_message .= "$message";
   
 }
@@ -190,6 +223,9 @@ sub fail {
 ###########################################################
 sub SendEmail {
     my($subject, $message) = @_;
+
+    print "$message\n";
+    return;
  
     $subject = "[easih-dash] $subject" if ( $subject !~ /easih-dash/);
     EASIH::Mail::send($to, $subject, $message);

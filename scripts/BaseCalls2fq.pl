@@ -42,10 +42,10 @@ BEGIN {
 use EASIH;
 use EASIH::DONE;
 use EASIH::Sample;
-
+use EASIH::Illumina::Sample_sheet;
 
 my %opts;
-getopts("a:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
+getopts("a:A:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
 
 my $limited_lanes = $opts{'l'};
 my $no_mismatches = $opts{n};
@@ -64,6 +64,7 @@ sub usage {
   print "\nUSAGE: Advanced parameters\n";
   print "USAGE: -1,  -2, .., -8 < the lanes are assigned this name> Overrules the sample_sheet.csv\n";
   print "USAGE: -a< id, all lanes that are not named specifically gets this id>.\n";
+  print "USAGE: -A< id, all lanes that are not named specifically gets this id with a _counter to separate them>.\n";
   print "USAGE: -d<ata monger mode, oh dont you dare>\n";
   print "USAGE: -b<arcoded run>.\n";
   print "USAGE: -l<imited lanes, by default the whole slide is extracted>.\n";
@@ -99,10 +100,11 @@ if (!$sample_sheet && -e "sample_sheet.csv") {
 fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
 
 
-usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
+usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{A} && ! $opts{1} && ! $opts{2} && ! $opts{3} && ! $opts{4} && 
 	   ! $opts{5} && ! $opts{6} && ! $opts{7} && ! $opts{8}  ||  $opts{h});
 
 my %sample_names = readin_sample_sheet( $sample_sheet) if ($sample_sheet);
+
 
 $sample_names{1} = $opts{'1'} if ($opts{'1'});
 $sample_names{2} = $opts{'2'} if ($opts{'2'});
@@ -113,16 +115,35 @@ $sample_names{6} = $opts{'6'} if ($opts{'6'});
 $sample_names{7} = $opts{'7'} if ($opts{'7'});
 $sample_names{8} = $opts{'8'} if ($opts{'8'});
 
-$sample_names{1} = $opts{a} if ($opts{a} && !$opts{'1'});
-$sample_names{2} = $opts{a} if ($opts{a} && !$opts{'2'});
-$sample_names{3} = $opts{a} if ($opts{a} && !$opts{'3'});
-$sample_names{4} = $opts{a} if ($opts{a} && !$opts{'4'});
-$sample_names{5} = $opts{a} if ($opts{a} && !$opts{'5'});
-$sample_names{6} = $opts{a} if ($opts{a} && !$opts{'6'});
-$sample_names{7} = $opts{a} if ($opts{a} && !$opts{'7'});
-$sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
+if ($opts{a}) {
+  $sample_names{1} = $opts{a} if ( !$opts{'1'} );
+  $sample_names{2} = $opts{a} if ( !$opts{'2'} );
+  $sample_names{3} = $opts{a} if ( !$opts{'3'} );
+  $sample_names{4} = $opts{a} if ( !$opts{'4'} );
+  $sample_names{5} = $opts{a} if ( !$opts{'5'} );
+  $sample_names{6} = $opts{a} if ( !$opts{'6'} );
+  $sample_names{7} = $opts{a} if ( !$opts{'7'} );
+  $sample_names{8} = $opts{a} if ( !$opts{'8'} );
+}
+
+if ($opts{A}) {
+  my $counter = 1;
+
+  $sample_names{1} = "$opts{A}_".$counter++ if ( !$opts{'1'} );
+  $sample_names{2} = "$opts{A}_".$counter++ if ( !$opts{'2'} );
+  $sample_names{3} = "$opts{A}_".$counter++ if ( !$opts{'3'} );
+  $sample_names{4} = "$opts{A}_".$counter++ if ( !$opts{'4'} );
+  $sample_names{5} = "$opts{A}_".$counter++ if ( !$opts{'5'} );
+  $sample_names{6} = "$opts{A}_".$counter++ if ( !$opts{'6'} );
+  $sample_names{7} = "$opts{A}_".$counter++ if ( !$opts{'7'} );
+  $sample_names{8} = "$opts{A}_".$counter++ if ( !$opts{'8'} );
+
+}
+
 
 %sample_names = validate_lane_names(%sample_names);
+
+die Dumper( %sample_names );
 my (%fhs, %fids);
 
 my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);
@@ -376,70 +397,11 @@ sub analyse_tile {
 sub readin_sample_sheet {
   my ( $sample_sheet) = @_;
   
-  my (%res );
-  
-  my $text_delim = "";
-  my $field_delim = "";
+  my ($res, $errors ) = EASIH::Illumina::Sample_sheet::readin( $sample_sheet );
 
-  open(my $in, $sample_sheet) || fail("Could not open '$sample_sheet': $!\n", "BASECALL2FQ_PATH_ERROR");
-  my @lines;
-  while(<$in>) {
-    $_ =~ s/\r\n/\n/g; 
-    $_ =~ s/\n\r/\n/g; 
-    $_ =~ s/\r/\n/g; 
-    push @lines, split("\n",$_);
-  }
-  close $in;
+  fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
-  while($_ = shift @lines ) {
-    chomp;
-    
-    
-    # As I dont trust they can export the csv file in the same format each time
-    # we will use the first line to identify field and text delimiters.
-    if (/^(.{0,1})FCID/) {
-      $text_delim = $1;
-      /FCID$text_delim(.)/;
-      $field_delim = $1;
-    }      
-    else {
-      my @F = split($field_delim, $_);
-      my (undef, $lane, $sample_id, undef, $index, undef) = @F;
-
-      $index = "" if (!$index);
-
-      $index ||= "";
-
-      $lane      =~ s/^$text_delim(.*)$text_delim\z/$1/;
-      $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
-      $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
-      
-      if ( $index !~ /^[ACGT]]\z/i) {
-	  
-      }
-
-
-
-      fail( "Index should be a base sequence, not '$index'\n", "MALFORMED_SAMPLESHEET")  if ( $index && $index !~ /^[ACGT]+\z/i);
-
-      if ( $index ) {
-	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
-	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});
-
-	$res{$lane}{$index} = $sample_id;
-	$indexed_run++;
-      }
-      else {
-	fail( "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n", "MALFORMED_SAMPLESHEET") 
-	    if ($res{$lane}  && !$opts{$lane} && !$opts{'a'});
-
-	$res{$lane} = $sample_id;
-      }
-    }
-  }
-
-
-  return %res;
+  return %$res;
 }
 
 
@@ -450,13 +412,15 @@ sub readin_sample_sheet {
 sub validate_lane_names {
   my (%sample_names) = @_;
 
+  if ($sample_sheet ) {
+    my $errors = EASIH::Illumina::Sample_sheet::validate( \%sample_names, $limited_lanes ) ;
+    fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
+  }
+
+
   my %basenames;
   for ( my $lane =1; $lane <=8;$lane++) {
     
-    fail( "no lane information for lane $lane \n", "MALFORMED_SAMPLESHEET")
-	if (! $sample_names{$lane} && ! $limited_lanes);
-    
-  
     if (ref ($sample_names{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$sample_names{$lane}}) {
 	$basenames{ $sample_names{$lane}{$bcode}} = -1;
@@ -467,6 +431,7 @@ sub validate_lane_names {
     }
   }
   
+
 
   if ( $outdir ) {
     if ( -e "$outdir" && ! -d "$outdir") {

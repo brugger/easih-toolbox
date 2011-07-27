@@ -39,8 +39,6 @@ use EASIH::Sample;
 use EASIH::Illumina::Sample_sheet;
 use EASIH::Barcodes;
 EASIH::Barcodes::barcode_set('illumina');
-EASIH::Barcodes::error_correct_barcodes(0);    
-
 
 my %opts;
 getopts('h', \%opts);

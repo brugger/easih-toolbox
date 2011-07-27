@@ -9,6 +9,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 
+use EASIH::Barcodes;
+
+BEGIN { 
+  EASIH::Barcodes::barcode_set('illumina');
+}
 
 
 
@@ -70,6 +75,12 @@ sub readin {
     }
   }
 
+  foreach my $lane ( keys %res ) {
+    if (keys %{$res{$lane}} == 1 && $res{$lane}{'default'}) {
+      $res{$lane} = $res{$lane}{'default'};
+    }
+  }
+
   return (undef, $errors) if ($errors ne "");
 
   return (\%res, undef);
@@ -82,20 +93,15 @@ sub readin {
 # 
 # Kim Brugger (27 Jul 2011)
 sub validate {
-  my ($hash) = @_;
+  my ($hash, $limited_lanes) = @_;
 #  print  Dumper( \$hash );
 
   my $errors = "";
   
-  foreach my $lane ( keys %$hash ) {
-    if (keys %{$$hash{$lane}} == 1 && $$hash{$lane}{'default'}) {
-      $$hash{$lane} = $$hash{$lane}{'default'};
-    }
-  }
 
   for ( my $lane =1; $lane <=8;$lane++) {
     
-    if (! $$hash{$lane}) {
+    if (! $$hash{$lane} && !$limited_lanes) {
       $errors .= "no lane information for lane $lane \n";
       next;
     }
@@ -118,7 +124,6 @@ sub validate {
 	  my $tag = $2;
 	  my $directions = $3;
 	  
-	  print "$barcode_set barcodes using the $tag tag for direction(s): $directions\n";
 	}
 	else {
 	  $errors .= "'$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n"; 

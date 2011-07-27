@@ -10,6 +10,9 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
+my $debug = 0;
+#my $debug = 1;
+
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -37,9 +40,8 @@ BEGIN {
 }
 
 use EASIH;
-use EASIH::Logistics;
+use EASIH::DONE;
 use EASIH::Sample;
-use EASIH::QC::db;
 
 
 my %opts;
@@ -73,8 +75,6 @@ sub usage {
   exit -1;
 }
 
-#my $debug = 0;
-my $debug = 1;
 
 my $indir       = $opts{'i'} || "./";
 # I need to find the run_folder name, for the data mongering things.
@@ -122,13 +122,10 @@ $sample_names{6} = $opts{a} if ($opts{a} && !$opts{'6'});
 $sample_names{7} = $opts{a} if ($opts{a} && !$opts{'7'});
 $sample_names{8} = $opts{a} if ($opts{a} && !$opts{'8'});
 
-
-
 %sample_names = validate_lane_names(%sample_names);
 my (%fhs, %fids);
 
-
-my $rid = EASIH::QC::db::add_run($runfolder, 'ILLUMINA') if($datamonger);
+my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);
 my %reads_pr_sample;
 
 for(my $lane = 1; $lane<=8; $lane++) {
@@ -144,18 +141,16 @@ for(my $lane = 1; $lane<=8; $lane++) {
   }
 }
 
-
-
 if ( $datamonger ) {
 
   # added the summed numbers to the file table, done as an update 
   foreach my $fid ( keys %reads_pr_sample ) {
-    EASIH::QC::db::update_file($fid, $reads_pr_sample{$fid});
+    EASIH::DONE::update_file($fid, $reads_pr_sample{$fid});
   }
 
-  EASIH::Logistics::add_run_folder_status($runfolder, 
-					  "ILLUMINA", 
-					  "BASECALLS2FQ_DONE");
+  EASIH::DONE::add_offloading_status($runfolder, 
+				     "ILLUMINA", 
+				     "BASECALLS2FQ_DONE");
 }
 
 # 
@@ -170,12 +165,12 @@ sub open_outfile {
 
   my $fh;
   open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
-  EASIH::Logistics::add_file_offload($runfolder, $sample_sheet, "$filename") if ($datamonger);
+
 
   if ( $datamonger ) {
     
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($filename);
-    my $fid = EASIH::QC::db::add_file($filename, $sample, $project, $runfolder, 'ILLUMINA');
+    my $fid = EASIH::DONE::add_file($filename, $sample, $project, $runfolder, 'ILLUMINA');
     $filename =~ s/.*\///;
     $filename =~ s/.fq.gz//;
     $filename =~ s/_\d+//;
@@ -227,8 +222,8 @@ sub analyse_lane {
 
 
   if($datamonger) {
-    EASIH::QC::db::add_illumina_lane_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 1, $sample_name, $in1, $out1 );
-    EASIH::QC::db::add_illumina_lane_stats( $rid, $fids{"$sample_name.2"}, $lane_nr, 2, $sample_name, $in2, $out2 ) if($in2);
+    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 1, $sample_name, $in1, $out1 );
+    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample_name.2"}, $lane_nr, 2, $sample_name, $in2, $out2 ) if($in2);
 
     $reads_pr_sample{$fids{"$sample_name.1"}} += $out1;
     $reads_pr_sample{$fids{"$sample_name.2"}} += $out2 if ( $out2 );
@@ -299,8 +294,8 @@ sub analyse_barcoded_lane {
   printf("lane $lane_nr.2\tMULTIPLEXED\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
 
   if($datamonger) {
-    EASIH::QC::db::add_illumina_lane_stats( $rid, undef, $lane_nr, 1, "MULTIPLEXED", $in1, $out1 );
-    EASIH::QC::db::add_illumina_lane_stats( $rid, undef, $lane_nr, 2, "MULTIPLEXED", $in2, $out2 ) if($in2);
+    EASIH::DONE::add_illumina_lane_stats( $rid, undef, $lane_nr, 1, "MULTIPLEXED", $in1, $out1 );
+    EASIH::DONE::add_illumina_lane_stats( $rid, undef, $lane_nr, 2, "MULTIPLEXED", $in2, $out2 ) if($in2);
   }
 
 #  print Dumper(\%multiplex_stats);
@@ -310,10 +305,10 @@ sub analyse_barcoded_lane {
     my $perc = sprintf("%.2f", $multiplex_stats{pass}{$k}*100/$multiplex_stats{total});
     printf("lane $lane_nr\t$sample_name\t$k\t$multiplex_stats{pass}{$k}\t$perc %%\n");
 
-    EASIH::QC::db::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc);
+    EASIH::DONE::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc) if ($datamonger);
 
-    $reads_pr_sample{$fids{"$sample_name.1"}} += $multiplex_stats{pass}{$k};
-    $reads_pr_sample{$fids{"$sample_name.2"}} += $multiplex_stats{pass}{$k};
+    $reads_pr_sample{$fids{"$sample_name.1"}} += $multiplex_stats{pass}{$k} if ( $datamonger);
+    $reads_pr_sample{$fids{"$sample_name.2"}} += $multiplex_stats{pass}{$k} if ( $datamonger);
 
   }
 
@@ -661,12 +656,12 @@ sub fail {
   
   if ( $datamonger ) {
     print STDERR "$message\n";
-    EASIH::Logistics::add_run_folder_status($runfolder, 
-					    "ILLUMINA", 
-					    "$status");
-    EASIH::Logistics::add_run_folder_status($runfolder, 
-					    "ILLUMINA", 
-					    "BASECALLS2FQ_FAILED");
+    EASIH::DONE::add_offloading_status($runfolder, 
+				       "ILLUMINA", 
+				       "$status");
+    EASIH::DONE::add_offloading_status($runfolder, 
+				       "ILLUMINA", 
+				       "BASECALLS2FQ_FAILED");
     exit -1;
   }
   else {

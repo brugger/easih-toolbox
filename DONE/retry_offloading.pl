@@ -41,19 +41,16 @@ BEGIN {
 
 
 use EASIH;
-use EASIH::Logistics;
+use EASIH::DONE;
 
 my $runfolder = shift || usage();
+my $rid = EASIH::DONE::fetch_run_id( $runfolder );
 
-my $last_status = EASIH::Logistics::fetch_latest_run_folder_status($runfolder);
+my $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
 
 die "no run with the name of '$runfolder'\n" if (! $last_status );
 
-my $platform = EASIH::Logistics::fetch_platform($runfolder);
-
-
-EASIH::Logistics::add_run_folder_status($runfolder, 
-					$platform, 
+EASIH::DONE::add_offloading_status($rid, 
 					"RETRY_OFFLOAD");
 
 

@@ -40,26 +40,24 @@ BEGIN {
 }
 
 use EASIH;
-use EASIH::Logistics;
+use EASIH::DONE;
 
 my $runfolder = shift || "";
 
 
-
 if ( !$runfolder ) {
-  my @data = EASIH::Logistics::fetch_offloaded_files();
+  my @data = EASIH::DONE::fetch_runs();
 #  print Dumper( \@data );
   foreach my $line ( @data ) {
-    print "$$line[0] --> $$line[1]\n";
+    print "$$line[1] --> $$line[2]\n";
   }
 }
 else {
-  my @data = EASIH::Logistics::fetch_files_from_rundir( $runfolder );
+  my @data = EASIH::DONE::fetch_files_from_run( $runfolder );
   foreach my $line ( @data ) {
-#    print "$runfolder --> $line\n";
   }
 
-  my $printstring = EASIH::Logistics::runfolder_log( $runfolder );
+  my $printstring = EASIH::DONE::run_log( $runfolder );
 
   print $printstring;
 }

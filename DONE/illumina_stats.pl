@@ -35,21 +35,21 @@ BEGIN {
 }
 
 use EASIH;
-use EASIH::QC::db;
+use EASIH::DONE;
 
 my $run_folder = shift;
 
 if ( ! $run_folder) {
-  my @runs = EASIH::QC::db::fetch_runs();
+  my @runs = EASIH::DONE::fetch_runs();
   foreach my $run ( @runs ) {
     print join("\t", $$run[1], $$run[2], "\n");
   }
 }
 else {
-  my $rid = EASIH::QC::db::fetch_run_id($run_folder);
+  my $rid = EASIH::DONE::fetch_run_id($run_folder);
 
-  my @lanes  = EASIH::QC::db::fetch_illumina_lane_stats_by_rid($rid);
-  my @mplexs = EASIH::QC::db::fetch_illumina_multiplex_stats_by_rid($rid);
+  my @lanes  = EASIH::DONE::fetch_illumina_lane_stats_by_rid($rid);
+  my @mplexs = EASIH::DONE::fetch_illumina_multiplex_stats_by_rid($rid);
 
   print join("\t", "lane", "Sample", "total", "PF", "Stats", "\n");
   print "="x50 ."\n";

@@ -128,7 +128,6 @@ if ($opts{a}) {
 
 if ($opts{A}) {
   my $counter = 1;
-
   $sample_names{1} = "$opts{A}_".$counter++ if ( !$opts{'1'} );
   $sample_names{2} = "$opts{A}_".$counter++ if ( !$opts{'2'} );
   $sample_names{3} = "$opts{A}_".$counter++ if ( !$opts{'3'} );
@@ -137,13 +136,11 @@ if ($opts{A}) {
   $sample_names{6} = "$opts{A}_".$counter++ if ( !$opts{'6'} );
   $sample_names{7} = "$opts{A}_".$counter++ if ( !$opts{'7'} );
   $sample_names{8} = "$opts{A}_".$counter++ if ( !$opts{'8'} );
-
 }
 
 
 %sample_names = validate_lane_names(%sample_names);
 
-die Dumper( %sample_names );
 my (%fhs, %fids);
 
 my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);

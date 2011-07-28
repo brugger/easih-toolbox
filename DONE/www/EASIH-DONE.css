@@ -1,0 +1,281 @@
+.hidden {
+    visibility: hidden;
+}
+.clearfloat {
+    clear: both;
+}
+body {
+    color: #357288;
+    font-family: Arial,Helvetica,sans-serif;
+    font-size: 1em;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+#topcontainer {
+    background-image: url("http://www.easih.ac.uk/images/topback.gif");
+    background-position: left top;
+    background-repeat: repeat-x;
+    height: 104px;
+    width: 100%;
+}
+#topcontainer h1, #topcontainer p {
+    margin: 0;
+    padding: 0;
+}
+#topbanner {
+    background-image: url("http://www.easih.ac.uk/images/easih.gif");
+    background-position: left top;
+    background-repeat: no-repeat;
+    display: block;
+    height: 104px;
+    margin: 0 auto;
+    text-decoration: none;
+    width: 909px;
+}
+#navcontainer {
+    background-color: #67C2E3;
+    height: 54px;
+    width: 100%;
+}
+#navarea {
+    height: 33px;
+    margin: 0 auto;
+    padding: 21px 0 0 43px;
+    width: 866px;
+}
+#navarea ul {
+    float: center;
+    margin: 0;
+    padding: 0 20px 0 0;
+    width:900px;
+    position: relative;
+}
+#navarea ul li {
+    display: inline;
+    float: left;
+    list-style-type: none;
+    width: 118px;
+}
+#navarea a {
+    display: inline;
+    float: left;
+    background-position: left top;
+    text-decoration: none;
+    color: white;
+    list-style-type: none;
+}
+#contentcontainer {
+    background-image: url("http://www.easih.ac.uk/images/contentback.jpg");
+    background-position: left top;
+    background-repeat: repeat-x;
+    width: 100%;
+}
+#homebanner {
+    background-image: url("http://www.easih.ac.uk/images/home-banner.jpg");
+    background-position: left top;
+    background-repeat: no-repeat;
+    height: 243px;
+    margin: 0 auto;
+    padding: 35px 440px 9px 24px;
+    width: 443px;
+}
+#homebanner h1 {
+    color: #25B5E9;
+    font-size: 2em;
+    line-height: 22px;
+    margin: 0;
+    padding: 0;
+}
+#homebanner h2 {
+    color: #2B98C0;
+    font-size: 1.8em;
+    margin: 0;
+    padding: 0;
+}
+#homebanner p {
+    color: #2B98C0;
+    font-size: 1.7em;
+    font-weight: normal;
+    margin: 0;
+    padding: 30px 0 0;
+}
+#contentarea {
+    background-color: white;
+    background-image: url("http://www.easih.ac.uk/images/contentareaback.jpg");
+    background-position: left bottom;
+    background-repeat: repeat-x;
+    color: #256278;
+    border: 3px solid #ABBABF;
+    margin: 0 auto;
+    padding: 0;
+    width: 901px;
+    min-height:300px;
+}
+#contentarea h1 {
+    text-align: center;
+    margin: 0;
+    padding: 10;
+}
+
+#contentarea table {
+    align: center;
+    color: #000000;
+    background-color: #DDDDDD;
+    margin: 0;
+    padding: 10;
+    margin-left: auto;
+    margin-right: auto;
+}
+#contentarea image {
+    text-align: center;
+    margin: 0;
+    padding: 10;
+}
+#contentarea h3 {
+    font-size: 1em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0;
+}
+#contentarea h4 {
+    font-size: 1em;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+#contentraea .indent {
+    margin: 0;
+    padding: 27px 21px 0;
+}
+#contentarea p {
+    font-size: 1em;
+    align: right;
+    margin-left:1cm;
+}
+#contentarea li {
+    font-size: 0.9em;
+}
+#contentarea a {
+    color: #25B5E9;
+    text-decoration: none;
+}
+#contentarea a:hover {
+    text-decoration: underline;
+}
+.leftcol {
+    float: left;
+    padding: 27px 0 25px 21px;
+    width: 530px;
+}
+.rightcol {
+    float: right;
+    padding: 27px 21px 25px;
+    width: 290px;
+}
+.rightcol img {
+    border: medium none;
+}
+.rightcol #rightquotes {
+    background-color: #FFFFFF;
+    margin: 0;
+    padding: 0;
+}
+.rightcol #rightquotes img {
+    padding: 0 0 5px;
+}
+.rightcol #rightquotes p {
+    margin: 6px 0;
+    padding: 0 0 0 12px;
+}
+.rightcol #rightquotes a {
+    color: #286278;
+    text-decoration: underline;
+}
+#technologiesused h4 {
+    color: #389FC4;
+    font-size: 1.1em;
+    margin: 15px 0 0;
+    padding: 0;
+}
+#technologiesused img {
+    margin: 0;
+    padding: 0 7px 0 0;
+}
+#homefooter {
+    background-color: white;
+    background-image: url("http://www.easih.ac.uk/images/logos.gif");
+    background-position: center center;
+    background-repeat: no-repeat;
+    height: 66px;
+    margin: 15px auto 0;
+    padding: 0 0 20px;
+    width: 901px;
+}
+#homefooter span {
+    font-size: 0.1em;
+}
+#footercontainer {
+    background-color: #67C2E3;
+    background-image: url("http://www.easih.ac.uk/images/footerback.jpg");
+    background-position: left top;
+    background-repeat: repeat-x;
+    vertical-align: bottom;
+    height: 30px;
+    margin: 15px 0 0;
+    width: 100%;
+}
+#footer {
+    color: white;
+    font-size: 0.9em;
+    height: 30px;
+    margin: 0 auto;
+    padding: 8px 3px 0 0;
+    width: 909px;
+}
+#footer a {
+    color: white;
+    text-decoration: none;
+}
+#footer a:hover {
+    text-decoration: underline;
+}
+#footer .rightcol {
+    padding: 0;
+    text-align: right;
+}
+#footer .leftcol {
+    padding: 0;
+}
+#contentbanner {
+    background-image: url("http://www.easih.ac.uk/images/bannerback.jpg");
+    background-position: left top;
+    background-repeat: repeat-x;
+    color: white;
+    height: 75px;
+}
+#contentbanner h1 {
+    font-size: 2em;
+    font-weight: normal;
+    margin: 0;
+    padding: 20px 0 0 22px;
+}
+.border {
+    border: 3px solid #AAD5E7 !important;
+}
+blockquote {
+    font-size: 0.75em;
+    margin: 0;
+    padding: 3px 0 20px;
+}
+.column1 {
+    float: left;
+    font-size: 0.8em;
+    padding: 2px 0;
+    width: 170px;
+}
+.column2 {
+    float: left;
+    padding: 2px 0;
+    width: 350px;
+}

@@ -36,6 +36,9 @@ BEGIN {
 use EASIH;
 use EASIH::Mail;
 use EASIH::Sample;
+use EASIH::Illumina::Sample_sheet;
+use EASIH::Barcodes;
+EASIH::Barcodes::barcode_set('illumina');
 
 my %opts;
 getopts('h', \%opts);
@@ -57,6 +60,7 @@ my @input_dirs = ("/seqs/illumina2/");
 
 foreach my $dir ( @input_dirs ) {
 
+#  $error_message = "";
   opendir(DIR, "$dir");
   my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
   closedir(DIR);
@@ -78,17 +82,12 @@ foreach my $dir ( @input_dirs ) {
     $sample_sheet = "$indir/Sample_Sheet.csv" if (!$sample_sheet && -e "$indir/Sample_Sheet.csv");
 
 
-#    print "Examining $dir$file $sample_sheet\n";
-
-
-    fail("No sample sheet present in $indir\n") if ( ! -e $sample_sheet );
-    
+    $error_message .= "No sample sheet present in $indir\n" if ( ! -e $sample_sheet );
     validate_sample_sheet( $sample_sheet );
+
   }
 
-
   SendEmail("sample sheet error in runfolder: $file", $error_message) if ($error_message);
-  
 }
 
 
@@ -100,97 +99,26 @@ foreach my $dir ( @input_dirs ) {
 sub validate_sample_sheet {
   my ( $sample_sheet) = @_;
 
-  my (%res );
-  
-  my $text_delim = "";
-  my $field_delim = "";
+  my ($res, $errors) = EASIH::Illumina::Sample_sheet::readin( $sample_sheet );
 
-  open(my $in, $sample_sheet) || fail("Could not open '$sample_sheet': $!\n", "BASECALL2FQ_PATH_ERROR");
-  my @lines;
-  while(<$in>) {
-    $_ =~ s/\r\n/\n/g; 
-    $_ =~ s/\n\r/\n/g; 
-    $_ =~ s/\r/\n/g; 
-    push @lines, split("\n",$_);
-  }
-  close $in;
-
-  while($_ = shift @lines ) {
-    chomp;
-    
-    
-    # As I dont trust they can export the csv file in the same format each time
-    # we will use the first line to identify field and text delimiters.
-    if (/^(.{0,1})FCID/) {
-      $text_delim = $1;
-      /FCID$text_delim(.)/;
-      $field_delim = $1;
-    }      
-    else {
-      my @F = split($field_delim, $_);
-      my (undef, $lane, $sample_id, undef, $index, undef) = @F;
-
-      $index ||= "";
-
-      $lane      =~ s/^$text_delim(.*)$text_delim\z/$1/;
-      $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
-      $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
-
-      fail( "Index should be a base sequence, not '$index' for lane $lane\n")  if ( $index && $index !~ /^[ACGT]\z/i);
-
-      if ( $index ) {
-	fail( "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n") 
-	    if ($res{$lane}{$index} && !$opts{$lane} && !$opts{'a'});
-
-	$res{$lane}{$index} = $sample_id;
-      }
-      else {
-	fail( "Lane $lane has already been assigned to '$res{$lane}' and cannot be assigned to '$sample_id' as well\n") 
-	    if ($res{$lane}  && !$opts{$lane} && !$opts{'a'});
-
-	$res{$lane} = $sample_id;
-      }
-    }
+  if ( $errors ) {
+    $error_message .= $errors;
+    return;
   }
 
-  my %basenames;
-  for ( my $lane =1; $lane <=8;$lane++) {
-    
-    fail( "no lane information for lane $lane \n")
-	if (! $res{$lane});
-    
-  
-    if (ref ($res{$lane}) eq "HASH") {
-      foreach my $bcode (keys %{$res{$lane}}) {
-	fail("$res{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}{$bcode}));
-      }
-    }
-    else {
-	fail("$res{$lane} for lane $lane is not an  EASIH sample name\n") if ( !EASIH::Sample::validate_name($res{$lane}));
-    }
-  }
+  $errors = EASIH::Illumina::Sample_sheet::validate( $res );
+  $error_message .= $errors   if ( $errors );
   
 }
 
 
 
-
-# 
-# 
-# 
-# Kim Brugger (30 Jun 2011)
-sub fail {
-  my ($message) = @_;
-
-  $error_message .= "$message";
-  
-}
 
 
 ###########################################################
 sub SendEmail {
     my($subject, $message) = @_;
- 
-    $subject = "[easih-dash] $subject" if ( $subject !~ /easih-dash/);
+
+    $subject = "[easih-done] $subject" if ( $subject !~ /easih-dash/);
     EASIH::Mail::send($to, $subject, $message);
 }

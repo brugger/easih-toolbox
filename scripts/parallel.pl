@@ -13,7 +13,7 @@ use POSIX  'tmpnam';
 use Getopt::Std;
 
 my %opts;
-getopts("c:", \%opts);
+getopts("c:n", \%opts);
 
 my $cpus = nr_of_cpus();
 my $MAX_NODES = $opts{c} || $cpus;
@@ -63,6 +63,11 @@ while ($_ = shift @commands ) {
 #    $command .= "> /dev/null 2>/dev/null";
       
 #    $total++;
+
+      if ( $opts{n}) {
+	print "$command\n";
+	next;
+      }
       
       my $cpid = create_child($command);
       $running_nodes++;

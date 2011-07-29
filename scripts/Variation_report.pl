@@ -16,9 +16,34 @@ use lib '/software/lib/e62/ensembl/modules/';
 use lib '/software/lib/e62/ensembl-compara/modules/';
 use lib '/software/lib/bioperl/';
 
-use lib '/home/kb468/easih-toolbox/modules/';
-use EASIH::SNPs;
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+}
 
+
+use EASIH;
+use EASIH::SNPs;
+use EASIH::Git;
 
 use strict;
 use Getopt::Long;
@@ -31,8 +56,9 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('s:v:pb:Tq:m:HfrhnILEgPpQ:B:l:o:O:i:', \%opts);
-perldoc() if ( $opts{h});
+getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
+#perldoc() if ( $opts{h});
+usage() if ( $opts{h});
 
 my $species     = $opts{S} || "human";
 my $buffer_size = 1;
@@ -42,36 +68,31 @@ my $user        = "easih_ro";
 #$host = "ensembldb.ensembl.org";
 #$user = "anonymous"; 
 
+EASIH::SNPs->New();
+
 if ( $opts{ Q }  ) {
 
   $opts{ Q } =~ s/\.bam//;
   $opts{ Q } =~ s/\.snps.vcf//;
+  $opts{ Q } =~ s/\.indels.vcf//;
 
-  $opts{s} = "$opts{Q}.snps.vcf";
-  $opts{i} = "$opts{Q}.indels.vcf";
+  $opts{s} = "$opts{Q}.snps.vcf"   if ( -e "$opts{Q}.snps.vcf");
+  $opts{i} = "$opts{Q}.indels.vcf" if ( -e "$opts{Q}.indels.vcf");
 #  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
-  $opts{o} = "$opts{Q}.var.csv";
-  $opts{O} = "$opts{Q}.var_full.csv";
-  $opts{g} = 1;
-#  $opts{p} = 1;
-#  $opts{P} = 1;
+  $opts{o} = "$opts{Q}.var_full.csv";
+  $opts{O} = "$opts{Q}.var.csv";
 }
   
+usage() if ( !$opts{s}  && !$opts{i});
 
 my $exit_count = 10;
 
 my $snp_vcf      = $opts{s};
 my $indel_vcf    = $opts{i};
 my $bam          = $opts{b};
-my $pfam         = $opts{p} || 1;
+my $basecount    = $opts{c} || 0;
 my $from_36      = $opts{T} || 0;
-my $min_mapq     = undef; #$opts{m} || undef;
-my $no_ensembl   = $opts{n} || 0;
-my $min_qual     = $opts{q} || undef;
 #my $at_ENSEMBL   = $opts{E} || 0;
-my $grantham     = $opts{g} || 0;
-my $pass_only    = 0;#$opts{P} || 0;
-my $hgmd         = $opts{m} || 0;
 
 my $baits        = $opts{B} || "";
 my $leeway       = $opts{l} || 100;
@@ -103,6 +124,31 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 		'INTERGENIC'             =>  2,
 		'NO_CONSEQUENCE'         =>  0, 
     );
+
+
+###svvd###
+
+my $DACstring = DepthAndCoverage($bam,$baits);
+
+my($ANstring,@SMstrings) = BamHead_ANSM($bam);
+
+
+$ANstring = "hg19" if ( $ANstring eq "human_g1k_v37");
+die "\n\n ALERT!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
+
+$ANstring = "# Aligned2Reference: $ANstring";
+
+my $SMstring = "# SampleName: ";
+
+foreach my $string(@SMstrings)
+{
+    $SMstring .= "$string,";
+}
+
+$SMstring =~ s/,$//;
+
+
+############################
 
 open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
 open( my $full_out_fh, "> $full_out") || die "Could not write to '$full_out': $!\n" if ( $full_out );
@@ -146,6 +192,8 @@ if ( $from_36 ) {
 
 }
 
+my $version = EASIH::Git::version();
+
 
 my %SNPs = ();
 
@@ -161,11 +209,13 @@ my %grch37_remapping = ();
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
 my $counter = 10;
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
+
   
   my %res;
   my @vfs;
 
   foreach my $pos ( sort { $a <=> $b} keys %{$SNPs{$chr}} ) {
+   
         
     my $position = "$chr:$pos";
     
@@ -175,21 +225,20 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
     $res{$position}{depth}     = $SNPs{$chr}{$pos}{depth};    
     $res{$position}{filter}    = $SNPs{$chr}{$pos}{filter};
     $res{$position}{genotype}  = $SNPs{$chr}{$pos}{genotype};
-    $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base}) if ( $bam );
+    $res{$position}{base_dist} = base_dist( $chr, $pos, $res{$position}{ref_base}, $res{$position}{alt_base}) if ( $bam && $basecount );
     
-    if ( ! $no_ensembl ) {
-      
-      my $Echr = $chr;
-      $Echr =~ s/chr//;
-      my $Epos = $pos;
-      ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
-      
+    my $Echr = $chr;
+    $Echr =~ s/chr//;
+    my $Epos = $pos;
+    ($Echr, $Epos) = remap($Echr, $pos, $pos) if ( $from_36 );
+    
 #	$res{$position}{grcH37} = "$Echr:$Epos";
-      
-      next if ( ! $Echr );
-      $grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
-      my $slice = fetch_slice($Echr);
-      my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
+    
+    next if ( ! $Echr );
+    $grch37_remapping{"$chr:$pos"} = "$Echr:$Epos";
+    my $slice = fetch_slice($Echr);
+    next if ( ! $slice);
+    my $allele_string = "$res{$position}{ref_base}/$res{$position}{alt_base}";
       
       # create a new VariationFeature object
       my $new_vf = Bio::EnsEMBL::Variation::VariationFeature->new(
@@ -215,11 +264,11 @@ foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 #	  exit if ($exit_count-- < 0);
       }
     }
-  }
+  
   
   
   if ( @vfs || keys %res ) {
-    my $effects = variation_effects(\@vfs) if ( ! $no_ensembl);
+    my $effects = variation_effects(\@vfs);
     print_results( \%res, $effects);
     @vfs = ();
     %res = ();
@@ -265,8 +314,35 @@ sub print_results {
     push @header, [ "#EASIH Variation Report v1.20"];
     push @header, [ "#commandline: $0 @argv"];
     push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
-
+    push @header, [ "#version: $version"];
+    
     push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
+
+    push @header, ["$DACstring"];
+    push @header, ["$SMstring"];
+    push @header, ["$ANstring"];
+
+    push @header, [ q{##INFO=<Field=Position,ExampleValue=X:2715425,Description="Chromosome and coordinate">}];
+    push @header, [ q{##INFO=<Field=Change,ExampleValue=A>G,Description="Base change">}];
+    push @header, [ q{##INFO=<Field=filter,ExampleValue=PASS,Description="SNPs can be filtered based on certain criteria such as sequence depth">}];
+    push @header, [ q{##INFO=<Field=score,ExampleValue=1548.43,Description="SNP confidence score determined by GATK">}];
+    push @header, [ q{##INFO=<Field=depth,ExampleValue=11,Description="Number of reads covering base">}];
+    push @header, [ q{##INFO=<Field=type,ExampleValue=HOMO,Description="Nature of SNP">}];
+    push @header, [ q{##INFO=<Field=gene,ExampleValue=XG,Description="Gene Name or Ensembl gene ID, if there is no gene name ">}];
+    push @header, [ q{##INFO=<Field=transcript,ExampleValue=NM_175569.2,Description="Refseq id or Ensembl transcript ID if no efseq id">}];
+    push @header, [ q{##INFO=<Field=region,ExampleValue=NON_SYNONYMOUS_CODING,Description="Indicates whether the variation is in gene, etc">}];
+    push @header, [ q{##INFO=<Field=codon pos,ExampleValue=c.546,Description="Which codon the variation occurs in">}];
+    push @header, [ q{##INFO=<Field=AA change,ExampleValue=p.Ser157 Phe,Description="Amino acid change: p.FromPosition To">}];
+    push @header, [ q{##INFO=<Field=Grantham score,ExampleValue=155,Description="Measure of difference between reference and mutation amino acid">}];
+    push @header, [ q{##INFO=<Field=external ref,ExampleValue=rs111382948,Description="External Database ref e.g., dbSNP">}];
+    push @header, [ q{##INFO=<Field=dbsnp flags,ExampleValue=VLD;KGPilot1VC=SNP,Description="dbSNP details">}];
+    push @header, [ q{##INFO=<Field=HGMD,ExampleValue=Y,Description="Is the SNP present in the HGMD database">"}];
+    push @header, [ q{##INFO=<Field=pfam,ExampleValue=Sulfatase,Description="PFAM domain">}];
+    push @header, [ q{##INFO=<Field=PolyPhen,ExampleValue=tolerated/0.59,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=SIFT,ExampleValue=benign/0,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=Condel,ExampleValue=neutral/0.391,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=GERP,ExampleValue=800.7,Description="The genomic evolutionary rate for the nucleotide in mammals">}];
+
 
     push @res, @header;
     push @filtered_res, @header;
@@ -275,10 +351,10 @@ sub print_results {
     my @annotations = ('Position', 'Change', 'Filter', 'Score', 'Depth', 'Genotype');
     push @annotations, ('', '', '', '', '') if ( $bam );
       
-    push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change') if ( ! $no_ensembl);
+    push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change');
     push @annotations, ('Grantham score');
-    push @annotations, ('dbsnp') if ( ! $no_ensembl);
-    push @annotations, ('dbsnp flags') if ( $use_local_dbsnp);
+    push @annotations, ('dbsnp');
+    push @annotations, ('dbsnp flags');
     push @annotations, ('HGMD');
 
     push @annotations, 'pfam';
@@ -365,6 +441,7 @@ sub sort_effects {
 
   foreach my $effect (@$in_effects ) {
 
+    $$effect{ effect } ||= "INTERGENIC";
 
     if ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
 	 $$effect{ transcript_id} !~ /^ENST\d+/ ) {
@@ -380,9 +457,9 @@ sub sort_effects {
 
   }    
 
-  @ensembl     = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @ensembl;
-  @part_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @part_ensembl;
-  @non_ensembl = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} }} @non_ensembl;
+  @ensembl      = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @ensembl;
+  @part_ensembl = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @part_ensembl;
+  @non_ensembl  = sort { $effects{ $$b{effect} } || 0 <=> $effects{ $$a{effect} } || 0} @non_ensembl;
 
   
   return [@non_ensembl, @part_ensembl, @ensembl];
@@ -402,7 +479,7 @@ sub variation_effects {
     my $name = $vf->variation_name();
 
     my $existing_vf = "";
-    my ($dbsnp_flags, $dbsnp_freq, $HGMD) = ('','', '');
+    my ($dbsnp_flags, $HGMD) = ('','', '');
     if ( $use_local_dbsnp ) {
       my ($chr, $pos);
       if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
@@ -413,17 +490,20 @@ sub variation_effects {
  	($chr, $pos) = split(":", $vf->variation_name());
       }
       
-      my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
+      my $result = EASIH::SNPs::fetch_snp($chr, $pos);
       
       if ( $result->{rs} ) {
  	$existing_vf = $result->{rs};
  	$dbsnp_flags = $result->{flags} || "";
- 	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
+	$dbsnp_flags .= ";VC=$result->{class}" if ($result->{class});
  	$HGMD        = $result->{hgmd};
       }
     }
 
-
+    if (! $vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand) ) {
+      print STDERR "should this be hg18? cannot get slice: ". $vf->start .":". $vf->end ."-". $vf->strand . "\n";
+      next;
+    }
     my $cons = $ce_adaptor->fetch_all_by_MethodLinkSpeciesSet_Slice($ce_mlss,$vf->slice->sub_Slice($vf->start, $vf->end, $vf->strand));
 
     # get consequences
@@ -459,7 +539,6 @@ sub variation_effects {
 
 
  	$gene_res{ rs_number }   = $existing_vf || "";
- 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
  	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
 
 	if(scalar @entries) {
@@ -497,10 +576,10 @@ sub variation_effects {
  	    while (my $prot_feat = shift @{ $prot_feats }) {
  	      my $logic_name = $prot_feat->analysis()->logic_name();
 	      
- 	      next if ( $logic_name ne 'Pfam');
+ 	      next if ( $logic_name ne 'pfam');
 	      
- 	      if ($tva->translation_start >= $prot_feat->start() and
- 		  $tva->translation_end <= $prot_feat->end() ) {
+ 	      if ($tv->translation_start >= $prot_feat->start() and
+ 		  $tv->translation_end <= $prot_feat->end() ) {
 		
  		$gene_res{ pfam }     = $prot_feat->idesc();
  		$gene_res{ interpro } = $prot_feat->interpro_ac();
@@ -823,6 +902,8 @@ sub variation_effects_old {
 	    
 	    while (my $prot_feat = shift @{ $prot_feats }) {
 	      my $logic_name = $prot_feat->analysis()->logic_name();
+
+	      print STDERR "LN :: $logic_name\n";
 	      
 	      next if ( $logic_name ne 'Pfam');
 	      
@@ -977,7 +1058,6 @@ sub base_dist {
   while(<$st_pipe>) {
     chomp;
     my ($read, $flags, $chr, $pos, $mapq, $cigar, $mate, $mate_pos, $insert_size, $sequence, $quality, $opts) = split("\t");
-    next if ( defined $min_mapq && $min_mapq > $mapq);
 
     ($sequence, $quality) = patch_alignment($sequence, $quality, $cigar);
 
@@ -1322,13 +1402,12 @@ sub readin_vcf {
       $SNPs{$chr}{$pos}{genotype} = "HET" if ($info_hash{AF} == 0.50);
       $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ($info_hash{AF} != 1 && $info_hash{AF} != 0.5);
     }
-    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ ) || 
-	    ($info_hash{IAC} && $info_hash{IAC} =~ /^(\d+),\d+\z/ )) {
+    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
       my $indels = $1;
       
-      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $depth*100/$indels > 75 );
-      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $depth*100/$indels <= 75 && $depth*100/$indels > 35 );
-      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $depth*100/$indels <= 35 );
+      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
+      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
+      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
     }
     else {
       $SNPs{$chr}{$pos}{genotype} = "unknown $info_hash{IAC}";
@@ -1390,6 +1469,8 @@ sub readin_bed {
   open (STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
   while(<STDIN>) {
 
+    next if ((/^chromosome/) && (! $leeway)); 
+    
     chomp;
     my ($chr, $start, $end) = split("\t", $_);
 
@@ -1400,8 +1481,11 @@ sub readin_bed {
 
     $chr =~ s/chr//;
     
-    $start -= $leeway;
-    $end   += $leeway;
+    if ($leeway)
+    {
+	$start -= $leeway;
+	$end   += $leeway;
+    }
     
     push @{$res{$chr}}, [$start, $end] if ( $chr);
   }
@@ -1676,6 +1760,291 @@ sub grantham_score {
 
 
 
+# 
+# 
+# 
+# Kim Brugger (21 Jul 2010)
+sub names_n_lengths {
+  my ( $bam_file ) = @_;
+  
+  my $samtools  = find_program('samtools');
+  my @sequences = ();
+  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+
+    my ($name, $length);
+    foreach my $field ( split("\t") ) {
+      $name   = $1 if ( $field =~ /SN:(.*)/);
+      $length = $1 if ( $field =~ /LN:(\d+)/);
+    }
+
+    push @sequences, [$name, $length] if ( $name && $length );
+  }
+
+    
+  return \@sequences;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jul 2010)
+sub find_program {
+  my ($program) = @_;
+
+
+  my @paths = ("/home/easih/bin/",
+	       "/home/kb468/bin/",
+	       "/home/kb468/easih-toolbox/scripts/",
+	       "/usr/local/bin");
+  
+  foreach my $path ( @paths ) {
+    
+    return "$path/$program" if ( -e "$path/$program" );
+  }
+
+  my $location = `which $program`;
+  chomp( $location);
+  
+  return $location if ( $location );
+
+  return undef;
+}
+
+
+sub DepthAndCoverage
+{
+    my($bamfile,$baitfile) = @_;
+
+    my $regions_ref  = readin_bed( $baitfile, 0 ) if ( $baitfile ); 
+    my $samtools  = find_program('samtools');
+    my $bam2depth = find_program('bam2depth');
+
+    my $seqs = names_n_lengths( $bamfile );
+
+    my ($START, $END) = (0, 1);
+    
+    my $total_reads;
+    my %base_coverage;
+    my %exon_coverage;
+    
+    my $escape = 1;
+    
+    my $patched_start = 0;
+    
+    foreach my $chr ( sort keys %$regions_ref ) {
+	
+#  $chr ="chr2";
+	
+	my (undef, $base_pos, $depth);
+	my @regions =  @{$$regions_ref{$chr}};
+	my $region  = shift @regions;
+	my ($start, $end) = @{$region};
+	
+#  print "Doing $chr ... expecting ".@regions." regions\n";
+	
+	$chr = "chr$chr" if ($baits =~ /hg18/);
+
+	open (my $pipe, "$bam2depth $bamfile $chr | " ) || die "Could not open pipe: $!\n";
+	my $covered = 0;
+	while(<$pipe>) {
+	    chomp;
+	    (undef, $base_pos, $depth) = split("\t", $_);
+	    
+	    next if ( $base_pos < $start);
+	    
+	    if ( $base_pos >= $start && 
+		 $base_pos <= $end ) {
+		
+		$base_coverage{ $depth }++;
+		$covered++;
+	    }
+	    else {
+		
+		if ( $start != $end ) {
+		    
+		    $exon_coverage{ int( $covered/($end-$start + 1)*100)}++;
+		    $base_coverage{ 0 } += $end - $start + 1 - $covered;
+		}
+		
+		($start, $end) = (undef, undef);
+		$region  = shift @regions;
+		last if ( ! $region );
+		($start, $end) = @{$region};
+		
+		$covered = 0;
+	    }      
+	}
+	close( $pipe );
+	
+	if (  $start ) {
+	    if ( $start != $end ) {
+		$exon_coverage{ int( $covered/($end-$start + 1)*100)}++;
+		$base_coverage{ 0 } += $end - $start + 1 - $covered;
+	    }
+	}
+	
+	if (@regions) {
+	    foreach $region (@regions) {
+		($start, $end) = @{$region};
+		$exon_coverage{ 0 }++;
+		$base_coverage{ 0 } += $end - $start + 1;
+	    }
+	}
+	
+#  last;
+    }
+    
+    my $DACstring;
+    
+    $DACstring = Depth($bamfile,%base_coverage);
+    
+    $DACstring .= Coverage(%exon_coverage);
+    
+      
+    return($DACstring);
+}
+
+
+sub Depth
+{
+    my($bamfile,%base_coverage) = @_;
+    my %binned = ( 0 => 0,
+		   1 => 0,
+		   10 => 0,
+		   20 => 0,
+		   30 => 0,
+		   40 => 0);
+    my $base_total = 0;
+    foreach my $depth ( keys %base_coverage ) {  
+	
+	$base_total += $base_coverage{ $depth };
+	if ( $depth == 0 || $depth == 1 ) {
+	    $binned{ $depth } = $base_coverage{ $depth };
+	    next;
+	}
+	elsif ( $depth < 10 ) {
+	    $binned{ 10 } +=  $base_coverage{ $depth };
+	}
+	elsif ( $depth < 20 ) {
+	    $binned{ 20 } +=  $base_coverage{ $depth };
+	}
+	elsif ( $depth < 30 ) {
+	    $binned{ 30 } +=  $base_coverage{ $depth };
+	}
+	else {
+	    $binned{ 40 } +=  $base_coverage{ $depth };
+	}
+    }
+
+    my $Dstring;
+
+    #$Dstring .= "# $bamfile\n";
+    $Dstring .= "# base depth distribution:\n"; 
+    $Dstring .=  sprintf("#     0x depth: $binned{  0 } (%.2f %%) \n", $binned{  0 }/$base_total*100);
+    $Dstring .=  sprintf("#     1x depth: $binned{  1 } (%.2f %%) \n", $binned{  1 }/$base_total*100);
+    $Dstring .= sprintf("#  2-10x depth: $binned{ 10 } (%.2f %%) \n", $binned{ 10 }/$base_total*100);
+    $Dstring .= sprintf("# 10-20x depth: $binned{ 20 } (%.2f %%) \n", $binned{ 20 }/$base_total*100);
+    $Dstring .= sprintf("# 20-30x depth: $binned{ 30 } (%.2f %%) \n", $binned{ 30 }/$base_total*100);
+    $Dstring .= sprintf("#   >30x depth: $binned{ 40 } (%.2f %%) \n", $binned{ 40 }/$base_total*100);
+    
+    
+    return($Dstring);
+}
+
+
+sub Coverage
+{
+    my %exon_coverage = @_;
+
+    my %exons = (  0 => 0,
+		   70 => 0,
+		   80 => 0,
+		   90 => 0,
+		   100 => 0,
+		   101 => 0);
+    
+    my $exon_total = 0;
+    foreach my $coverage ( keys %exon_coverage ) {  
+	
+	$exon_total += $exon_coverage{ $coverage };
+	if ( $coverage == 0 ) {
+	    $exons{ $coverage } += $exon_coverage{ $coverage };
+	}
+	elsif ( $coverage < 70 ) {
+	    $exons{ 70 } += $exon_coverage{ $coverage };
+	}
+	elsif ( $coverage < 80 ) {
+	    $exons{ 80 } += $exon_coverage{ $coverage };
+	}
+	elsif ( $coverage < 90 ) {
+	    $exons{ 90 } += $exon_coverage{ $coverage };
+	}
+	elsif ( $coverage < 100 ) {
+	    $exons{ 100 } += $exon_coverage{ $coverage };
+	}
+	elsif ( $coverage >= 100 ) {
+	    $exons{ 101 } += $exon_coverage{ $coverage };
+	}
+    }
+
+    my $Cstring;
+
+    $Cstring .= "# bait regions coverage:\n"; 
+    $Cstring .= sprintf("#      0 %% of bait covered: $exons{  0 } (%.2f %%) \n", $exons{     0 }/$exon_total*100);
+    $Cstring .= sprintf("#    <70 %% of bait covered: $exons{  70 } (%.2f %%) \n", $exons{   70 }/$exon_total*100);
+    $Cstring .= sprintf("#  70-80 %% of bait covered: $exons{  80 } (%.2f %%) \n", $exons{   80 }/$exon_total*100);
+    $Cstring .= sprintf("#  80-90 %% of bait covered: $exons{  90 } (%.2f %%) \n", $exons{   90 }/$exon_total*100);
+    $Cstring .= sprintf("#  90-99 %% of bait covered: $exons{  100 } (%.2f %%) \n", $exons{  100 }/$exon_total*100);
+    $Cstring .= sprintf("#    100 %% of bait covered: $exons{  101 } (%.2f %%)", $exons{  101 }/$exon_total*100);
+
+    return($Cstring);
+}
+
+
+sub BamHead_ANSM 
+{
+  my ($bam_file) = @_;
+  
+  my $samtools  = find_program('samtools');
+ 
+  my($ANstring,$SMstring) = ("Undef","Undef");  
+  my(@SMstrings);
+
+  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
+  
+  my $count = 0;
+  
+  while(<$spipe>) 
+  {
+      if(/\@RG/)
+      {
+	  if(/SM:(.*?)\s/)
+	  {
+	      $SMstring = "$1";
+	  }
+	  
+	  #$SMstring = "# SampleName: $SMstring";
+	  push @SMstrings, $SMstring;
+      }
+            
+      next, if($count);
+      
+      if(/\@SQ/)
+      {
+	  $ANstring = "$1", if(/AN:(.*?)\s/);
+	  $count++;
+      }
+  }
+  
+  #$ANstring = "# Aligned2Reference: $ANstring";
+  
+  return($ANstring,@SMstrings);
+}
+
 
 # 
 # 
@@ -1685,92 +2054,17 @@ sub usage {
   
   $0 =~ s/.*\///;
 
-  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -p<fam domains> -m<HGMD lookup> -g<rantham scpre> -p<hylop-phast scores> -B[ait file] -l[eeway, default 10 bp]\n";
+  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
 
-  print "\nor extrapolate the standard <bam, vcf, output file> with the -Q flag, this flag also sets phylop-phast, pfam and grantham flags\n";
-  print "EXAMPLE: $0 -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
+  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+  print "EXAMPLE: $0 -Q [base name] -T<ransform>\n";
   print "\n";
 
   
-  print "USAGE: $0 -b[am file] -v[cf file] -T<ranform, use if mapped against hg18> -H<tml out put> -I<GV links> -p<fam domains> -r<egulation information>\n";
-  print "USAGE: -E[nsembl.ensembl.org databases, SLOOOOOOWWWWWERRRRRR ]\n";  
-  print "USAGE: -g[rantham score]\n";  
   print "USAGE: -o[output file]\n";  
-#  print "USAGE: -m[in mapping qual. for base dist. report]\n";  
-  print "USAGE: -q[uality cutoff for SNPs to report]\n";
-  print "USAGE: -f[ multi line report]\n";
+
   exit;
 }
 
 
 
-
-# 
-# 
-# 
-# Kim Brugger (09 Jul 2010)
-sub perldoc {
-
-  system "perldoc $0";
-  exit;
-}
-
-
-=pod
-
-=head1 SYNOPSIS
-
-SNP_report turns a vcf file into a nice report, annotated with Ensembl information like effect, regulation etc
-
-=head1 OPTIONS
-
-
-=over
-
-=item B<-b F<bam file>>: 
-
-The bamfile that the SNP calling was based on. This is used for doing the base distribution information for each snp.
-
-=item B<-f>: 
-
-Prints out a multi-line report, otherwise it is done on a oneline basis (good for excel)
-
-=item B<-H>: 
-
-Prints a HTML report, default is a tab-separated one.
-
-=item B<-I>: 
-
-Adds links to IGV to ease navigation.
-
-=item B<-m>: 
-
-Minumum mapping quality to use for the base distribution report
-
-
-=item B<-p>: 
-
-Extracts pfam domains information from ensembl
-
-=item B<-q>: 
-
-Minumum SNP quality to report
-
-=item B<-v F<vcf file>>: 
-
-The infile that is to be converted into a nice report.
-
-=item B<-T>: 
-
-The mapping was done on NCBI36/hg18 and the coordinates should be transformed to GRCh37/hg19.
-
-=back
-
-=head1 NOTES
-
-=over
-
-=item B<-s>: will change the species, but changing that will probably break about just everything.
-
-
-=cut

@@ -1,0 +1,17 @@
+HapMap Collections
+MKK    Maasai in Kinyawa, Kenya
+YRI    Yoruba in Ibadan, Nigeria
+CHB    Han Chinese in Beijing, China
+JPT    Japanese in Tokyo, Japan
+LWK    Luhya in Webuye, Kenya
+CHD    Chinese in Metropolitan Denver, CO, USA
+GIH    Gujarati Indians in Houston, TX, USA
+TSI    Toscani in Italia
+MXL    Mexican Ancestry in Los Angeles, CA, USA
+
+1000 Genomes Collections
+GBR  British from England and Scotland, UK
+CLM  Colombian in Medellín, Colombia
+FIN  Finnish in Finland
+CHS  Han Chinese South, China
+PUR  Puerto Rican in Puerto Rico

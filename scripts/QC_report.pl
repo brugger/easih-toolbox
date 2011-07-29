@@ -13,7 +13,7 @@ use Getopt::Std;
 use strict;
 use Getopt::Long;
 
-use lib '/home/kb468/easih-toolbox/modules/';
+use lib '/software/installed/easih-toolbox/modules/';
 use EASIH::QC;
 use EASIH::Misc;
 

@@ -10,9 +10,6 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/home/kb468/easih-toolbox/modules/';
-use EASIH;
-
 my %opts;
 getopts('hiIvf:sro:', \%opts); 
 

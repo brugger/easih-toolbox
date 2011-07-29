@@ -16,7 +16,32 @@ use lib '/software/lib/e62/ensembl/modules/';
 use lib '/software/lib/e62/ensembl-compara/modules/';
 use lib '/software/lib/bioperl/';
 
-use lib '/home/kb468/easih-toolbox/modules/';
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+}
+
+
+use EASIH;
 use EASIH::SNPs;
 use EASIH::Git;
 
@@ -58,6 +83,7 @@ if ( $opts{ Q }  ) {
   $opts{O} = "$opts{Q}.var.csv";
 }
   
+usage() if ( !$opts{s}  && !$opts{i});
 
 my $exit_count = 10;
 
@@ -296,26 +322,26 @@ sub print_results {
     push @header, ["$SMstring"];
     push @header, ["$ANstring"];
 
-    push @header, [ "##INFO=<Field=Position,ExampleValue=X:2715425,Description="Chromosome and coordinate">"];
-    push @header, [ "##INFO=<Field=Change,ExampleValue=A>G,Description="Base change">"];
-    push @header, [ "##INFO=<Field=filter,ExampleValue=PASS,Description="SNPs can be filtered based on certain criteria such as sequence depth">"];
-    push @header, [ "##INFO=<Field=score,ExampleValue=1548.43,Description="SNP confidence score determined by GATK">"];
-    push @header, [ "##INFO=<Field=depth,ExampleValue=11,Description="Number of reads covering base">"];
-    push @header, [ "##INFO=<Field=type,ExampleValue=HOMO,Description="Nature of SNP">"];
-    push @header, [ "##INFO=<Field=gene,ExampleValue=XG,Description="Gene Name or Ensembl gene ID, if there is no gene name ">"];
-    push @header, [ "##INFO=<Field=transcript,ExampleValue=NM_175569.2,Description="Refseq id or Ensembl transcript ID if no efseq id">"];
-    push @header, [ "##INFO=<Field=region,ExampleValue=NON_SYNONYMOUS_CODING,Description="Indicates whether the variation is in gene, etc">"];
-    push @header, [ "##INFO=<Field=codon pos,ExampleValue=c.546,Description="Which codon the variation occurs in">"];
-    push @header, [ "##INFO=<Field=AA change,ExampleValue=p.Ser157 Phe,Description="Amino acid change: p.FromPosition To">"];
-    push @header, [ "##INFO=<Field=Grantham score,ExampleValue=155,Description="Measure of difference between reference and mutation amino acid">"];
-    push @header, [ "##INFO=<Field=external ref,ExampleValue=rs111382948,Description="External Database ref e.g., dbSNP">"];
-    push @header, [ "##INFO=<Field=dbsnp flags,ExampleValue=VLD;KGPilot1VC=SNP,Description="dbSNP details">"];
-    push @header, [ "##INFO=<Field=HGMD,ExampleValue=Y,Description="Is the SNP present in the HGMD database">"];
-    push @header, [ "##INFO=<Field=pfam,ExampleValue=Sulfatase,Description="PFAM domain">"];
-    push @header, [ "##INFO=<Field=PolyPhen,ExampleValue=tolerated/0.59,Description="Estimates if the SNP is pathogenic">"];
-    push @header, [ "##INFO=<Field=SIFT,ExampleValue=benign/0,Description="Estimates if the SNP is pathogenic">"];
-    push @header, [ "##INFO=<Field=Condel,ExampleValue=neutral/0.391,Description="Estimates if the SNP is pathogenic">"];
-    push @header, [ "##INFO=<Field=GERP,ExampleValue=800.7,Description="The genomic evolutionary rate for the nucleotide in mammals">"];
+    push @header, [ q{##INFO=<Field=Position,ExampleValue=X:2715425,Description="Chromosome and coordinate">}];
+    push @header, [ q{##INFO=<Field=Change,ExampleValue=A>G,Description="Base change">}];
+    push @header, [ q{##INFO=<Field=filter,ExampleValue=PASS,Description="SNPs can be filtered based on certain criteria such as sequence depth">}];
+    push @header, [ q{##INFO=<Field=score,ExampleValue=1548.43,Description="SNP confidence score determined by GATK">}];
+    push @header, [ q{##INFO=<Field=depth,ExampleValue=11,Description="Number of reads covering base">}];
+    push @header, [ q{##INFO=<Field=type,ExampleValue=HOMO,Description="Nature of SNP">}];
+    push @header, [ q{##INFO=<Field=gene,ExampleValue=XG,Description="Gene Name or Ensembl gene ID, if there is no gene name ">}];
+    push @header, [ q{##INFO=<Field=transcript,ExampleValue=NM_175569.2,Description="Refseq id or Ensembl transcript ID if no efseq id">}];
+    push @header, [ q{##INFO=<Field=region,ExampleValue=NON_SYNONYMOUS_CODING,Description="Indicates whether the variation is in gene, etc">}];
+    push @header, [ q{##INFO=<Field=codon pos,ExampleValue=c.546,Description="Which codon the variation occurs in">}];
+    push @header, [ q{##INFO=<Field=AA change,ExampleValue=p.Ser157 Phe,Description="Amino acid change: p.FromPosition To">}];
+    push @header, [ q{##INFO=<Field=Grantham score,ExampleValue=155,Description="Measure of difference between reference and mutation amino acid">}];
+    push @header, [ q{##INFO=<Field=external ref,ExampleValue=rs111382948,Description="External Database ref e.g., dbSNP">}];
+    push @header, [ q{##INFO=<Field=dbsnp flags,ExampleValue=VLD;KGPilot1VC=SNP,Description="dbSNP details">}];
+    push @header, [ q{##INFO=<Field=HGMD,ExampleValue=Y,Description="Is the SNP present in the HGMD database">"}];
+    push @header, [ q{##INFO=<Field=pfam,ExampleValue=Sulfatase,Description="PFAM domain">}];
+    push @header, [ q{##INFO=<Field=PolyPhen,ExampleValue=tolerated/0.59,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=SIFT,ExampleValue=benign/0,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=Condel,ExampleValue=neutral/0.391,Description="Estimates if the SNP is pathogenic">}];
+    push @header, [ q{##INFO=<Field=GERP,ExampleValue=800.7,Description="The genomic evolutionary rate for the nucleotide in mammals">}];
 
 
     push @res, @header;

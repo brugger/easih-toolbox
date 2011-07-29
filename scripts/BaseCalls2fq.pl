@@ -323,7 +323,11 @@ sub analyse_barcoded_lane {
     my $perc = sprintf("%.2f", $multiplex_stats{pass}{$k}*100/$multiplex_stats{total});
     printf("lane $lane_nr\t$sample_name\t$k\t$multiplex_stats{pass}{$k}\t$perc %%\n");
 
-    EASIH::DONE::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc) if ($datamonger);
+    if ($datamonger) {
+      EASIH::DONE::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 1, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc);
+      EASIH::DONE::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 2, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc) if ($in2);
+    }
+
 
     $reads_pr_sample{$fids{"$sample_name.1"}} += $multiplex_stats{pass}{$k} if ( $datamonger);
     $reads_pr_sample{$fids{"$sample_name.2"}} += $multiplex_stats{pass}{$k} if ( $datamonger);

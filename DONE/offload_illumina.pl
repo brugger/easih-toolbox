@@ -248,7 +248,7 @@ while( $RunDir = shift @files) {
 	  ### QC done email ###
 	  $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
 	    
-	  if($last_status eq "QC_REPORT_DONE") {
+	  if($last_status eq "QC_DB_DONE") {
 		
 	    ### Processing done status and email ###
 	    my $end = "PROCESSING_DONE";

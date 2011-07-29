@@ -652,11 +652,11 @@ sub fetch_mapping_stats {
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_illumina_multiplex_stats {
-  my ( $rid, $fid, $lane, $sample, $bcode, $total_reads, $pass_filter, $ratio ) = @_;
+  my ( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $pass_filter, $ratio ) = @_;
 
-  my $q = "REPLACE INTO illumina_multiplex_stats ( rid, fid, lane, sample, bcode, total_reads, pass_filter, ratio) VALUES (?,?,?,?,?,?,?,?)";
+  my $q = "REPLACE INTO illumina_multiplex_stats ( rid, fid, lane, read_nr, sample, bcode, total_reads, pass_filter, ratio) VALUES (?,?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $rid, $fid, $lane, $sample, $bcode, $total_reads, $pass_filter, $ratio ) || die "$DBI::errstr";
+  $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $pass_filter, $ratio ) || die "$DBI::errstr";
 }
 
 

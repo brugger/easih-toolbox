@@ -64,13 +64,14 @@ CREATE TABLE illumina_multiplex_stats (
   rid                 INT NOT NULL,
   fid                 INT NOT NULL,
   lane		      INT NOT NULL,
+  read_nr	      INT NOT NULL,
   sample	      VARCHAR(20),
   bcode		      VARCHAR(20),
   ratio		      float,
   total_reads	      INT,
   pass_filter	      INT,
 
-  PRIMARY KEY (rid, fid, lane, bcode),
+  PRIMARY KEY (rid, fid, lane, read_nr, bcode),
   KEY rid_idx (rid),
   KEY fid_idx (fid)
   

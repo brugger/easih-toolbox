@@ -44,12 +44,16 @@ print "Rundir: $run_folder --> $run_id\n";
 
 my %multiplex_counter;
 
+my $read2 = 0;
+
 open (my $in, "$infile") || die "Could not open '$infile': $!\n";
 while( <$in> ) {
   chomp;
-  my @f = split(/\s{3,}/);
-  
+  my @f = split(/\t/ );
+  @f = split(/\s{3,}/ ) if ( !@f || @f == 1);
+
   my ($lane, $read_nr) = $f[0] =~ /lane (\d).(\d)/;
+  $read2 = 1 if ( $read_nr == 2 );
   my ($sample, $total_reads, $pass_filter) = ($f[1],$f[2],$f[3]);
   if ( ! $read_nr) {
 
@@ -60,7 +64,8 @@ while( <$in> ) {
     $multiplex_counter{$sample} += $count;
     $perc =~ s/[\% ]//;
     
-    EASIH::DONE::add_illumina_multiplex_stats( $run_id, $fid, $lane, $sample, $bcode, $total_reads, undef, $perc);
+    EASIH::DONE::add_illumina_multiplex_stats( $run_id, $fid, $lane, 1, $sample, $bcode, $total_reads, undef, $perc);
+    EASIH::DONE::add_illumina_multiplex_stats( $run_id, $fid, $lane, 2, $sample, $bcode, $total_reads, undef, $perc) if ( $read2 );
 
   }
   else {
@@ -70,7 +75,7 @@ while( <$in> ) {
     my $project = $sample =~ /^(\w{3})/;
     print "$sample.1.fq, $sample, $project, $run_folder, 'ILLUMINA', $total_reads, $pass_filter\n";
     
-    my $fid = find_or_create_fid("$sample.1.fq");
+    my $fid = find_or_create_fid("$sample.$read_nr.fq");
     
     print "$run_id, $fid, $lane, $read_nr\n";
     

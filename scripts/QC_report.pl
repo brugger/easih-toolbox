@@ -13,7 +13,30 @@ use Getopt::Std;
 use strict;
 use Getopt::Long;
 
-use lib '/software/installed/easih-toolbox/modules/';
+# Sets up dynamic paths for EASIH modules...
+# Makes it possible to work with multiple checkouts without setting 
+# perllib/perl5lib in the enviroment.
+my $DYNAMIC_LIB_PATHS = 1;
+BEGIN {
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
+  }
+  else {
+    use lib '/home/kb468/easih-toolbox/modules/';
+  }
+}
+
 use EASIH::QC;
 use EASIH::Misc;
 
@@ -73,7 +96,7 @@ my ($QC, $base_name, $infile);
 if ( $fastq_file || $csfasta_file || $qual_file ) {
 
   if ( $fastq_file ) {
-    $QC = EASIH::QC::fastQC( $fastq_file, 1 );
+    ($QC, undef) = EASIH::QC::fastQC( $fastq_file );
     $base_name = $fastq_file;
     $infile    = $fastq_file;
     if ( $base_name =~ /\.\// || $base_name !~ /^\//) {
@@ -121,7 +144,7 @@ if ( $fastq_file || $csfasta_file || $qual_file ) {
   }
 
 
-  open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open outfile: $!\n";
+  open (my $out, ">  $tmp_dir/$tmp_file.tex") || die "Could not open 'outfile': $!\n";
   print $out latex_header();
   print $out latex_summary($infile, uc($platform), $sample_size, $$QC{reads} || $$QC{quals}, $$QC{Q30}, $$QC{perc_dup}, $$QC{mappability}, $$QC{ACsplit}, $$QC{partial_adaptor} );
   print $out latex_QV("$tmp_dir/$tmp_file\_BaseQual.pdf", "$tmp_dir/$tmp_file\_QualHist.pdf");

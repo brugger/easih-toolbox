@@ -109,18 +109,18 @@ while( $RunDir = shift @files) {
 				  '03-failstatus' => "MAKE_FAILED", 
 				  '04-poststatus' => "MAKE_DONE"},
 	       
-	       '03-BCL2FQ'    => {'01-command'    => "/home/kb468/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
+	       '03-BCL2FQ'    => {'01-command'    => "/software/installed/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
 				  '02-prestatus'  => "BCL2FQ_STARTED", 
 				  '03-failstatus' => "BCL2FQ_FAILED", 
 				  '04-poststatus' => "BCL2FQ_DONE"},
 	       
-	       '04-QC_Report' => {'01-command'    => "/home/kb468/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
+	       '04-QC_Report' => {'01-command'    => "/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
 				  '02-prestatus'  => "QC_REPORT_STARTED", 
 				  '03-failstatus' => "QC_REPORT_FAILED", 
 				  '04-poststatus' => "QC_REPORT_DONE"},
 
 
-	       '05-QC_DB' => {'01-command'    => "/home/kb468/easih-toolbox/DONE/QC_report.pl -p illumina -r ",
+	       '05-QC_DB' => {'01-command'    => "/software/installed/easih-toolbox/DONE/QC_report.pl -p illumina -r ",
 			      '02-prestatus'  => "QC_DB_STARTED", 
 			      '03-failstatus' => "QC_DB_FAILED", 
 			      '04-poststatus' => "QC_DB_DONE"},

@@ -13,7 +13,7 @@ use File::Temp qw/ tempfile /;
 
 
 my %opts;
-getopts('i:o:Or:s:l:p:c:a:A:R:', \%opts);
+getopts('i:o:O:r:s:l:p:c:a:A:R:', \%opts);
 usage() if ( $opts{h});
 
 my $infile    = $opts{i};

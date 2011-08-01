@@ -13,17 +13,22 @@ use Data::Dumper;
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment. Needs to be prior to the use of EASIH* modules.
 BEGIN {
-  my $path = $0;
-  if ($path =~ /.*\//) {
-    $path =~ s/(.*)\/.*/$1/;
-    push @INC, "$path/modules" if ( -e "$path/modules");
-    $path =~ s/(.*)\/.*/$1/;
-    push @INC, "$path/modules" if ( -e "$path/modules");
-    
+  my $DYNAMIC_LIB_PATHS = 1;
+  if ( $DYNAMIC_LIB_PATHS ) {
+    my $path = $0;
+    if ($path =~ /.*\//) {
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules");
+      $path =~ s/(.*)\/.*/$1/;
+      push @INC, "$path/modules" if ( -e "$path/modules" && ! grep /^$path\/modules/, @INC);
+    }
+    else {
+      push @INC, "../modules" if ( -e "../modules");
+      push @INC, "./modules" if ( -e "./modules");
+    }
   }
   else {
-    push @INC, "../modules" if ( -e "../modules");
-    push @INC, "./modules" if ( -e "./modules");
+    push @INC, '/home/kb468/easih-toolbox/modules/';
   }
 }
 

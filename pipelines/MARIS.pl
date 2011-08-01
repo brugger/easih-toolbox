@@ -38,19 +38,19 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 
 		 'std-aln'          => { function   => 'bwa_aln',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=12:00:00"},
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=05:00:00"},
 		 
 		 'std-generate'      => { function   => 'bwa_generate',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=12:00:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=05:00:00",},
 
 		 'std-tag_sam'       => { function   => 'sam_add_tags',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=01:00:00",},
 		 
 		 'std-sam2bam'       => { function   => 'EASIH::JMS::Samtools::sam2bam',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=1000mb,walltime=10:00:00"},
 		 
 		 'std-merge'         => { function   => 'EASIH::JMS::Picard::merge',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=20:00:00",
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=10:00:00",
 					  sync       => 1},
 
 		 'std-sort'          => { function   => 'EASIH::JMS::Picard::sort',
@@ -138,7 +138,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 	      'std-tag_sam'       => 'std-sam2bam',
 	      'std-sam2bam'       => 'std-sort',
 	      'std-sort'          => 'std-merge',
-	      'std-sort'          => 'std-calmd',
+	      'std-merge'         => 'std-calmd',
 	      'std-mark_dup'      => 'std-calmd',
 	      'std-calmd'         => 'std-index',
 
@@ -256,7 +256,7 @@ $sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
 
 
 # Only paired ends runs gets marked duplicates.
-$flow{'std-sort'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
+$flow{'std-merge'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 
 my $bwa             = EASIH::JMS::Misc::find_program('bwa');
@@ -450,7 +450,7 @@ sub sam_add_tags {
     $readgroup =~ s/.*\///;
   }
 
-  my $cmd = "$tag_sam -RO $input -p $platform -r $readgroup -a bwa -A '$align_param' ";
+  my $cmd = "$tag_sam -R $reference -O $input -p $platform -r $readgroup -a bwa -A '$align_param' ";
   EASIH::JMS::submit_job($cmd, $input);
 }
 

@@ -13,7 +13,6 @@ use Getopt::Std;
 use strict;
 use Getopt::Long;
 
-
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
@@ -37,7 +36,6 @@ BEGIN {
     use lib '/home/kb468/easih-toolbox/modules/';
   }
 }
-
 
 use EASIH::QC;
 use EASIH::Misc;

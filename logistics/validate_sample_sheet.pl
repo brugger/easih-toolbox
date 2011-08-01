@@ -51,8 +51,8 @@ my $error_message = "";
 
 
 #my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
-my $to = 'kim.brugger@easih.ac.uk'; #global
-#my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
+#my $to = 'kim.brugger@easih.ac.uk'; #global
+my $to = 'kim.brugger@easih.ac.uk,lab@easih.ac.uk'; #global
 my @input_dirs = ("/seqs/illumina2/");
 
 foreach my $dir ( @input_dirs ) {
@@ -80,8 +80,11 @@ foreach my $dir ( @input_dirs ) {
 
 #    print "Examining $dir$file $sample_sheet\n";
 
+    my $windir = $indir;
+    $windir =~ s|/seqs/illumina2/|Z:/|;
+    $windir =~ s/\//\\/g;
 
-    fail("No sample sheet present in $indir\n") if ( ! -e $sample_sheet );
+    fail("No sample sheet present in windows: $windir  linux:$indir \n") if ( ! -e $sample_sheet );
     
     validate_sample_sheet( $sample_sheet )  if (  -e $sample_sheet );
   }
@@ -191,6 +194,6 @@ sub fail {
 sub SendEmail {
     my($subject, $message) = @_;
  
-    $subject = "[easih-dash] $subject" if ( $subject !~ /easih-dash/);
+    $subject = "[easih-done] $subject" if ( $subject !~ /easih-dash/);
     EASIH::Mail::send($to, $subject, $message);
 }

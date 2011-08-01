@@ -103,38 +103,5 @@ sub fetch_snp {
   return $result;
 }
 
-<<<<<<< HEAD
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub fetch_ref_id {
-  my ($name) = @_;
-
-  my $sth = $dbi->prepare("select ref_id from reference where name='$name';");
-  $sth->execute();
-  my @entries =  $sth->fetchrow_array();
-  if (@entries) {
-    return $entries[0];
-  }
-
-  die "Could not find or insert reference '$name'\n";
-}
-
-# 
-# Hard coded for now, change later...
-# 
-# Kim Brugger (08 Dec 2010)
-BEGIN {
-  $snp_db = "dbsnp_132";
-  $pp_db  = "phylop_phast";
-
-  $dbi = DBI->connect("DBI:mysql:$snp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ppdbi = DBI->connect("DBI:mysql:$pp_db:mgpc17", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ref_id_hg18   = fetch_ref_id('hg18');
-  $ref_id_GRCh37 = fetch_ref_id('GRCh37');
-  fetch_populations();
-}
-
 
 1;

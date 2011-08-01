@@ -188,8 +188,8 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
     if ( $$lane[4] eq "MULTIPLEXED") {
       foreach my $mplex (@mplexs ) {
-	if ( $$lane[2] == $$mplex[2] ) {
-	  push @data, [undef, "<a href=$0?QC=1&fid=$$mplex[1]>$$mplex[3]</a>", $$mplex[4], $$mplex[6], "$$mplex[5] %"];
+	if ( $$lane[2] == $$mplex[2] && $$lane[3] == $$mplex[3]) {
+	  push @data, [undef, "<a href=$0?QC=1&fid=$$mplex[1]>$$mplex[4]</a>", $$mplex[5], $$mplex[7], "$$mplex[6] %"];
 	}
       }
     }

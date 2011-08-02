@@ -28,7 +28,7 @@ sub merge {
 
     my $username = scalar getpwuid $<;
 
-    my $cmd = "$picard -T MergeSamFiles O= $tmp_file  I= " . join(" I= ", @non_empty_files) . " VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/";
+    my $cmd = "$picard -T MergeSamFiles USE_THREADING=true O= $tmp_file  I= " . join(" I= ", @non_empty_files) . " VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/";
     EASIH::JMS::submit_job($cmd, $tmp_file);
   }
 }

@@ -113,29 +113,29 @@ while(<STDIN>) {
 
   
     if ( (/\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/) && 
-	 (/\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/)) {
+	 (/\tLB:Z:(\w+)\t/ || /\tLB:Z:(\w+)\Z/)) {
       
       s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
-      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
+      s/(.*\tLB:Z:)(.*?)(\t.*)/$1$library$3/;
       
       s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
-      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tLB:Z:)(.*?)\Z/$1$library/;
     }
     elsif ( /\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/ ) {
       chomp($_);
       s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
       s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
-      $_ .= "\tSM:$sample\n";
+      $_ .= "\tLB:$library\n";
     }
-    elsif ( /\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/ ) {
+    elsif ( /\tLB:Z:(\w+)\t/ || /\tLB:Z:(\w+)\Z/ ) {
       chomp($_);
-      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
-      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tLB:Z:)(.*?)(\t.*)/$1$library$3/;
+      s/(.*\tLB:Z:)(.*?)\Z/$1$library/;
       $_ .= "\tRG:$readgroup\n";
     }
     else {
       chomp($_);
-      $_ .= "\tRG:Z:$readgroup\tSM:Z:$sample\n";
+      $_ .= "\tRG:Z:$readgroup\tLB:Z:$library\n";
     }
   }
 

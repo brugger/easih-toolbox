@@ -38,7 +38,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=500mb,walltime=02:00:00"},
 		 
 		 'std-aln'          => { function   => 'bwa_aln',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=05:00:00"},
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,mem=2500mb,walltime=05:00:00"},
 		 
 		 'std-generate'      => { function   => 'bwa_generate',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=05:00:00",},
@@ -94,7 +94,6 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 		 'realigned_index'   => { function   => 'EASIH::JMS::Samtools::index',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
-
 		 'scrub_index'       => { function   => 'EASIH::JMS::Samtools::index',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2000mb,walltime=04:00:00"},
 		 
@@ -187,10 +186,10 @@ my $username = scalar getpwuid $<;
 
 # if using standard naming, this is a lot easier.
 if ( $opts{Q} ) {
-  $opts{'1'} = "$opts{Q}.1.fq"    if ( -e "$opts{Q}.1.fq");
-  $opts{'1'} = "$opts{Q}.1.fq.gz" if ( -e "$opts{Q}.1.fq.gz");
-  $opts{'2'} = "$opts{Q}.2.fq"    if ( -e "$opts{Q}.2.fq");
-  $opts{'2'} = "$opts{Q}.2.fq.gz" if ( -e "$opts{Q}.2.fq.gz");
+
+  $opts{'1'} = join(",", sort(glob("$opts{Q}*.1.fq"), glob("$opts{Q}*.1.fq.gz")));
+  $opts{'2'} = join(",", sort(glob("$opts{Q}*.2.fq"), glob("$opts{Q}*.1.fq.gz")));
+
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
@@ -203,7 +202,9 @@ if ( $opts{Q} ) {
 }  
 
 my $first         = $opts{'1'}     || usage();
+$first            = [split(",", $first)];
 my $second        = $opts{'2'};
+$second           = [split(",", $second)] if ( $second );
 my $dbsnp         = $opts{'d'}     || usage();
 my $email         = $opts{'e'}     || "$username\@cam.ac.uk";
 my $filter        = $opts{'f'}     || "exon";
@@ -251,12 +252,12 @@ $align_param .= " -e5 "     if ( $loose_mapping);
 
 $no_sw_pair     = 1 if ($platform eq "SOLID");
 my $sampe_param = "";
-$sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
-$sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
+$sampe_param    = '-s ' if ( @$first && @$second && $no_sw_pair);
+$sampe_param    = "-M $insert_size "  if ( @$first && @$second && $insert_size);
 
 
 # Only paired ends runs gets marked duplicates.
-$flow{'std-merge'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
+$flow{'std-merge'} = 'std-mark_dup' if ((@$first && @$second) || $mark_dup );
 
 
 my $bwa             = EASIH::JMS::Misc::find_program('bwa');
@@ -323,8 +324,8 @@ else {
 
 &EASIH::JMS::store_state();
 
-my $extra_report = "1 ==> $first\n";
-$extra_report .= "2 ==> $second\n" if ( $second );
+my $extra_report = "1 ==> @$first\n";
+$extra_report .= "2 ==> @$second\n" if ( $second );
 $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "snp_file ==> $report.snps\n";
 $extra_report .= "indel_file ==> $report.indel\n";
@@ -345,15 +346,20 @@ EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 #EASIH::JMS::delete_tmp_files();
 
 sub fastq_split {
-  my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file();
- 
-  my $cmd = "$fq_split -e $split  -1 $first";
-  $cmd .= " -2 $second "  if ( $second);
-  $cmd .= " -o tmp/ > $tmp_file";
+  foreach my $first_file ( @$first ) {
+    my $second_file = shift @$second if ( @$second );
 
-  EASIH::JMS::submit_job($cmd, $tmp_file);
+    my $tmp_file = EASIH::JMS::tmp_file();
+    # keep track of the original file
+#    $split2files{$tmp_file} = $first_file; 
+    
+    my $cmd = "$fq_split -e $split  -1 $first_file";
+    $cmd .= " -2 $second_file "  if ( $second_file);
+    $cmd .= " -o tmp/ > $tmp_file";
+    
+    EASIH::JMS::submit_job($cmd, $tmp_file);
+  }
 }
 
 
@@ -367,8 +373,8 @@ sub bwa_aln {
     if ( $first && $second ) {
       my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
       my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $first ;";
-      $cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $second ";
+      my $cmd = "$bwa aln -t 4 $align_param  -f $first_tmp_file  $reference $first ;";
+      $cmd   .= "$bwa aln -t 4 $align_param  -f $second_tmp_file $reference $second ";
 
       my $output = { "first_fq"   => $first,
 		     "first_sai"  => $first_tmp_file,
@@ -380,7 +386,7 @@ sub bwa_aln {
     }
     else {
       my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $first ";
+      my $cmd = "$bwa aln -t 4 $align_param  -f $tmp_file $reference $first ";
       my $output = { "first_fq"   => $first,
 		     "first_sai"  => $tmp_file};
       EASIH::JMS::submit_job($cmd, $output);
@@ -396,8 +402,8 @@ sub bwa_aln {
       if ( $file1 && $file2 ) {
 	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
 	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param  -f $first_tmp_file  $reference $file1 ;";
-	$cmd   .= "$bwa aln $align_param  -f $second_tmp_file $reference $file2 ";
+	my $cmd = "$bwa aln -t 4 $align_param  -f $first_tmp_file  $reference $file1 ;";
+	$cmd   .= "$bwa aln -t 4 $align_param  -f $second_tmp_file $reference $file2 ";
 	my $output = { "first_fq"   => $file1,
 		       "first_sai"  => $first_tmp_file,
 		       "second_fq"  => $file2,
@@ -407,7 +413,7 @@ sub bwa_aln {
       }
       else {
 	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-	my $cmd = "$bwa aln $align_param  -f $tmp_file $reference $file1 ";
+	my $cmd = "$bwa aln -t 4 $align_param  -f $tmp_file $reference $file1 ";
 	my $output = { "first_fq"   => $file1,
 		       "first_sai"  => $tmp_file};
 	EASIH::JMS::submit_job($cmd, $output);
@@ -688,8 +694,13 @@ sub validate_input {
   my @errors;
   my @info;
 
-  push @errors, "$first does not exist"  if ( ! -e $first );
-  push @errors, "$second does not exist"  if ( $second &&  ! -e $second );
+  foreach my $first_file ( @$first ) {
+    push @errors, "$first_file does not exist"  if ( ! -e $first_file );
+  }
+
+  foreach my $second_file ( @$second ) {
+    push @errors, "$second_file does not exist"  if ( ! $second_file );
+  }
 
 
   # Things related to the reference sequence being used.

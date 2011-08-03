@@ -13,7 +13,6 @@ use Getopt::Std;
 my $debug = 0;
 #my $debug = 1;
 
-
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
@@ -41,6 +40,10 @@ use EASIH;
 use EASIH::DONE;
 use EASIH::Sample;
 use EASIH::Illumina::Sample_sheet;
+
+EASIH::Barcodes::barcode_set( 'ill09' );
+EASIH::Barcodes::strict_tags();
+EASIH::Barcodes::error_correct_barcodes(0);
 
 my %opts;
 getopts("a:A:1:2:3:4:5:6:7:8:hs:i:o:lhnbd", \%opts);
@@ -80,6 +83,8 @@ my $indir       = $opts{'i'} || "./";
 my $runfolder   = id_run_folder();
 my $datamonger  = $opts{'d'} || 0;
 my $outdir      = $opts{'o'};
+
+my $paired_data = 0;
 
 my $indexed_run = $opts{b} || 0;
 my $sample_sheet = $opts{'s'};
@@ -139,6 +144,8 @@ if ($opts{A}) {
 
 %sample_names = validate_lane_names(%sample_names);
 
+
+
 my (%fhs, %fids);
 
 my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);
@@ -149,7 +156,7 @@ for(my $lane = 1; $lane<=8; $lane++) {
   next if (!$sample_names{ $lane });
  
   # this lane is barcoded...
-  if (ref ($sample_names{$lane}) eq "HASH") {
+  if (ref ($sample_names{$lane}) eq "HASH" && ! $sample_names{$lane}{'default'}) {
     analyse_barcoded_lane($lane);
   }
   else {
@@ -169,6 +176,8 @@ if ( $datamonger ) {
 				     "BASECALLS2FQ_DONE");
 }
 
+
+
 # 
 # 
 # 
@@ -176,11 +185,15 @@ if ( $datamonger ) {
 sub open_outfile {
   my ($filename) = @_;
 
+  
+
   # simplifies ////// to /
   $filename =~ s/\/{2,}/\//;
 
   my $fh;
-  open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
+#  open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
+  $filename =~ s/.gz//;
+  open ($fh, " > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
 
 
   if ( $datamonger ) {
@@ -202,9 +215,10 @@ sub open_outfile {
 # 
 # Kim Brugger (04 Jan 2011)
 sub analyse_lane {
-  my ( $lane_nr) = @_;
+  my ( $lane_nr ) = @_;
 
-  my $sample_name = $sample_names{$lane_nr};
+  my $sample_name = $sample_names{ $lane_nr }{'default'} if ( ref($sample_names{ $lane_nr }) eq 'HASH');
+  $sample_name ||= $sample_names{ $lane_nr } ;
   my $basename = $sample_names{ $sample_name };
   
   my @files = glob("$indir/s_$lane_nr\_1_*_qseq.txt");
@@ -214,13 +228,11 @@ sub analyse_lane {
   my ($fh1, $fh2);
   
   $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" ) if (! $fhs{"$sample_name.1"} );
-
   $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
-  
   $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
   
   foreach my $file (@files) {
-    my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.1"} );
+    my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.1"}, undef, $sample_names{$lane_nr} );
     $in1  += $ti;
     $out1 += $to;
     $file =~ s/(s_\d)_1_/$1_3_/ if ( $indexed_run );
@@ -228,7 +240,7 @@ sub analyse_lane {
     if ( -e $file ) {
       # find the next file
 
-      my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.2"} );
+      my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.2"}, undef, $sample_names{$lane_nr} );
       $in2  += $ti;
       $out2 += $to;
     }
@@ -243,7 +255,6 @@ sub analyse_lane {
 
     $reads_pr_sample{$fids{"$sample_name.1"}} += $out1;
     $reads_pr_sample{$fids{"$sample_name.2"}} += $out2 if ( $out2 );
-
   }
 					    
   printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
@@ -290,14 +301,14 @@ sub analyse_barcoded_lane {
 
     $file =~ s/(s_\d)_2_/$1_1_/;
 
-    my ($ti, $to) = analyse_tile( $file, undef, $demultiplexing );
+    my ($ti, $to) = analyse_tile( $file, undef, $demultiplexing, $sample_names{$lane_nr} );
     $in1  += $ti;
     $out1 += $to;
     $file =~ s/(s_\d)_1_/$1_3_/;
     if ( -e $file  ) {
       # find the next file
 
-      my ($ti, $to) = analyse_tile( $file, undef, $demultiplexing );
+      my ($ti, $to) = analyse_tile( $file, undef, $demultiplexing, $sample_names{$lane_nr} );
       $in2  += $ti;
       $out2 += $to;
     }
@@ -340,8 +351,22 @@ sub analyse_barcoded_lane {
 # 
 # Kim Brugger (09 Jun 2011)
 sub analyse_tile {
-  my ($input_file, $fout, $demultiplexing) = @_;
+  my ($input_file, $fout, $demultiplexing, $ebcs) = @_;
 
+  if ( ref($ebcs) eq "HASH") {
+    my %found_ebcs;
+    foreach my $ebc ( keys %$ebcs ) {
+      $found_ebcs{ $ebc } = $$ebcs{$ebc} if ($ebc !~ /^[ACGT]+\z/);
+    }
+    $ebcs = \%found_ebcs;
+
+    $ebcs = undef if ( keys %$ebcs == 0);
+
+  }
+  else {
+    $ebcs = undef;
+  }
+   
   my ( $count_in, $count_out ) = (0,0,0);
 
   open (my $in, "$input_file") || fail( "Could not open '$input_file': $!\n", "BASECALL2FQ_PATH_ERROR");
@@ -366,7 +391,49 @@ sub analyse_tile {
     push @read, "$bases\n";
     push @read, "+\n";
     push @read, "$q_line\n";
+
+
+    if ( $ebcs ) {
+
+
+      my ( $ebarcode, $decoded, $ebases, $eq_line ) = EASIH::Barcodes::decode_m13f($bases, $q_line);
+
+      # Found the tag, but cannot resolve the barcode
+      goto PRINTED if ( $decoded == 0);
+
+      if ( $decoded >= 1 ) {
+	print "$ebarcode, $decoded, $ebases, $eq_line\n";
+
+	my $sample_name = $$ebcs { $ebc_set };
+	$sample_name .= "_$ebarcode.$read";
+
+	if (! $fhs{"$sample_name"} ) {
+	  my $root_dir = "/data/";
+	  my $project = substr($sample_name, 0, 3);
+	  my $outfile = "$root_dir/$project/raw/$sample_name.fq.gz";
+	  if ( $outdir ) {
+	    $root_dir = $outdir;
+	    $outfile   = "$outdir/$sample_name.fq.gz";
+	  }
+	  
+	  print "$outfile\n";
+	  
+	  $fhs{"$sample_name"} = open_outfile( "$outfile" );
+	}
+
+	my $fh = $fhs{"$sample_name"};
 	
+	my @read = ("\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n", 
+		    "$ebases\n",
+		    "+\n",
+		    "$eq_line\n");
+	
+	print $fh join("", @read);
+	
+	goto PRINTED;
+      }
+    }
+
     if ($demultiplexing) {
       my $barcode = $$demultiplexing{ "\@${instr}_$run_id:$lane:$tile:$x:$y"};
       next if ( !$barcode );
@@ -381,6 +448,7 @@ sub analyse_tile {
     else {
       print $fout join("", @read);
     }
+  PRINTED:
     $count_out++;
   }
   
@@ -420,6 +488,8 @@ sub validate_lane_names {
   my %basenames;
   for ( my $lane =1; $lane <=8;$lane++) {
     
+    next if ( ! $sample_names{ $lane });
+
     if (ref ($sample_names{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$sample_names{$lane}}) {
 	$basenames{ $sample_names{$lane}{$bcode}} = -1;

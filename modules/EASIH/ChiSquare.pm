@@ -42,6 +42,28 @@ sub chisquare {
   return "[chi-square: $chisquare, df: $degrees_of_freedom] ==>  P = $chip";
 }
 
+sub chisquare_raw {
+  my @data = @_;
+  @data = @{$data[0]} if @data == 1 and ref($data[0]);
+  return "There's no data!" unless @data;
+  
+  my $degrees_of_freedom = scalar(@data) - 1;
+  my ($chisquare, $num_samples, $expected) = (0, 0, 0);
+  foreach (@data) { 
+    $num_samples += $_ 
+  }
+  $expected = $num_samples / scalar(@data);
+  # return "There's no data!" unless $expected;
+  foreach (@data) {
+    $chisquare += (($_ - $expected) ** 2) / $expected;
+  }
+  $chisquare = sprintf("%.5f", $chisquare);
+  
+
+  my $chip = chisqrprob ($degrees_of_freedom,$chisquare);
+  return ($chisquare, $degrees_of_freedom, $chip);
+}
+
 
 # assume the expected probability distribution is uniform
 sub chisquare_unbalanced {

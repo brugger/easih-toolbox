@@ -3,7 +3,7 @@
 # Lavet af Kim Brugger Sommeren 2000
 PROG   = tile2seq
 WARN   = #-Wshadow  -Wmissing-prototypes
-FLAGS  = -pipe -Wall -ggdb -I$(ILIB) -D_POSIX_SOURCE $(WARN) -O6  #-pg
+FLAGS  =  -I$(ILIB) -D_POSIX_SOURCE $(WARN) -O6  #-pg -pipe -Wall -ggdb
 CC     = gcc
 LIBS   = #-lm #-lefence #-ldmalloc  #-lefence #-lmcheck#-lmalloc
 RM     = rm -f

@@ -1,24 +1,14 @@
 /******************************************************************************
  * 
- * Extracts PF reads from illumina tiles and adjust the QV to the standard.
+ * Extracts PF reads from illumina tiles and adjust the QV prints result to stdout.
  * 
- * 
- *
  *
  * Kim Brugger (05 Aug 2011), contact: kim.brugger@easih.ac.uk
  *****************************************************************************/
  
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
-#include <string.h>
-#include <strings.h>
 #include <malloc.h>
-
-
-#define dprintf if (0) printf
-#define uprintf if (0) printf
-
 
 
 int main(int argc, char **argv){
@@ -26,13 +16,48 @@ int main(int argc, char **argv){
   FILE *fh =  fopen (argv[1], "r");
   size_t lineln = 10;
   char *line = malloc(sizeof(char)*lineln);
-  char data[11][256];
-
-  printf("Hello world, looking in file '%s'\n", argv[1]);
+  int index[20];
   
+
   while ( getline (&line, &lineln, fh) > 0 ) {
 
-  
+    int i;
+    int j = 0;
+    
+    for(i=0; i <  lineln; i++) {
+      if ( line[i] == '\t' ) {
+	line[i] = 0x00;
+	index[j++] = i+1;
+      }
+      else if ( line[i] == '\n' ) {
+	line[i] = 0x00;
+      }
+    }
+
+    if ( line[ index[9] ] == '0')
+      continue;
+
+    if (line[ index[6]] == '3' )
+      line[ index[6]] = '1';
+
+    for(i=0;line[ index[7] + i];i++) {
+      if (line[ index[7] + i] == '.')
+	line[ index[7] + i] = 'N';
+    }
+
+    for(i=0;line[ index[8] + i];i++) {
+	line[ index[8] + i] -= 33;
+    }
+
+
+    printf("@%s_%s:%s:%s:%s:%s/%s\t%s\t%s\t%s\n", &line[0], &line[ index[0]], &line[ index[1]], &line[ index[2]], &line[ index[3]], &line[ index[4]], &line[ index[6]], &line[ index[7]], &line[ index[8]], &line[ index[9]]);
+
+  }
+  return(0);
+}
+
+
+/*
     int i;
     int j = 0;
     int k = 0;
@@ -48,7 +73,7 @@ int main(int argc, char **argv){
     }
     
     //    push @read, "\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n";
-    
+
     if ( data[10][0] == '0')
       continue;
 
@@ -72,3 +97,4 @@ int main(int argc, char **argv){
   }
   return(0);
 }
+*/

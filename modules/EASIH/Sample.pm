@@ -41,6 +41,8 @@ sub sample2outfilename {
   
   my ($sample, $postfix) = $sample_name =~ /^([A-Z]\d{6,7})(.*)/;
   
+#  print "$sample $postfix\n";
+
   if ( $outdir ) {
     if ( -e "$outdir" && ! -d "$outdir") {
       return (undef,  "$outdir is not a directory\n");
@@ -77,22 +79,26 @@ sub sample2outfilename {
     system "mkdir -p $root_dir" if ( ! -d "$root_dir" );
   }
   
-  
   my @files = `find $root_dir | grep $sample `;
   my $version = 0;
   if ( @files ) {
     while ( $_ = pop @files ) {
       chomp;
       if (  /[A-Z]\d{6,7}\_(\d+)\.\d+$postfix/ || /[A-Z]\d{6,7}\_(\d+)$postfix/) {
-	$version = $1+1 if ($version < $1+1 );
+	$version = $1 + 1 if ($version < $1 + 1 );
       }
       elsif ( $version == 0 && ( /[A-Z]\d{6,7}\.\d+$postfix/  || /[A-Z]\d{6,7}$postfix/)) {
 	$version = 1;
       }
     }
     
-    $file = "$root_dir/$sample\_$version";
+    $file = "$root_dir/$sample\_$version" if ($version);
+    $file = "$root_dir/$sample" if (!$version);
   }
+
+  $file =~ s/\/{2,}/\//g;
+
+#  print "$file$postfix\n\n";
 
   return ("$file$postfix", undef);
 }

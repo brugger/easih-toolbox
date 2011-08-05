@@ -41,7 +41,7 @@ use EASIH::DONE;
 use EASIH::Sample;
 use EASIH::Illumina::Sample_sheet;
 
-EASIH::Barcodes::barcode_set( 'ill09' );
+EASIH::Barcodes::barcode_set( 'ill9' );
 EASIH::Barcodes::strict_tags();
 EASIH::Barcodes::error_correct_barcodes(0);
 
@@ -109,6 +109,7 @@ usage() if (! $sample_sheet &&  ! $opts{a} && ! $opts{A} && ! $opts{1} && ! $opt
 my %sample_names = readin_sample_sheet( $sample_sheet) if ($sample_sheet);
 
 
+
 $sample_names{1} = $opts{'1'} if ($opts{'1'});
 $sample_names{2} = $opts{'2'} if ($opts{'2'});
 $sample_names{3} = $opts{'3'} if ($opts{'3'});
@@ -142,8 +143,8 @@ if ($opts{A}) {
 }
 
 
-%sample_names = validate_lane_names(%sample_names);
 
+%sample_names = validate_lane_names(%sample_names);
 
 
 my (%fhs, %fids);
@@ -183,27 +184,32 @@ if ( $datamonger ) {
 # 
 # Kim Brugger (17 Jun 2011)
 sub open_outfile {
-  my ($filename) = @_;
+  my ( $sample_name ) = @_;
 
-  
+  return $fhs{ $sample_name } if ( $fhs{ $sample_name } );
+
+#  my ($basename, $read_nr) = $sample_name =~ /^(.*?)\.[12]/;
+
+  use EASIH::Sample;
+  my ($base_filename, $error) = EASIH::Sample::sample2outfilename( $sample_name, $outdir);
 
   # simplifies ////// to /
-  $filename =~ s/\/{2,}/\//;
+  $base_filename =~ s/\/{2,}/\//;
+  
+  $base_filename .= ".fq.gz";
+
+#  print "opening a file for: $sample_name --> $base_filename\n";
 
   my $fh;
-#  open ($fh, "| gzip -c > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
-  $filename =~ s/.gz//;
-  open ($fh, " > $filename") || fail( "Could not open '$filename': $!\n", "BASECALL2FQ_PATH_ERROR");
-
-
+  open ($fh, "| gzip -c > $base_filename") || fail( "Could not open '$base_filename': $!\n", "BASECALL2FQ_PATH_ERROR");
+#  open ($fh, " > $base_filename") || fail( "Could not open '$base_filename': $!\n", "BASECALL2FQ_PATH_ERROR");
+  $fhs{ $sample_name }  = $fh;
+  
   if ( $datamonger ) {
     
-    my ($sample, $project) = EASIH::Sample::filename2sampleNproject($filename);
-    my $fid = EASIH::DONE::add_file($filename, $sample, $project, $runfolder, 'ILLUMINA');
-    $filename =~ s/.*\///;
-    $filename =~ s/.fq.gz//;
-    $filename =~ s/_\d+//;
-    $fids{ $filename }  = $fid;
+    my ($sample, $project) = EASIH::Sample::filename2sampleNproject($base_filename);
+    my $fid = EASIH::DONE::add_file($base_filename, $sample, $project, $runfolder, 'ILLUMINA');
+    $fids{ $sample_name }  = $fid;
   }
   
   return $fh;
@@ -217,30 +223,37 @@ sub open_outfile {
 sub analyse_lane {
   my ( $lane_nr ) = @_;
 
-  my $sample_name = $sample_names{ $lane_nr }{'default'} if ( ref($sample_names{ $lane_nr }) eq 'HASH');
-  $sample_name ||= $sample_names{ $lane_nr } ;
-  my $basename = $sample_names{ $sample_name };
+  my $sample;
+  
+  if ( ref($sample_names{ $lane_nr }) eq 'HASH' && $sample_names{ $lane_nr }{'default'}) {
+    $sample = $sample_names{ $lane_nr }{'default'};
+  }
+  else {
+    $sample  ||= $sample_names{ $lane_nr } ;
+  }
   
   my @files = glob("$indir/s_$lane_nr\_1_*_qseq.txt");
 
   my ($in1, $out1, $in2, $out2) =(0,0,0,0);
 
   my ($fh1, $fh2);
+
+#  print "Lane: '$lane_nr' -- sample: $sample\n";
   
-  $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" ) if (! $fhs{"$sample_name.1"} );
-  $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
-  $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && ( -e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run));
+  $fhs{"$sample.1"} = open_outfile( "$sample.1" );
+  $fhs{"$sample.2"} = open_outfile( "$sample.2" ) if ( -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+  $fhs{"$sample.2"} = open_outfile( "$sample.2" ) if (-e "$indir/s_$lane_nr\_2_0001_qseq.txt" && ! $indexed_run );
   
   foreach my $file (@files) {
-    my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.1"}, undef, $sample_names{$lane_nr} );
+    my ($ti, $to) = analyse_tile( $file, $fhs{"$sample.1"}, undef, $sample_names{$lane_nr} );
     $in1  += $ti;
     $out1 += $to;
     $file =~ s/(s_\d)_1_/$1_3_/ if ( $indexed_run );
     $file =~ s/(s_\d)_1_/$1_2_/ if ( !$indexed_run );
+
     if ( -e $file ) {
       # find the next file
-
-      my ($ti, $to) = analyse_tile( $file, $fhs{"$sample_name.2"}, undef, $sample_names{$lane_nr} );
+      my ($ti, $to) = analyse_tile( $file, $fhs{"$sample.2"}, undef, $sample_names{$lane_nr} );
       $in2  += $ti;
       $out2 += $to;
     }
@@ -250,15 +263,15 @@ sub analyse_lane {
 
 
   if($datamonger) {
-    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 1, $sample_name, $in1, $out1 );
-    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample_name.2"}, $lane_nr, 2, $sample_name, $in2, $out2 ) if($in2);
+    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample.1"}, $lane_nr, 1, $sample, $in1, $out1 );
+    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample.2"}, $lane_nr, 2, $sample, $in2, $out2 ) if($in2);
 
-    $reads_pr_sample{$fids{"$sample_name.1"}} += $out1;
-    $reads_pr_sample{$fids{"$sample_name.2"}} += $out2 if ( $out2 );
+    $reads_pr_sample{$fids{"$sample.1"}} += $out1;
+    $reads_pr_sample{$fids{"$sample.2"}} += $out2 if ( $out2 );
   }
 					    
-  printf("lane $lane_nr.1\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
-  printf("lane $lane_nr.2\t$sample_name\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
+  printf("lane $lane_nr.1\t$sample\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out1*100/$in1, $out1/120) ;
+  printf("lane $lane_nr.2\t$sample\t$in1\t$out1 (%.2f %%)\t%.2f avg clusters per tile\n", $out2*100/$in2, $out2/120) if($in2);
 
   return ($in1, $out1, $in2, $out2);
 }
@@ -284,8 +297,8 @@ sub analyse_barcoded_lane {
       my $sample_name = $sample_names{$lane_nr}{$bcode};
       my $basename = $sample_names{ $sample_name };
 
-      $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" ) if (! $fhs{"$sample_name.1"} );
-      $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if (! $fhs{"$sample_name.2"} && -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
+      $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" );
+      $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if ( -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
 
     }
   }
@@ -400,29 +413,16 @@ sub analyse_tile {
 
       # Found the tag, but cannot resolve the barcode
       goto PRINTED if ( $decoded == 0);
+#	print "$ebarcode, $decoded, $ebases, $eq_line\n";
 
       if ( $decoded >= 1 ) {
-	print "$ebarcode, $decoded, $ebases, $eq_line\n";
+#	print "$ebarcode, $decoded, $ebases, $eq_line\n";
 
-	my $sample_name = $$ebcs { $ebc_set };
+	my $sample_name = $$ebcs { 'ill9_m13F' };
 	$sample_name .= "_$ebarcode.$read";
 
-	if (! $fhs{"$sample_name"} ) {
-	  my $root_dir = "/data/";
-	  my $project = substr($sample_name, 0, 3);
-	  my $outfile = "$root_dir/$project/raw/$sample_name.fq.gz";
-	  if ( $outdir ) {
-	    $root_dir = $outdir;
-	    $outfile   = "$outdir/$sample_name.fq.gz";
-	  }
-	  
-	  print "$outfile\n";
-	  
-	  $fhs{"$sample_name"} = open_outfile( "$outfile" );
-	}
+	my $fh = open_outfile( "$sample_name" );
 
-	my $fh = $fhs{"$sample_name"};
-	
 	my @read = ("\@${instr}_$run_id:$lane:$tile:$x:$y/$read\n", 
 		    "$ebases\n",
 		    "+\n",
@@ -514,52 +514,6 @@ sub validate_lane_names {
     }
   }
 
- 
-  foreach my $basename ( keys %basenames ) {        
-
-    my $root_dir = "/data/";
-    my $project = substr($basename, 0, 3);
-    my $file = "$root_dir/$project/raw/$basename";
-
-    if ( $outdir ) {
-      $root_dir = $outdir;
-      $file     = "$outdir/$basename";
-    }
-    else {
-      if ( -e "$root_dir/$project" && ! -d "$root_dir/$project") {
-	fail("$root_dir/$project is not a directory\n", "BASECALL2FQ_PATH_ERROR");
-      }
-      elsif ( -e "$root_dir/$project" && ! -w "$root_dir/$project") {
-	fail( "$root_dir/$project is not writeable\n", "BASECALL2FQ_PATH_ERROR");
-      }
-      
-      $root_dir .= "$project/raw/";
-      system "mkdir -p $root_dir" if ( ! -d "$root_dir" );
-    }
-    
-
-    my @files = `find $root_dir | grep $basename | grep fq`;
-    my $version = 0;
-    if ( @files ) {
-      while ( $_ = pop @files ) {
-	chomp;
-
-	if ( $version == 0 &&  /[A-Z][0-9]{6,7}.\d+.fq/ ) {
-	  $version = 1;
-	}
-	elsif (  /[A-Z][0-9]{6,7}\_(\d+).\d+.fq/ ) {
-	  $version = $1+1 if ($version <= $1 );
-	}
-	
-      }
-
-      $file = "$root_dir/$basename\_$version";
-    }
-    $sample_names{$basename} = $file;
-  }
-
-#  print Dumper( \%sample_names );
-#  sleep 60;
 
   return %sample_names;
 }

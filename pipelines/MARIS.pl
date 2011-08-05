@@ -344,6 +344,7 @@ $bam_file =~ s/.*\///;
 EASIH::JMS::mail_report($email, $bam_file, $extra_report);
 
 #EASIH::JMS::delete_tmp_files();
+my %split2files;
 
 sub fastq_split {
 
@@ -352,7 +353,7 @@ sub fastq_split {
 
     my $tmp_file = EASIH::JMS::tmp_file();
     # keep track of the original file
-#    $split2files{$tmp_file} = $first_file; 
+    $split2files{$tmp_file} = $first_file; 
     
     my $cmd = "$fq_split -e $split  -1 $first_file";
     $cmd .= " -2 $second_file "  if ( $second_file);
@@ -371,25 +372,33 @@ sub bwa_aln {
   if ( $no_split ) {
     
     if ( $first && $second ) {
-      my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln -t 4 $align_param  -f $first_tmp_file  $reference $first ;";
-      $cmd   .= "$bwa aln -t 4 $align_param  -f $second_tmp_file $reference $second ";
-
-      my $output = { "first_fq"   => $first,
-		     "first_sai"  => $first_tmp_file,
-		     "second_fq"  => $second,
-		     "second_sai" => $second_tmp_file};
-		     
+      foreach my $first_file ( @$first ) {
+	my $second_file = shift @$second if ( @$second );
+	$split2files{$first_file} = $first_file; 
+	
+	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln -t 4 $align_param  -f $first_tmp_file  $reference $first_file ;";
+	$cmd   .= "$bwa aln -t 4 $align_param  -f $second_tmp_file $reference $second_file ";
+	
+	my $output = { "first_fq"   => $first_file,
+		       "first_sai"  => $first_tmp_file,
+		       "second_fq"  => $second_file,
+		       "second_sai" => $second_tmp_file};
+	
 #      EASIH::JMS::submit_job($cmd, "$first_tmp_file $second_tmp_file $first $second");
-      EASIH::JMS::submit_job($cmd, $output);
+	EASIH::JMS::submit_job($cmd, $output);
+      }
     }
     else {
-      my $tmp_file  = EASIH::JMS::tmp_file(".sai");
-      my $cmd = "$bwa aln -t 4 $align_param  -f $tmp_file $reference $first ";
-      my $output = { "first_fq"   => $first,
-		     "first_sai"  => $tmp_file};
-      EASIH::JMS::submit_job($cmd, $output);
+      foreach my $first_file ( @$first ) {
+	$split2files{$first_file} = $first_file; 
+	my $tmp_file  = EASIH::JMS::tmp_file(".sai");
+	my $cmd = "$bwa aln -t 4 $align_param  -f $tmp_file $reference $first_file ";
+	my $output = { "first_fq"   => $first_file,
+		       "first_sai"  => $tmp_file};
+	EASIH::JMS::submit_job($cmd, $output);
+      }
     }
   }
   else {
@@ -399,6 +408,9 @@ sub bwa_aln {
       chomp;
       my ($file1, $file2) = split("\t", $_);
       
+      $split2files{ $file1 } = $split2files{ $input };
+      $split2files{ $file2 } = $split2files{ $input } if ( $file2 );
+
       if ( $file1 && $file2 ) {
 	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
 	my $second_tmp_file = EASIH::JMS::tmp_file(".sai");
@@ -436,6 +448,8 @@ sub bwa_generate {
     $cmd = "$bwa samse -f $tmp_file $reference $$input{first_sai} $$input{first_fq}";
   }
 
+  $split2files{ $tmp_file } = $split2files{ $$input{first_fq} };
+
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
 
@@ -448,15 +462,26 @@ sub bwa_generate {
 sub sam_add_tags {
   my ($input) = @_;
 
-  if ( ! $readgroup ) {
-    $readgroup = $first;
-    $readgroup =~ s/.fastq//;
-    $readgroup =~ s/.fq//;
-    $readgroup =~ s/.gz//;
-    $readgroup =~ s/.*\///;
-  }
+  my $readgroup = $split2files{ $input };
+  $readgroup =~ s/\.gz//;
+  $readgroup =~ s/\.[1|2].fq//;
 
-  my $cmd = "$tag_sam -R $reference -O $input -p $platform -r $readgroup -a bwa -A '$align_param' ";
+  
+
+  my $sample = $readgroup;
+  $sample =~ s/\..*//;
+  $sample =~ s/_\d*//;
+
+
+#  if ( ! $readgroup ) {
+#    $readgroup = $split2files{ $input };
+#    $readgroup =~ s/.fastq//;
+#    $readgroup =~ s/.fq//;
+#    $readgroup =~ s/.gz//;
+#    $readgroup =~ s/.*\///;
+#  }
+
+  my $cmd = "$tag_sam -R $reference -O $input -p $platform -r $readgroup -s $sample -a bwa -A '$align_param' ";
   EASIH::JMS::submit_job($cmd, $input);
 }
 

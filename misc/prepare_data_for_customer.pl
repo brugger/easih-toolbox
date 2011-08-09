@@ -61,10 +61,8 @@ foreach (@file_type) {
 }
 
 sub help {
-    
-
-
-
+    system("perldoc $0");
+    exit;
 }
 
 =pod

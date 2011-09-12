@@ -150,7 +150,7 @@ sub generic_decode {
       $res_qual = substr($qual, length($bcode)+length($tag));
     }
     
-    return ($barcode_hash{$bcode}, $found, $seq, $qual);
+    return ($barcode_hash{$bcode}, $found, $res_seq, $res_qual);
   }
 
   return (undef, -1, $seq, $qual);
@@ -173,8 +173,6 @@ sub validate_barcode {
   my $START = 0;
   my $END   = 1;
   
-#  return 0 if ( $pos != 57421888);
-
 
   # set the start and end of the array and find the 
   # the middle of the array

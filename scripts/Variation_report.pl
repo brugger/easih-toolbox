@@ -77,7 +77,7 @@ if ( $opts{ Q }  ) {
 
   $opts{s} = "$opts{Q}.snps.vcf"   if ( -e "$opts{Q}.snps.vcf");
   $opts{i} = "$opts{Q}.indels.vcf" if ( -e "$opts{Q}.indels.vcf");
-#  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
+  $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var_full.csv";
   $opts{O} = "$opts{Q}.var.csv";
 }
@@ -127,9 +127,9 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
 
 ###svvd###
 
-my $DACstring = DepthAndCoverage($bam,$baits);
+my $DACstring = DepthAndCoverage($bam,$baits) if ( $bam && $baits);
 
-my($ANstring,@SMstrings) = BamHead_ANSM($bam);
+my($ANstring,@SMstrings) = BamHead_ANSM($bam) if ( $bam );
 
 
 $ANstring = "hg19" if ( $ANstring eq "human_g1k_v37");
@@ -2034,7 +2034,7 @@ sub BamHead_ANSM
       
       if(/\@SQ/)
       {
-	  $ANstring = "$1", if(/AN:(.*?)\s/);
+	  $ANstring = "$1", if(/AN:(.*?)\s*/);
 	  $count++;
       }
   }

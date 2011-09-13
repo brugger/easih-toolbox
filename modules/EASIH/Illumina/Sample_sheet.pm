@@ -15,6 +15,25 @@ BEGIN {
   EASIH::Barcodes::barcode_set('illumina');
 }
 
+# 
+# Examines a sample_sheet_hash to determine if it is a barcoded run.
+# 
+# Kim Brugger (13 Sep 2011)
+sub indexed_run {
+  my ( $sample_hash ) = @_;
+  
+  print Dumper( $sample_hash );
+  
+  foreach my $lane ( keys %{$sample_hash})  {
+    if ( ref($$sample_hash{ $lane }) eq "HASH" &&
+	 !$$sample_hash{ $lane }{'default'} ) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 
 
 # 
@@ -22,7 +41,7 @@ BEGIN {
 # 
 # Kim Brugger (27 Jul 2011)
 sub readin {
-  my ( $sample_sheet) = @_;
+  my ( $sample_sheet ) = @_;
 
   my (%res );
   my $errors = "";
@@ -141,8 +160,4 @@ sub validate {
 }
 
 
-
 1;
-
-
-

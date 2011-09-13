@@ -468,6 +468,8 @@ sub readin_sample_sheet {
 
   fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
+  $indexed_run = EASIH::Illumina::Sample_sheet::indexed_run( $res );  
+
   return %$res;
 }
 

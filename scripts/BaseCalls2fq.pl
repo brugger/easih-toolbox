@@ -293,17 +293,15 @@ sub analyse_barcoded_lane {
     next if (ref ($sample_names{$lane}) ne "HASH");
 
     foreach my $bcode (keys %{$sample_names{$lane}}) {
-#      print "$lane - $bcode ==  $sample_names{$lane}{$bcode} \n";
       my $sample_name = $sample_names{$lane_nr}{$bcode};
       my $basename = $sample_names{ $sample_name };
 
       $fhs{"$sample_name.1"} = open_outfile( "$basename.1.fq.gz" );
       $fhs{"$sample_name.2"} = open_outfile( "$basename.2.fq.gz" ) if ( -e "$indir/s_$lane_nr\_3_0001_qseq.txt");
-
     }
   }
   
-  my ($in1, $out1, $in2, $out2) =(0,0,0,0);
+  my ($in1, $out1, $in2, $out2) = (0,0,0,0);
 
   foreach my $file (@files) {
     my ($demultiplexing, $counts) = demultiplex_tile($file, \%barcodes);
@@ -408,11 +406,10 @@ sub analyse_tile {
 
     if ( $ebcs ) {
 
-
       my ( $ebarcode, $decoded, $ebases, $eq_line ) = EASIH::Barcodes::decode_m13f($bases, $q_line);
 
       # Found the tag, but cannot resolve the barcode
-      goto PRINTED if ( $decoded == 0);
+      goto PRINTED if ( $decoded == 0 );
 #	print "$ebarcode, $decoded, $ebases, $eq_line\n";
 
       if ( $decoded >= 1 ) {

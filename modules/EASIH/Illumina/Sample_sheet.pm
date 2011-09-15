@@ -142,7 +142,10 @@ sub validate {
 	  my $barcode_set = $1;
 	  my $tag = $2;
 	  my $directions = $3;
-	  
+
+	  die "Only supports ill9 EASIH barcodes, not $barcode_set\n" if ( $barcode_set ne "ill9");
+	  die "Only supports m13 cloning site, not '$tag'\n" if ( $tag ne "m13");
+
 	}
 	else {
 	  $errors .= "'$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n"; 

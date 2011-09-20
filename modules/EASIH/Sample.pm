@@ -99,6 +99,7 @@ sub sample2outfilename {
   $file =~ s/\/{2,}/\//g;
 
 #  print "$file$postfix\n\n";
+  
 
   return ("$file$postfix", undef);
 }

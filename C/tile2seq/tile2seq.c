@@ -18,7 +18,6 @@ int main(int argc, char **argv){
   char *line = malloc(sizeof(char)*lineln);
   int index[20];
   
-
   while ( getline (&line, &lineln, fh) > 0 ) {
 
     int i;
@@ -34,11 +33,11 @@ int main(int argc, char **argv){
       }
     }
 
-    if ( line[ index[9] ] == '0')
-      continue;
+    //    if ( line[ index[9] ] == '0')
+    //      continue;
 
     if (line[ index[6]] == '3' )
-      line[ index[6]] = '1';
+      line[ index[6]] = '2';
 
     for(i=0;line[ index[7] + i];i++) {
       if (line[ index[7] + i] == '.')

@@ -124,6 +124,8 @@ sub validate {
       $errors .= "no lane information for lane $lane \n";
       next;
     }
+
+    
    
     if (ref ($$hash{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$$hash{$lane}}) {
@@ -135,8 +137,11 @@ sub validate {
 
 
 	if ( $bcode =~ /^[ACGT]+\z/ ) {
+	  die "Both indexed and non-indexed samples in lane $lane\n" if ($$hash{$lane}{'default'});
+	  EASIH::Barcodes::barcode_set('illumina');
+
 	  ($bcode, my $valid) = EASIH::Barcodes::validate_barcode( $bcode );
-	  $errors .= "$bcode  in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
+	  $errors .= "'$bcode' in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
 	}
 	elsif($bcode =~ /^(\w+?)_(\w+)([F|R]{1,2})/) {
 	  my $barcode_set = $1;
@@ -145,6 +150,7 @@ sub validate {
 
 	  die "Only supports ill9 EASIH barcodes, not $barcode_set\n" if ( $barcode_set ne "ill9");
 	  die "Only supports m13 cloning site, not '$tag'\n" if ( $tag ne "m13");
+
 
 	}
 	else {
@@ -161,6 +167,40 @@ sub validate {
   return undef if ($errors eq "");
   return $errors;
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (20 Sep 2011)
+sub remove_easih_barcodes {
+  my ( $sample_sheet ) =  @_;
+
+
+  my %removed;
+
+
+  foreach my $lane_nr ( keys %$sample_sheet ) {
+
+    next if ( ref ($$sample_sheet{ $lane_nr }) ne "HASH");
+    next if ( ref ($$sample_sheet{ $lane_nr }) eq "HASH" && ! $$sample_sheet{ $lane_nr }{'default'});
+
+    foreach my $barcode ( keys %{$$sample_sheet{ $lane_nr }} ) {
+      next if ( $barcode eq 'default');
+      $removed{$lane_nr}{ $barcode } = $$sample_sheet{ $lane_nr }{ $barcode };
+    }
+    
+    $$sample_sheet{$lane_nr} = $$sample_sheet{ $lane_nr }{'default'};
+    
+  }
+
+
+  return ($sample_sheet, \%removed);
+
+  exit;
+}
+
 
 
 1;

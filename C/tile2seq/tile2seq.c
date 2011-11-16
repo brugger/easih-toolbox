@@ -36,6 +36,7 @@ int main(int argc, char **argv){
     //    if ( line[ index[9] ] == '0')
     //      continue;
 
+    // Change read nr to 2 if it is 2 as read 2 is the barcode read.
     if (line[ index[6]] == '3' )
       line[ index[6]] = '2';
 
@@ -44,12 +45,15 @@ int main(int argc, char **argv){
 	line[ index[7] + i] = 'N';
     }
 
+    int QV30 = 0;
     for(i=0;line[ index[8] + i];i++) {
 	line[ index[8] + i] -= 33;
+	if (line[ index[8] + i] >= 30 + 33)
+	  QV30++;
     }
 
 
-    printf("@%s_%s:%s:%s:%s:%s/%s\t%s\t%s\t%s\n", &line[0], &line[ index[0]], &line[ index[1]], &line[ index[2]], &line[ index[3]], &line[ index[4]], &line[ index[6]], &line[ index[7]], &line[ index[8]], &line[ index[9]]);
+    printf("@%s_%s:%s:%s:%s:%s/%s\t%s\t%s\t%s\t%d\n", &line[0], &line[ index[0]], &line[ index[1]], &line[ index[2]], &line[ index[3]], &line[ index[4]], &line[ index[6]], &line[ index[7]], &line[ index[8]], &line[ index[9]], QV30);
 
   }
   return(0);

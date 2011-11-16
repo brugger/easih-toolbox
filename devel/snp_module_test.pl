@@ -12,29 +12,14 @@ use Data::Dumper;
 use lib '/home/kb468/easih-toolbox/modules/';
 use EASIH::SNPs;
 
+EASIH::SNPs->New('dbsnp_134');
 print "Hellow world, let look at some snps...\n";
 
-print Dumper(EASIH::SNPs::phylop_score_GRCh37(10, 60007));
-print Dumper(EASIH::SNPs::phylop_score_GRCh37(10, 6000));
-print Dumper(EASIH::SNPs::phylop_score_GRCh37(10, 60002));
-print Dumper(EASIH::SNPs::phylop_score_GRCh37(10, 60009));
-print Dumper(EASIH::SNPs::phylop_score_GRCh37(10, 60037));
+my $snp = EASIH::SNPs::fetch_snp(1, 11370591);
 
-exit;
+print Dumper( $snp );
 
-print Dumper(EASIH::SNPs::fetch_snp_hg18(1, 536205));
-print Dumper(EASIH::SNPs::fetch_snp_GRCh37(1, 536205));
+my $cm = EASIH::SNPs::CM(1, 11370691);
+$cm = EASIH::SNPs::CM(1, 11377114);
 
-print Dumper(EASIH::SNPs::fetch_flags('rs75786306'));
-
-exit;
-
-
-print Dumper(EASIH::SNPs::population_stats('rs1048488', 'ASW'));
-print Dumper(EASIH::SNPs::population_stats('rs1048488'));
-
-
-
-print Dumper(EASIH::SNPs::fetch_rs('rs6690870'));
-
-
+print "At 1:11370691 $cm\n";

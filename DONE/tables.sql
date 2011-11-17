@@ -54,6 +54,30 @@ CREATE TABLE illumina_lane_stats (
   total_bases	      INT,
   QV30_bases	      INT,
 
+  Clusters	      INT,
+  ClustersSD	      FLOAT,
+  ClustersPF	      INT,
+  ClustersPFSD	      FLOAT,
+
+  Phas   	      FLOAT,
+  Preph	              FLOAT,
+
+  PrcAlign	      FLOAT,
+  PrcAlignSD	      FLOAT,
+
+  ErrRate	      FLOAT,
+  ErrRateSD	      FLOAT,
+
+  PrcPFClusters	      FLOAT,
+  PrcPFClustersSD     FLOAT,
+
+  FirstCycleInt	      FLOAT,
+  FirstCycleIntSD     FLOAT,
+  20CyclesInt	      FLOAT,
+  20CyclesIntSD	      FLOAT,
+
+
+
   PRIMARY KEY (rid, lane),
   KEY rid_idx (rid),
 

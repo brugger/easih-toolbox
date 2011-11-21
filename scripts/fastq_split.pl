@@ -41,22 +41,26 @@ if ( $first_file && $second_file ) {
 
   system "mkdir $output_dir" if ( ! -d $output_dir);
   
-  if ( $compress ) {
-    open ($wfh[1], "| gzip -c  > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
-    open ($wfh[2], "| gzip -c  > $output_dir/$second_file.$file_counter.gz") || die "could not open '$output_dir/$second_file.$file_counter.gz': $!\n";
-    print "$output_dir/$first_file.$file_counter.gz\t$output_dir/$second_file.$file_counter.gz\n";
-  }
-  else {
-    open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
-    open ($wfh[2], "> $output_dir/$second_file.$file_counter") || die "could not open '$output_dir/$second_file.$file_counter': $!\n";
-    print "$output_dir/$first_file.$file_counter\t$output_dir/$second_file.$file_counter\n";
-  }  
-  $file_counter++;
 
   my (@first, @second);
   @first  = &read1($rfh[1]); 
   @second = &read1($rfh[2]);
   while (@first && @second) {
+
+
+    if ( $printed == 0 ) {
+      if ( $compress ) {
+	open ($wfh[1], "| gzip -c  > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
+	open ($wfh[2], "| gzip -c  > $output_dir/$second_file.$file_counter.gz") || die "could not open '$output_dir/$second_file.$file_counter.gz': $!\n";
+	print "$output_dir/$first_file.$file_counter.gz\t$output_dir/$second_file.$file_counter.gz\n";
+      }
+      else {
+	open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
+	open ($wfh[2], "> $output_dir/$second_file.$file_counter") || die "could not open '$output_dir/$second_file.$file_counter': $!\n";
+	print "$output_dir/$first_file.$file_counter\t$output_dir/$second_file.$file_counter\n";
+      }  
+      $file_counter++;
+    }
 
     if ($first[0] eq $second[0]) { # mate pair
       print {$wfh[1]} $first[1]; 
@@ -81,19 +85,6 @@ if ( $first_file && $second_file ) {
     if ($printed >= $entries) {
       close($wfh[1]);
       close($wfh[2]);
-      
-      if ( $compress ) {
-	open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
-	open ($wfh[2], "| gzip -c > $output_dir/$second_file.$file_counter.gz") || die "could not open '$output_dir/$second_file.$file_counter.gz': $!\n";
-	print "$output_dir/$first_file.$file_counter.gz\t$output_dir/$second_file.$file_counter.gz\n";
-      }
-      else {
-	open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
-	open ($wfh[2], "> $output_dir/$second_file.$file_counter") || die "could not open '$output_dir/$second_file.$file_counter': $!\n";
-	print "$output_dir/$first_file.$file_counter\t$output_dir/$second_file.$file_counter\n";
-      }  
-      
-      $file_counter++;
       $printed = 0;
     }
   }
@@ -120,25 +111,9 @@ else {
 
   $first_file  =~ s/.*\///;
 
-  if ( $compress ) {
-    open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
-    print "$output_dir/$first_file.$file_counter.gz\n";
-  }
-  else {
-    open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
-    print "$output_dir/$first_file.$file_counter\n";
-  }  
-  $file_counter++;
-
   while ( my @first  = &read1($rfh[1])) {
 
-    print {$wfh[1]} $first[1];
-    $printed++;
-
-
-    if ($printed >= $entries) {
-      close($wfh[1]);
-      
+    if ( $printed == 0 ) {
       if ( $compress ) {
 	open ($wfh[1], "| gzip -c > $output_dir/$first_file.$file_counter.gz")  || die "could not open '$output_dir/$first_file.$file_counter.gz': $!\n";
 	print "$output_dir/$first_file.$file_counter.gz\n";
@@ -147,8 +122,16 @@ else {
 	open ($wfh[1], "> $output_dir/$first_file.$file_counter")  || die "could not open '$output_dir/$first_file.$file_counter': $!\n";
 	print "$output_dir/$first_file.$file_counter\n";
       }  
-      
       $file_counter++;
+    }
+
+
+    print {$wfh[1]} $first[1];
+    $printed++;
+    
+    
+    if ($printed >= $entries) {
+      close($wfh[1]);
       $printed = 0;
     }
   }

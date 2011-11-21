@@ -41,7 +41,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,mem=2500mb,walltime=05:00:00"},
 		 
 		 'std-generate'      => { function   => 'bwa_generate',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=05:00:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=3500mb,walltime=08:00:00",},
 
 		 'std-tag_sam'       => { function   => 'sam_add_tags',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,mem=2500mb,walltime=01:00:00",},
@@ -188,7 +188,7 @@ my $username = scalar getpwuid $<;
 if ( $opts{Q} ) {
 
   $opts{'1'} = join(",", sort(glob("$opts{Q}*.1.fq"), glob("$opts{Q}*.1.fq.gz")));
-  $opts{'2'} = join(",", sort(glob("$opts{Q}*.2.fq"), glob("$opts{Q}*.1.fq.gz")));
+  $opts{'2'} = join(",", sort(glob("$opts{Q}*.2.fq"), glob("$opts{Q}*.2.fq.gz")));
 
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
@@ -252,12 +252,12 @@ $align_param .= " -e5 "     if ( $loose_mapping);
 
 $no_sw_pair     = 1 if ($platform eq "SOLID");
 my $sampe_param = "";
-$sampe_param    = '-s ' if ( @$first && @$second && $no_sw_pair);
-$sampe_param    = "-M $insert_size "  if ( @$first && @$second && $insert_size);
+$sampe_param    = '-s ' if ( $first && $second && $no_sw_pair);
+$sampe_param    = "-M $insert_size "  if ( $first && $second && $insert_size);
 
 
 # Only paired ends runs gets marked duplicates.
-$flow{'std-merge'} = 'std-mark_dup' if ((@$first && @$second) || $mark_dup );
+$flow{'std-merge'} = 'std-mark_dup' if (($first && $second) || $mark_dup );
 
 
 my $bwa             = EASIH::JMS::Misc::find_program('bwa');
@@ -349,7 +349,7 @@ my %split2files;
 sub fastq_split {
 
   foreach my $first_file ( @$first ) {
-    my $second_file = shift @$second if ( @$second );
+    my $second_file = shift @$second if ( $second );
 
     my $tmp_file = EASIH::JMS::tmp_file();
     # keep track of the original file
@@ -373,7 +373,7 @@ sub bwa_aln {
     
     if ( $first && $second ) {
       foreach my $first_file ( @$first ) {
-	my $second_file = shift @$second if ( @$second );
+	my $second_file = shift @$second if ( $second );
 	$split2files{$first_file} = $first_file; 
 	
 	my $first_tmp_file  = EASIH::JMS::tmp_file(".sai");
@@ -544,8 +544,8 @@ sub realign_indel {
   if (  -z $interval_file ) {
     $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
   }
-  else {
-    $cmd = "$gatk -T IndelRealigner -baq CALCULATE_AS_NECESSARY -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file";
+  else { #-baq CALCULATE_AS_NECESSARY
+    $cmd = "$gatk -T IndelRealigner  -targetIntervals  $interval_file -baq CALCULATE_AS_NECESSARY  -L $region -o $tmp_file -R $reference -I $tmp_bam_file";
   }
 
   EASIH::JMS::submit_job($cmd, $tmp_file);
@@ -723,10 +723,11 @@ sub validate_input {
     push @errors, "$first_file does not exist"  if ( ! -e $first_file );
   }
 
-  foreach my $second_file ( @$second ) {
-    push @errors, "$second_file does not exist"  if ( ! $second_file );
+  if ( $second ) {
+    foreach my $second_file ( @$second ) {
+      push @errors, "$second_file does not exist"  if ( ! $second_file );
+    }
   }
-
 
   # Things related to the reference sequence being used.
   

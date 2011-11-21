@@ -2,14 +2,21 @@ package EASIH::JMS::Picard;
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 use EASIH::JMS;
 use EASIH::JMS::Misc;
 
-my $picard = EASIH::JMS::Misc::find_program('picard');
+my $picard   = EASIH::JMS::Misc::find_program('picard');
 
 sub merge { 
   my (@inputs) = @_;
+
+  print Dumper( \@inputs);
+
+  @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
+
+  print Dumper( \@inputs);
 
   my $tmp_file = EASIH::JMS::tmp_file(".merged.bam");
 
@@ -44,8 +51,6 @@ sub sort {
   my $cmd = "$picard -T SortSam  I= $input O= $tmp_file SO=coordinate VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/";
   EASIH::JMS::submit_job($cmd, $tmp_file);
 }
-
-
 
 sub fixmate_n_sort  { 
   my ($input) = @_;

@@ -14,6 +14,7 @@ use EASIH::HTML;
 use EASIH::DONE;
 
 
+#EASIH::DONE::Connect('done_dev');
 
 
 
@@ -45,15 +46,17 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   $name =~ s/.*\///;
   
 
-  my @traffic_light = ([{value => 'Bases >=Q30:'}, {value=>'<70%', bgcolor=>'red'},{value=>'70-90%', bgcolor=>'yellow'},{value=>'>90%', bgcolor=>'#00DD00'}],
-		       [{value => 'Duplicates sequences:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}],
-		       [{value => 'Partial adaptors:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}],
-		       [{value => 'Mean AC:'}, {value=>'<40% or > 60%', bgcolor=>'red'},{value=>'40-45% or 55-60%', bgcolor=>'yellow'},{value=>'45-55%', bgcolor=>'#00DD00'}]);
+  my @traffic_light;
+  push @traffic_light,["NOT ANALYSED YET..."] if (!$Q30bases && !$duplicates && !$partial_adaptors && !$Avg_AC );
+  push @traffic_light,[{value => 'Bases >=Q30:'}, {value=>'<70%', bgcolor=>'red'},{value=>'70-90%', bgcolor=>'yellow'},{value=>'>90%', bgcolor=>'#00DD00'}] if ( $Q30bases );
+  push @traffic_light,[{value => 'Duplicates sequences:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}] if ( $duplicates );
+  push @traffic_light, [{value => 'Partial adaptors:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}] if ( $partial_adaptors );
+  push @traffic_light, [{value => 'Mean AC:'}, {value=>'<40% or > 60%', bgcolor=>'red'},{value=>'40-45% or 55-60%', bgcolor=>'yellow'},{value=>'45-55%', bgcolor=>'#00DD00'}] if ( $Avg_AC );
   
 
   easih_top();
   
-  print " <H1>QC report for: $name</H1>";
+  print " <H1>QC report for: $name [$fid]</H1>";
   
 
   my @data = ([{value=>'Filename:', bgcolor => 'grey'}, {value=>"$name", bgcolor => 'grey'}],
@@ -69,22 +72,22 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   $colour = 'yellow' if ($Q30bases >= 70 );
   $colour = '#00DD00'  if ($Q30bases >= 90 );
   
-  push @data, [{value=>'Q30 bases:', bgcolor => $colour}, {value=>"$Q30bases %", bgcolor => $colour}];
+  push @data, [{value=>'Q30 bases:', bgcolor => $colour}, {value=>"$Q30bases %", bgcolor => $colour}] if ($Q30bases);
   
   $colour = 'red';
   $colour = 'yellow' if ($duplicates <10 );
   $colour = '#00DD00'  if ($duplicates < 1 );
-  push @data, [{value=>'Duplicates:', bgcolor => $colour}, {value=>"$duplicates %", bgcolor => $colour}];
+  push @data, [{value=>'Duplicates:', bgcolor => $colour}, {value=>"$duplicates %", bgcolor => $colour}] if ($duplicates);
   
   $colour = 'red';
   $colour = 'yellow' if ($partial_adaptors < 10  );
   $colour = '#00DD00'  if ($partial_adaptors < 1 );
-  push @data, [{value=>'Partial adaptors:', bgcolor => $colour}, {value=>"$partial_adaptors %", bgcolor => $colour}];
+  push @data, [{value=>'Partial adaptors:', bgcolor => $colour}, {value=>"$partial_adaptors %", bgcolor => $colour}] if ($partial_adaptors);
   
   $colour = 'red';
   $colour = 'yellow' if ($Avg_AC > 40 && $Avg_AC < 60);
   $colour = '#00DD00'  if ($Avg_AC > 45 && $Avg_AC < 55);
-  push @data, [{value=>'Mean AC:', bgcolor => $colour}, {value=>"$Avg_AC %", bgcolor => $colour}];
+  push @data, [{value=>'Mean AC:', bgcolor => $colour}, {value=>"$Avg_AC %", bgcolor => $colour}] if ($Avg_AC);
   
 #, $partial_adaptors, $Avg_AC
 
@@ -159,40 +162,94 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
   my $run_name = EASIH::DONE::fetch_run_name( $rid );
   easih_top();
-  print "<h1> Stats for run: $run_name</h1>";
-
+  print "<h1> Stats for run: '$run_name'</h1>";
 
   my @lanes  = EASIH::DONE::fetch_illumina_lane_stats_by_rid($rid);
-  my @mplexs = EASIH::DONE::fetch_illumina_multiplex_stats_by_rid($rid);
+  my @mplexs = EASIH::DONE::fetch_illumina_sample_stats_by_rid($rid);
 
-  my @data = (["lane", "Sample", "total", "Pass filter", "Percentage PF"]);
-  foreach my $lane ( @lanes) {
-    
-    
-    my @lvs = ("lane $$lane[2].$$lane[3]", "<a href=$0?QC=1&fid=$$lane[1]> $$lane[4]</a>", $$lane[5], $$lane[6], sprintf("%.2f %%", $$lane[6]*100/$$lane[5]));
+  print STDERR Dumper( @lanes );
 
-    @lvs = ("lane $$lane[2].$$lane[3]", $$lane[4], $$lane[5], $$lane[6], sprintf("%.2f %%", $$lane[6]*100/$$lane[5])) if ($$lane[4] eq "MULTIPLEXED");
+  my @rundata;
+  foreach my $lane ( sort { $$a[1] <=> $$b[1] || $$a[2] <=> $$b[2] } @lanes ) {
+    my @lane_data;
 
-    
-
-    if ($$lane[5] < 30_000_000 || $$lane[6]*100/$$lane[5] < 75 ) {
-      my @clvs;
-      foreach my $lv ( @lvs ) {
-	push @clvs, {value=> $lv, bgcolor=>'#CC0000'};
+    foreach my $lane_data (@$lane ) {
+      if ( $lane_data > 100 && $lane_data < 1000) {
+	$lane_data = sprintf("%.2fK", $lane_data/1000);
       }
-      @lvs = @clvs;
-
+      elsif ( $lane_data > 1000  && $lane_data < 10000) {
+	$lane_data = sprintf("%.1fK", $lane_data/1000);
+      }
+      elsif ( $lane_data > 10000  && $lane_data < 100000) {
+	$lane_data = sprintf("%dK", $lane_data/1000);
+      }
     }
 
-    push @data, \@lvs;
+    push @lane_data, @$lane[2..6], 
+                     "$$lane[7]&plusmn;$$lane[8]", "$$lane[9]&plusmn;$$lane[10]",  "$$lane[11] / $$lane[12]", 
+                     "$$lane[13]&plusmn;$$lane[14]","$$lane[15]&plusmn;$$lane[16]","$$lane[17]&plusmn;$$lane[18]",
+                     "$$lane[19]&plusmn;$$lane[20]","$$lane[21]&plusmn;$$lane[22]";
+    push @rundata, \@lane_data;
+  }
+  print EASIH::HTML::advanced_table(\@rundata, 1, 1, 1, undef, undef, 600);
 
-    if ( $$lane[4] eq "MULTIPLEXED") {
-      foreach my $mplex (@mplexs ) {
-	if ( $$lane[2] == $$mplex[2] && $$lane[3] == $$mplex[3]) {
-	  push @data, [undef, "<a href=$0?QC=1&fid=$$mplex[1]>$$mplex[4]</a>", $$mplex[5], $$mplex[7], "$$mplex[6] %"];
+
+  my @data = (["Lane", "Sample", "total", "Pass filter", "% PF", "%QV30 bases"]);
+  foreach my $lane ( sort { $$a[2] <=> $$b[2] } @lanes) {
+
+#    print STDERR Dumper( $lane );
+    my $QV30 = "NA";
+    $QV30 = sprintf("'%s', '%s'", $$lane[6], $$lane[5]);
+    $QV30 = sprintf("%.2f %%", $$lane[6]*100/$$lane[5]) if ( $$lane[6] && $$lane[5] );
+
+      my @lvs = ("Lane $$lane[2]", " ", $$lane[3], $$lane[4], sprintf("%.2f %%", $$lane[4]*100/$$lane[3]), $QV30);
+
+      if ($$lane[4] < 30_000_000 || $$lane[4]*100/$$lane[3] < 75 ) {
+	my @clvs;
+	foreach my $lv ( @lvs ) {
+	  push @clvs, {value=> $lv, bgcolor=>'#CC0000'};
 	}
+	@lvs = @clvs;
       }
+      else {
+	my @clvs;
+	foreach my $lv ( @lvs ) {
+	  push @clvs, {value=> $lv, bgcolor=>'#00CC00'};
+	}
+	@lvs = @clvs;
+      }
+      
+      push @data, \@lvs;
+
+
+    my %sample_stats;
+    foreach my $mplex (@mplexs ) {
+
+      next if ( $$lane[2] != $$mplex[2] );
+      
+      $sample_stats{$$mplex[4]}{ perc  } = $$mplex[6];
+      $sample_stats{$$mplex[4]}{ reads } = $$mplex[7];
+      $sample_stats{$$mplex[4]}{ bcode } = $$mplex[5];
+      push @{$sample_stats{$$mplex[4]}{fids}}, $$mplex[1];
+
+      $sample_stats{$$mplex[4]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
     }
+
+
+    
+    foreach my $sample (sort keys %sample_stats ) {
+
+      $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
+      
+      $sample_stats{$sample}{ filename } =~ s/^.*\///;
+      $sample_stats{$sample}{ filename } =~ s/\.gz//;
+      $sample_stats{$sample}{ filename } =~ s/\.fq//;
+      $sample_stats{$sample}{ filename } =~ s/\.[12]\z//;
+
+      push @data, ["<a href=$0?QC=1&fid=$sample_stats{$sample}{fids}>$sample</a>", $sample_stats{$sample}{ filename }, $sample_stats{$sample}{ bcode }, $sample_stats{$sample}{ reads }, "$sample_stats{$sample}{ perc } %"] 
+
+    }
+
 
   }
   print EASIH::HTML::advanced_table(\@data, 1, 1, 1, undef, undef, 600);
@@ -246,7 +303,7 @@ elsif( $EASIH::HTML::parameters{ 'runs' } ) {
 
   my @runs = (['Run', 'Platform', 'Samples']) ;
   foreach my $run ( sort {$$b[1] cmp $$a[1] } EASIH::DONE::fetch_runs()) {
-    
+
     my $files = int( EASIH::DONE::fetch_samples_from_run($$run[1]));
     push @runs, ["<a href='$0?rid=$$run[0]'> $$run[1]</a>", $$run[2], $files];
   }
@@ -563,6 +620,16 @@ sub print_basesplits {
 sub print_adaptor_histogram {
   my ($fid, $domid) = @_;
 
+  my @data;
+  my @adaptors = EASIH::DONE::fetch_adaptors( $fid );
+
+  my %splits;
+  foreach my $split ( @adaptors ) {
+    $splits{$$split[0]} = $$split[1];
+  }
+
+  return if ( !@adaptors);
+
   print '
     <script type="text/javascript">
       google.load("visualization", "1", {packages:["corechart"]});
@@ -572,15 +639,6 @@ sub print_adaptor_histogram {
         data.addColumn("string", "Position");
         data.addColumn("number", "Counts");
 ';
-
-
-  my @data;
-  my @adaptors = EASIH::DONE::fetch_adaptors( $fid );
-
-  my %splits;
-  foreach my $split ( @adaptors ) {
-    $splits{$$split[0]} = $$split[1];
-  }
 
   print"          data.addRows(".(keys %splits ).");\n";
 
@@ -597,7 +655,7 @@ sub print_adaptor_histogram {
   var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
         chart.draw(data, {title: "Partial adaptor mapping",
                           hAxis: {title: "Count"},
-                          vAxis: {title: "QVs"}
+                          vAxis: {title: "Adaptor"}
                          });
       }
     </script>
@@ -613,6 +671,17 @@ sub print_adaptor_histogram {
 sub print_qv_histogram {
   my ($fid, $domid) = @_;
 
+
+  my @data;
+  my @splits = EASIH::DONE::fetch_qvs_histogram( $fid );
+
+  my %splits;
+  foreach my $split ( @splits ) {
+    $splits{$$split[0]} = $$split[1];
+  }
+
+  return if ( !@splits);
+
   print '
     <script type="text/javascript">
       google.load("visualization", "1", {packages:["corechart"]});
@@ -622,15 +691,6 @@ sub print_qv_histogram {
         data.addColumn("string", "QV Score");
         data.addColumn("number", "Counts");
 ';
-
-
-  my @data;
-  my @splits = EASIH::DONE::fetch_qvs_histogram( $fid );
-
-  my %splits;
-  foreach my $split ( @splits ) {
-    $splits{$$split[0]} = $$split[1];
-  }
 
   print"          data.addRows(".($splits[-1][0]  ).");\n";
 
@@ -662,6 +722,11 @@ sub print_qv_histogram {
 sub print_dups_histogram {
   my ($fid, $domid) = @_;
 
+
+  my @dups = EASIH::DONE::fetch_duplicates( $fid );
+
+  return if (!@dups);
+
   print '
     <script type="text/javascript">
       google.load("visualization", "1", {packages:["corechart"]});
@@ -671,9 +736,6 @@ sub print_dups_histogram {
         data.addColumn("string", "QV Score");
         data.addColumn("number", "Counts");
 ';
-
-
-  my @dups = EASIH::DONE::fetch_duplicates( $fid );
 
   my %splits;
   foreach my $dup ( @dups ) {

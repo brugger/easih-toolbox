@@ -46,6 +46,18 @@ sub job_push {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (24 Nov 2011)
+sub dump_jobs {
+  use Data::Dumper;
+  print Dumper(\@jobs);
+  
+}
+
+
+
 
 # 
 # 
@@ -86,7 +98,7 @@ sub run_parallel {
 
       my $function = shift @$param;
       
-      my $cpid = create_child($function, @$param);
+      my $cpid = create_child($total, $function, @$param);
       $running_nodes++;
       $total++;
       push @cpids, $cpid;
@@ -143,11 +155,15 @@ sub run_parallel {
 
 
 
+
+
 sub create_child {
-  my ($command, @params) = @_;
+  my ($id, $command, @params) = @_;
+
+#  print "$command @params\n";
 
   my $pid;
-  if ($pid = open($fhs[$params[0]], "-|")) {
+  if ($pid = open($fhs[$id], "-|")) {
     ;
   } 
   else {

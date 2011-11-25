@@ -10,8 +10,8 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-#my $debug = 0;
-my $debug = 1;
+my $debug = 0;
+#$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -39,8 +39,12 @@ BEGIN {
 use EASIH;
 use EASIH::DONE;
 use EASIH::Sample;
+use EASIH::Illumina::Summary;
 use EASIH::Illumina::Sample_sheet;
 use EASIH::Parallel;
+
+
+EASIH::DONE::Connect('done_dev') if ($debug); 
 
 my %opts;
 getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhnbd", \%opts);
@@ -80,6 +84,7 @@ my $indir       = $opts{'i'} || "./";
 my $runfolder   = id_run_folder();
 my $datamonger  = $opts{'d'} || 0;
 my $outdir      = $opts{'o'};
+$outdir = "/tmp/BC2FQ/" if ($debug);
 my $parallel =  1;
 $parallel = 0 if ($opts{S});
 
@@ -140,15 +145,46 @@ if ($opts{A}) {
   $$sample_names{8} = "$opts{A}_".$counter++ if ( !$opts{'8'} );
 }
 
-$sample_names = validate_lane_names( $sample_names);
-
-my (%fhs, %fids);
-
+$runfolder = "ILL_TEST5" if ( $debug );
 my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);
 my %reads_pr_sample;
 
-#for(my $lane = 1; $lane<=8; $lane++) {
-for(my $lane = 3; $lane<=8; $lane++) {
+my %filenames;
+$sample_names = validate_lane_names( $sample_names);
+
+
+
+if ($datamonger) {
+  use EASIH::Mail;
+  my $to = 'kim.brugger@easih.ac.uk';
+
+  my $body = "";
+
+  foreach my $lane_nr ( keys %$removed_samples ) {
+    foreach my $tag (keys %{$$removed_samples{$lane_nr}} ) {
+      my @files;
+      foreach my $file ( keys %{$filenames{ $lane_nr }}) {
+	push @files, $filenames{ $lane_nr }{ $file };
+      }
+      $body .= "$$removed_samples{$lane_nr}{$tag} with EASIH or no barcode $tag might needs to be removed/extracted from: " . join(", ", @files) . "\n";
+
+    }
+  }
+
+
+  EASIH::Mail::send($to, 
+		    "[easih-done] unremoved EASIH barcode readsreads", 
+		      "$body") if ($body);
+
+
+}
+
+
+
+my (%fhs, %fids);
+
+for(my $lane = 1; $lane<=8; $lane++) {
+#for(my $lane = 4; $lane<=8; $lane++) {
 
   next if (!$$sample_names{ $lane });
 
@@ -165,12 +201,11 @@ else {
 }
 
 
+
 if ( $datamonger ) {
 
-  # added the summed numbers to the file table, done as an update 
-  foreach my $fid ( keys %reads_pr_sample ) {
-    EASIH::DONE::update_file($fid, $reads_pr_sample{$fid});
-  }
+  my $res = EASIH::Illumina::Summary::readin_summaries($indir);
+  EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
 
   EASIH::DONE::add_offloading_status($runfolder, 
 				     "ILLUMINA", 
@@ -183,30 +218,27 @@ if ( $datamonger ) {
 # 
 # 
 # Kim Brugger (17 Jun 2011)
-sub open_outfile {
+sub outfile {
   my ( $sample_name, $lane_nr ) = @_;
 
   return $fhs{ $lane_nr }{ $sample_name } if ( $fhs{ $lane_nr }{ $sample_name } );
 
 #  my ($basename, $read_nr) = $sample_name =~ /^(.*?)\.[12]/;
 
-  use EASIH::Sample;
-  my ($base_filename, $error) = EASIH::Sample::sample2outfilename( $sample_name, $outdir);
-
-  # simplifies ////// to /
-  $base_filename =~ s/\/{2,}/\//;
+  my $base_filename = $filenames{ $lane_nr }{ $sample_name } || die "No filename for '$sample_name' in lane '$lane_nr'\n";
   $base_filename .= ".fq.gz";
-
 
   my $fh;
   open ($fh, "| gzip -c > $base_filename") || fail( "Could not open '$base_filename': $!\n", "BASECALL2FQ_PATH_ERROR");
   $fhs{ $lane_nr }{ $sample_name }  = $fh;
+
+
   
   if ( $datamonger ) {
     
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($base_filename);
     my $fid = EASIH::DONE::add_file($base_filename, $sample, $project, $runfolder, 'ILLUMINA');
-    $fids{ $sample_name }  = $fid;
+    $fids{ $lane_nr }{ $sample_name }  = $fid;
   }
   
   return $fh;
@@ -231,47 +263,61 @@ sub analyse_lane {
   # Get all the files for the lane.
   my @files = glob("$indir/s_$lane_nr\_1_*_qseq.txt");
 
-  my ($lane_total, $lane_pass) = (0, 0);
+  my ($lane_total, $lane_pass, $lane_QV30, $lane_bases) = (0, 0, 0, 0);
+  my $read_length = 0;
   my %sample_stats;
 
   foreach my $file (@files) {
     my $tile_stats = analyse_tile( $file, $lane_nr );
-    $lane_total += $$tile_stats{ 'lane_total' } || 0;
-    $lane_pass  += $$tile_stats{ 'lane_pass'  } || 0;
+    $lane_total   += $$tile_stats{ 'lane_total' } || 0;
+    $lane_pass    += $$tile_stats{ 'lane_pass'  } || 0;
+    $lane_QV30    += $$tile_stats{ 'lane_QV30'  } || 0;
+    $lane_bases   += $$tile_stats{ 'lane_bases' } || 0;
+
+    $read_length = $$tile_stats{'lane_read_length'};
 
     foreach my $k ( keys %$tile_stats ) {
       next if ( $k =~ /^lane_/ );
+#      print "$k\n";
+      
       $sample_stats{ $k } += $$tile_stats{ $k };
     }
 
     last if ($debug);
   }
 
-  printf("lane $lane_nr\t\t$lane_total\t$lane_pass (%.2f %%)\t%.2f avg clusters per tile\n", $lane_pass*100/$lane_total, $lane_pass/120);
+  printf("lane $lane_nr\t\t$lane_total\t$lane_pass (%.2f %%)\t%.2f avg clusters per tile. %.2f%% bases >= QV30\n", $lane_pass*100/$lane_total, $lane_pass/120, 100*$lane_QV30/$lane_bases);
 
-  foreach my $k ( keys %sample_stats ) {
-    my $perc = sprintf("%.2f", $sample_stats{$k}*100/$lane_pass);
-    my $barcode = $bcode2sample{$k} || "";
-    printf("lane $lane_nr\t$k\t$barcode\t$sample_stats{$k}\t$perc %%\n");
+  
+
+  EASIH::DONE::add_illumina_lane_stats( $rid, 1, $lane_nr, $lane_total, $lane_pass, $lane_bases, $lane_QV30 )   
+      if( $datamonger );
+
+
+  foreach my $sample ( keys %sample_stats ) {
+    my $perc = sprintf("%.2f", $sample_stats{$sample}*100/$lane_pass);
+    my $barcode = $bcode2sample{$sample} || "";
+    printf("lane $lane_nr\t$sample\t$barcode\t$sample_stats{$sample}\t$perc %%\n");
+
+    if($datamonger) {
+
+      if ( $fids{ $lane_nr }{"$sample.1"}) {
+	EASIH::DONE::add_illumina_sample_stats( $rid, $fids{$lane_nr}{"$sample.1"}, $lane_nr, 1, "$sample", $barcode, $sample_stats{$sample}, $perc);
+	EASIH::DONE::update_file($fids{$lane_nr}{"$sample.1"}, $sample_stats{$sample}, $read_length);
+      }
+
+      if ( $fids{ $lane_nr }{"$sample.2"}) {
+	EASIH::DONE::add_illumina_sample_stats( $rid, $fids{$lane_nr}{"$sample.2"}, $lane_nr, 2, "$sample", $barcode, $sample_stats{$sample}, $perc);
+	EASIH::DONE::update_file($fids{$lane_nr}{"$sample.1"}, $sample_stats{$sample}, $read_length);
+      }
+    }
   }
 
-  if($datamonger) {
-#    EASIH::DONE::add_illumina_lane_stats( $rid, $fids{"$sample.1"}, $lane_nr, 1, $sample, $lane_total, $lane_pass );
-
-#     foreach my $k ( keys %{$multiplex_stats{pass}} ) {
-#       my $sample_name = $$sample_names{ $lane_nr }{ $k };
-#       my $perc = sprintf("%.2f", $multiplex_stats{pass}{$k}*100/$multiplex_stats{total});
-#       printf("lane $lane_nr\t$sample_name\t$k\t$multiplex_stats{pass}{$k}\t$perc %%\n");
-      
-#       EASIH::DONE::add_illumina_multiplex_stats( $rid, $fids{"$sample_name.1"}, $lane_nr, 1, $sample_name, $k, $multiplex_stats{pass}{$k}, $multiplex_stats{pass}{$k} + ($multiplex_stats{fail}{$k} || 0), $perc);
-      
-#       $reads_pr_sample{$fids{"$sample_name.1"}} += $multiplex_stats{pass}{$k} if ( $datamonger);
-#       $reads_pr_sample{$fids{"$sample_name.2"}} += $multiplex_stats{pass}{$k} if ( $datamonger);
-#     }
+  foreach my $fh ( keys %{$fhs{ $lane_nr }} ) {
+    close $fh;
   }
 
 
-#  return ($in1, $out1, $in2, $out2);
 }
 
 # 
@@ -297,7 +343,7 @@ sub analyse_tile {
   # I am so going to regret this later on, I am sure of it...
   ($fh2, $fh3) = ($fh3, $fh2) if ( $fh3 );
 
-  
+  my $read_length;
   my %stats;
     
   if ( $fh3 ) {
@@ -317,25 +363,31 @@ sub analyse_tile {
       chomp ( $line2 );
 
       my $barcode = verify_bcode($bases3, @bar_codes) if (ref $$sample_names{ $lane_nr } eq "HASH");
-      my ($name1, $bases1, $qual1, $pf1) = split /\t/, $line1;
-      my ($name2, $bases2, $qual2, $pf2) = split /\t/, $line2 if ($fh2);
+      my ($name1, $bases1, $qual1, $pf1, $QV30_1) = split /\t/, $line1;
+      my ($name2, $bases2, $qual2, $pf2, $QV30_2) = split /\t/, $line2 if ($fh2);
       next if (! $barcode && ref $$sample_names{ $lane_nr } eq "HASH");
-
+      
+ 
       my $sample_name = $$sample_names{ $lane_nr };
       $sample_name = $$sample_names{ $lane_nr }{ $barcode } if ( $barcode && ref $$sample_names{ $lane_nr } eq "HASH");
 
-
-
-      my $bfout = open_outfile("$sample_name.1", $lane_nr );
+      my $bfout = outfile("$sample_name.1", $lane_nr );
       print $bfout "$name1\n$bases1\n+\n$qual1\n";
 
       if ($fh2) {
-	my $bfout = open_outfile("$sample_name.2", $lane_nr );
+	my $bfout = outfile("$sample_name.2", $lane_nr );
 	print $bfout "$name2\n$bases2\n+\n$qual2\n";
+	$paired_data = 1;
+
       }
 
       $stats{ $sample_name }++;
-      $stats{lane_pass}++;
+      $stats{'lane_pass'}++;
+      $stats{'lane_QV30'} += $QV30_1 if ($QV30_1);
+      $stats{'lane_QV30'} += $QV30_2 if ($QV30_2);
+      $read_length = length($bases1) if (! $read_length);
+      $stats{'lane_bases'    } += $read_length;
+      $stats{'lane_bases'    } += $read_length if ($fh2);
     }
   }
   else {
@@ -343,32 +395,41 @@ sub analyse_tile {
 
     while (my $line1 = <$fh1>) {
       $stats{lane_total}++;
-      
-      my $line2 = <$fh2> if ($fh2);
       chomp ( $line1 );
-      chomp ( $line2 );
+
+      my $line2 = <$fh2> if ($fh2);
+      chomp ( $line2 )   if ($fh2);
       
-      my ($name1, $bases1, $qual1, $pf1) = split /\t/, $line1;
-      my ($name2, $bases2, $qual2, $pf2) = split /\t/, $line2 if ($fh2);
+      my ($name1, $bases1, $qual1, $pf1, $QV30_1) = split /\t/, $line1;
+      my ($name2, $bases2, $qual2, $pf2, $QV30_2) = split /\t/, $line2 if ($fh2);
 
       next if ( ! $pf1 );
 
       my $sample_name = $$sample_names{$lane_nr};
 
-      my $fout = open_outfile("$sample_name.1", $lane_nr );
+      my $fout = outfile("$sample_name.1", $lane_nr );
       print $fout "$name1\n$bases1\n+\n$qual1\n";
 
       if ($fh2) {
-	my $fout = open_outfile("$sample_name.2", $lane_nr );
+	my $fout = outfile("$sample_name.2", $lane_nr );
 	print $fout "$name2\n$bases2\n+\n$qual2\n";
+	$paired_data = 1;
+
       }
 
       $stats{ $sample_name }++;
 
 
-      $stats{lane_pass}++;
+      $stats{'lane_pass'}++;
+      $stats{'lane_QV30'} += $QV30_1 if ($QV30_1);
+      $stats{'lane_QV30'} += $QV30_2 if ($QV30_2);
+      $read_length = length($bases1) if (! $read_length);
+      $stats{'lane_bases'} += $read_length;
+      $stats{'lane_bases'} += $read_length if ($fh2);
     }
   }
+
+  $stats{'lane_read_length'} = $read_length;
 
   return (\%stats);
 }
@@ -384,12 +445,8 @@ sub readin_sample_sheet {
 
   fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
-  $indexed_run = EASIH::Illumina::Sample_sheet::indexed_run( $res );  
-
-
   ($res, my $removed_samples) = EASIH::Illumina::Sample_sheet::remove_easih_barcodes( $res );
-
-#  die Dumper( $removed_samples );
+  $indexed_run = EASIH::Illumina::Sample_sheet::indexed_run( $res );  
 
   return ($res, $removed_samples);
 
@@ -409,23 +466,47 @@ sub validate_lane_names {
     fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
   }
 
-
-  my %basenames;
+  # assign filenames to each sample in each lane, as this script can/will
+  # run in parallel this has to be done before we loose control.
   for ( my $lane =1; $lane <=8;$lane++) {
-    
     next if ( ! $$sample_names{ $lane });
 
     if (ref ($$sample_names{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$$sample_names{$lane}}) {
-	$basenames{ $$sample_names{$lane}{$bcode}} = -1;
+
+	my $sample_name = $$sample_names{$lane}{$bcode};
+
+	my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.1", $outdir);
+
+	$filenames{ $lane }{ "$sample_name.1" } = "$base_filename";
+	outfile("$sample_name.1", $lane);
+
+
+	if (( $indexed_run  && (-e "$indir/s_1_3_0001_qseq.txt" || -e "$indir/s_1_3_1101_qseq.txt")) ||
+	    ( !$indexed_run && (-e "$indir/s_1_2_0001_qseq.txt"|| -e "$indir/s_1_2_1101_qseq.txt"))) {
+	  my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.2", $outdir);
+	  $filenames{ $lane }{ "$sample_name.2" } = "$base_filename";
+	  outfile("$sample_name.2", $lane);
+	  $paired_data = 1;
+	}
       }
     }
     else {
-      $basenames{ $$sample_names{$lane} } = -1;
+      my $sample_name = $$sample_names{$lane};
+      my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.1", $outdir);
+      $filenames{ $lane }{ "$sample_name.1" } = "$base_filename";
+      outfile("$sample_name.1", $lane);
+
+      if (( $indexed_run  &&  (-e "$indir/s_1_3_0001_qseq.txt" || -e "$indir/s_1_3_1101_qseq.txt")) ||
+	  ( !$indexed_run &&  (-e "$indir/s_1_2_0001_qseq.txt" || -e "$indir/s_1_2_1101_qseq.txt")) ) {
+	my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.2", $outdir);
+	$filenames{ $lane }{ "$sample_name.2" } = "$base_filename";
+	outfile("$sample_name.2", $lane);
+	$paired_data = 1;
+      }
     }
   }
   
-
 
   if ( $outdir ) {
     if ( -e "$outdir" && ! -d "$outdir") {
@@ -480,7 +561,7 @@ sub verify_bcode {
 
 
 # 
-# Need the rulfolder for the datamongering. As the script can be
+# Need the runfolder for the datamongering. As the script can be
 # called in every possible way this is a tad complicated
 # 
 # Kim Brugger (17 Jun 2011)
@@ -509,6 +590,8 @@ sub id_run_folder {
   if ( $dir  =~ /\.\./ ) {
     fail("Cannot handle input paths containing: ../\n", "BASECALL2FQ_INPATH_ERROR");
   }
+
+  $indir = $dir;
 
   my @dirs = split( "/", $dir);
   return $dirs[3];

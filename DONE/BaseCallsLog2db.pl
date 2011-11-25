@@ -84,7 +84,8 @@ while( <$in> ) {
     
     print "$run_id, $fid, $lane, $read_nr\n";
     
-    EASIH::DONE::add_illumina_lane_stats( $run_id, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter )
+    EASIH::DONE::add_illumina_lane_stats( $run_id, 1, $lane, $read_nr, $sample, $total_reads, $pass_filter );
+    EASIH::DONE::add_illumina_lane_stats( $run_id, 2, $lane, $read_nr, $sample, $total_reads, $pass_filter ) if ( $read2 );
 	
   }
 

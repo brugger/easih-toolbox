@@ -735,12 +735,46 @@ sub fetch_illumina_sample_stats_by_rid {
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_illumina_lane_stats {
-  my ( $rid, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases ) = @_;
+  my ( $rid, $read_nr, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases ) = @_;
   check_connection();
 
-  my $q = "REPLACE INTO illumina_lane_stats ( rid, lane, total_reads, pass_filter, total_bases, QV30_bases) VALUES (?,?,?,?,?,?)";
+  my $q = "REPLACE INTO illumina_lane_stats ( rid, read_nr, lane, total_reads, pass_filter, total_bases, QV30_bases) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $rid, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases) || die "$DBI::errstr";
+  $sth->execute( $rid, $read_nr, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases) || die "$DBI::errstr";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (18 Nov 2011)
+sub add_illumina_lane_stats_summary {
+  my ($rid, $summary) = @_;
+  
+  my @entries = fetch_illumina_lane_stats_by_rid($rid);
+  my %entries;
+  map {$entries{$$_[0]}{$$_[1]}{$$_[2]} = $_} @entries;
+
+
+  foreach my $read_nr ( keys %$summary ) {
+    foreach my $lane ( keys %{$$summary{ $read_nr }} ) {
+      # the information for read2 was not stored, so we create it now.
+      if ( $read_nr == 2 && ! $entries{$rid}{$read_nr}{$lane} ) {
+	$entries{$rid}{1}{$lane}[1] = 2;
+	print "@{$entries{$rid}{1}{$lane}}\n";
+	add_illumina_lane_stats(@{$entries{$rid}{1}{$lane}});
+      }
+      my @values;
+      foreach my $key ( sort keys %{$$summary{ $read_nr }{$lane}} ) {
+	push @values, "$key = '$$summary{ $read_nr }{$lane}{ $key }' ";
+      }
+      my $q = "UPDATE  illumina_lane_stats SET " . join(", ", @values) . "WHERE rid=$rid AND read_nr=$read_nr AND lane=$lane";
+      my $sth = $dbi->prepare($q);
+      $sth->execute() || die "$DBI::errstr";
+    }
+  }
+  
 }
 
 

@@ -121,8 +121,7 @@ sub readin_decode {
   open(my $in, $file) || die "Could not open '$file': $!\n";
   while(<$in>) {
     chomp;
-    my ($pos, $rs, $cm) = split(/\t/);
-    (my $chr, $pos) = split(/:/, $pos);
+    my ($chr, $pos, $rs, $cm) = split(/\t/);
     
     $res{ $chr}{$pos} = $cm;
     $res{ $rs} = $cm;

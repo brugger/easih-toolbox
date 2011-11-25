@@ -12,6 +12,7 @@ package EASIH::SNPs;
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 use DBI;
 
@@ -120,7 +121,6 @@ sub CM {
 
   my @cms;
 
-  use Data::Dumper;
   $sth_fetch_cm_up->execute( $chr, $pos );
   while (my $result = $sth_fetch_cm_up->fetchrow_hashref() ) {
     unshift @cms, [$$result{pos}, $$result{centimorgan}];
@@ -130,10 +130,10 @@ sub CM {
   while (my $result = $sth_fetch_cm_down->fetchrow_hashref() ) {
     push @cms, [$$result{pos}, $$result{centimorgan}];
   }
-
-#  print Dumper( @cms );
+#  print "chr:$pos\n";
+#  print Dumper( \@cms );
   
-  for(my $i = 0; $i<@cms; $i++ ){ 
+  for(my $i = 0; $i<@cms-1; $i++ ){ 
     return $cms[$i][1] if ($cms[$i][0] == $pos);
     if ($cms[$i][0] < $pos && $cms[$i + 1][0] > $pos) {
       return $cms[$i + 1][1] if ( $cms[$i][0] ==  $cms[$i + 1][0]);

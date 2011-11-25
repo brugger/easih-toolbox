@@ -47,20 +47,20 @@ CREATE TABLE offloading (
 CREATE TABLE illumina_lane_stats (
 
   rid                 INT NOT NULL,
-  fid                 INT ,
+  read                INT,
   lane		      INT NOT NULL,
   total_reads	      INT,
   pass_filter	      INT,
   total_bases	      INT,
   QV30_bases	      INT,
 
-  Clusters	      INT,
-  ClustersSD	      FLOAT,
-  ClustersPF	      INT,
-  ClustersPFSD	      FLOAT,
+  clusters	      FLOAT,
+  clustersSD	      FLOAT,
+  clustersPF	      FLOAT,
+  clustersPFSD	      FLOAT,
 
-  Phas   	      FLOAT,
-  Preph	              FLOAT,
+  phas   	      FLOAT,
+  preph	              FLOAT,
 
   PrcAlign	      FLOAT,
   PrcAlignSD	      FLOAT,
@@ -75,8 +75,6 @@ CREATE TABLE illumina_lane_stats (
   FirstCycleIntSD     FLOAT,
   20CyclesInt	      FLOAT,
   20CyclesIntSD	      FLOAT,
-
-
 
   PRIMARY KEY (rid, lane),
   KEY rid_idx (rid),

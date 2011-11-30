@@ -167,91 +167,98 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
   my @lanes  = EASIH::DONE::fetch_illumina_lane_stats_by_rid($rid);
   my @mplexs = EASIH::DONE::fetch_illumina_sample_stats_by_rid($rid);
 
-  print STDERR Dumper( @lanes );
+#  print STDERR Dumper( @lanes );
 
-  my @rundata;
+  my @run1data;
+  my @run2data;
+
   foreach my $lane ( sort { $$a[1] <=> $$b[1] || $$a[2] <=> $$b[2] } @lanes ) {
     my @lane_data;
 
-    foreach my $lane_data (@$lane ) {
-      if ( $lane_data > 100 && $lane_data < 1000) {
-	$lane_data = sprintf("%.2fK", $lane_data/1000);
-      }
-      elsif ( $lane_data > 1000  && $lane_data < 10000) {
-	$lane_data = sprintf("%.1fK", $lane_data/1000);
-      }
-      elsif ( $lane_data > 10000  && $lane_data < 100000) {
-	$lane_data = sprintf("%dK", $lane_data/1000);
-      }
-    }
-
-    push @lane_data, @$lane[2..6], 
-                     "$$lane[7]&plusmn;$$lane[8]", "$$lane[9]&plusmn;$$lane[10]",  "$$lane[11] / $$lane[12]", 
-                     "$$lane[13]&plusmn;$$lane[14]","$$lane[15]&plusmn;$$lane[16]","$$lane[17]&plusmn;$$lane[18]",
-                     "$$lane[19]&plusmn;$$lane[20]","$$lane[21]&plusmn;$$lane[22]";
-    push @rundata, \@lane_data;
+    #lane_nr, total_reads, readsPF
+    push @lane_data, $$lane[2], _round($$lane[3]), _round($$lane[4]);
+    # %PF
+    push @lane_data, sprintf("%.2f%%", $$lane[4]*100/$$lane[3]);
+    # %QV30+ bases
+    push @lane_data, sprintf("%.2f%%", $$lane[6]*100/$$lane[5]);
+    # clusters
+    push @lane_data, sprintf("%s&plusmn;%s",_round($$lane[7]),_round($$lane[8]));
+    # clustersPF
+    push @lane_data, sprintf("%s&plusmn;%s",_round($$lane[9]),_round($$lane[10]));
+    # phasing/prephasing
+    push @lane_data, sprintf("%s/%s",$$lane[11],$$lane[12]);
+    # PhiX align
+    push @lane_data, sprintf("%s&plusmn;%s",$$lane[13],$$lane[14]);
+    # % Error
+    push @lane_data, sprintf("%s&plusmn;%s",$$lane[15],$$lane[16]);
+    # First int
+    push @lane_data, sprintf("%s&plusmn;%s",$$lane[19],$$lane[20]);
+    # 20th int
+    push @lane_data, sprintf("%s&plusmn;%s",$$lane[21],$$lane[22]);
+    
+#    push @lane_data,                 "$$lane[7]&plusmn;$$lane[8]", "$$lane[9]&plusmn;$$lane[10]",  "$$lane[11] / $$lane[12]", 
+#                     "$$lane[13]&plusmn;$$lane[14]","$$lane[15]&plusmn;$$lane[16]","$$lane[17]&plusmn;$$lane[18]",
+#                     "$$lane[19]&plusmn;$$lane[20]","$$lane[21]&plusmn;$$lane[22]";
+    push @run1data, \@lane_data if ($$lane[1] == 1);
+    push @run2data, \@lane_data if ($$lane[1] == 2);
   }
-  print EASIH::HTML::advanced_table(\@rundata, 1, 1, 1, undef, undef, 600);
+
+  if (@run1data) {
+    
+    unshift @run1data,['lane', '#reads', 'readsPF', '%PF', '%QV30+ bases', 'clusters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', 'clustersPF&nbsp;&nbsp;&nbsp;&nbsp;', 'phas/preph','%alig', 'Error rate', 'First Int', '20th Int'];
+    
+    print "<H3>Read 1</H3>\n";
+    print EASIH::HTML::advanced_table(\@run1data, 1, 1, 1, undef, undef, 800);
+  }
+
+  if (@run2data) {
+    unshift @run2data,['lane', '#reads', 'readsPF', '%PF', '%QV30+ bases', 'clusters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', 'clustersPF&nbsp;&nbsp;&nbsp;&nbsp;', 'phas/preph','%alig', 'Error rate', 'First Int', '20th Int'];
+
+    print "<BR><H3>Read 2</H3>\n";
+    print EASIH::HTML::advanced_table(\@run2data, 1, 1, 1, undef, undef, 800);
+  }
 
 
-  my @data = (["Lane", "Sample", "total", "Pass filter", "% PF", "%QV30 bases"]);
-  foreach my $lane ( sort { $$a[2] <=> $$b[2] } @lanes) {
+  print "<BR><H3>Sample statistics</H3>\n";
 
-#    print STDERR Dumper( $lane );
-    my $QV30 = "NA";
-    $QV30 = sprintf("'%s', '%s'", $$lane[6], $$lane[5]);
-    $QV30 = sprintf("%.2f %%", $$lane[6]*100/$$lane[5]) if ( $$lane[6] && $$lane[5] );
+  my @data = (["Lane", "Sample", "reads", "Barcode","% split"]);
 
-      my @lvs = ("Lane $$lane[2]", " ", $$lane[3], $$lane[4], sprintf("%.2f %%", $$lane[4]*100/$$lane[3]), $QV30);
+  my %sample_stats;
+  foreach my $mplex (sort {$$a[2] <=> $$b[2] } @mplexs ) {
+#    next if ($$mplex[3]  != 1 );
 
-      if ($$lane[4] < 30_000_000 || $$lane[4]*100/$$lane[3] < 75 ) {
-	my @clvs;
-	foreach my $lv ( @lvs ) {
-	  push @clvs, {value=> $lv, bgcolor=>'#CC0000'};
-	}
-	@lvs = @clvs;
-      }
-      else {
-	my @clvs;
-	foreach my $lv ( @lvs ) {
-	  push @clvs, {value=> $lv, bgcolor=>'#00CC00'};
-	}
-	@lvs = @clvs;
-      }
-      
-      push @data, \@lvs;
-
-
-    my %sample_stats;
-    foreach my $mplex (@mplexs ) {
-
-      next if ( $$lane[2] != $$mplex[2] );
-      
-      $sample_stats{$$mplex[4]}{ perc  } = $$mplex[6];
-      $sample_stats{$$mplex[4]}{ reads } = $$mplex[7];
-      $sample_stats{$$mplex[4]}{ bcode } = $$mplex[5];
-      push @{$sample_stats{$$mplex[4]}{fids}}, $$mplex[1];
-
-      $sample_stats{$$mplex[4]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
-    }
+#    push @data, [$$mplex[2], $$mplex[4], $$mplex[5], $$mplex[7], $$mplex[6]];
+    push @{$sample_stats{$$mplex[4]}{fids}}, $$mplex[1];
+    $sample_stats{$$mplex[4]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
+    $sample_stats{$$mplex[4]}{ lane } = $$mplex[2];
+    $sample_stats{$$mplex[4]}{ bcode } = $$mplex[5] || "&nbsp;";
+    $sample_stats{$$mplex[4]}{ reads } = _round($$mplex[7]);
+    $sample_stats{$$mplex[4]}{ perc } = $$mplex[6] || "&nbsp;";
+  }
 
 
     
-    foreach my $sample (sort keys %sample_stats ) {
+  foreach my $sample (sort {$sample_stats{$a}{lane} <=> $sample_stats{$b}{lane}} keys %sample_stats ) {
 
-      $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
-      
-      $sample_stats{$sample}{ filename } =~ s/^.*\///;
-      $sample_stats{$sample}{ filename } =~ s/\.gz//;
-      $sample_stats{$sample}{ filename } =~ s/\.fq//;
-      $sample_stats{$sample}{ filename } =~ s/\.[12]\z//;
+    $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
+    
+    $sample_stats{$sample}{ filename } =~ s/^.*\///;
+    $sample_stats{$sample}{ filename } =~ s/\.gz//;
+    $sample_stats{$sample}{ filename } =~ s/\.fq//;
+    $sample_stats{$sample}{ filename } =~ s/\.[12]\z//;
 
-      push @data, ["<a href=$0?QC=1&fid=$sample_stats{$sample}{fids}>$sample</a>", $sample_stats{$sample}{ filename }, $sample_stats{$sample}{ bcode }, $sample_stats{$sample}{ reads }, "$sample_stats{$sample}{ perc } %"] 
-
-    }
-
-
+    my $colour = "grey";
+    $colour = "lightgrey" if ( $sample_stats{$sample}{lane} % 2);
+    
+    
+    push @data, [{value=>$sample_stats{$sample}{lane}, bgcolor => $colour},
+		 {value=>"<a href=$0?QC=1&fid=$sample_stats{$sample}{fids}>$sample</a>", bgcolor => $colour},
+		 {value=>$sample_stats{$sample}{ reads }, bgcolor => $colour}, 
+		 {value=>$sample_stats{$sample}{ bcode }, bgcolor => $colour}, 
+		 {value=>"$sample_stats{$sample}{ perc } %", bgcolor => $colour}];
   }
+  
+  
   print EASIH::HTML::advanced_table(\@data, 1, 1, 1, undef, undef, 600);
 
   easih_foot();
@@ -477,6 +484,40 @@ else {
 
 
 
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Nov 2011)
+sub _round {
+  my ($value) = @_;
+
+  return $value if ($value !~ /^\d+\z/ && $value =~ /^\d+\.\d+\z/ );
+
+
+
+
+  if ( $value > 100 && $value < 1000) {
+    $value = sprintf("%.2fK", $value/1000);
+  }
+  elsif ( $value > 1000 && $value < 10000) {
+    $value = sprintf("%.1fK", $value/1000);
+  }
+  elsif ( $value > 10000 && $value < 100000) {
+    $value = sprintf("%.1fK", $value/1000);
+  }
+  elsif ( $value > 100000 && $value < 1000000) {
+    $value = sprintf("%dK", $value/1000);
+  }
+  elsif ( $value > 1000000 && $value < 10000000) {
+    $value = sprintf("%.1fM", $value/1000000);
+  }
+  elsif ( $value > 10000000) {
+    $value = sprintf("%dM", $value/1000000);
+  }
+  return $value;
+}
 
 
 # 

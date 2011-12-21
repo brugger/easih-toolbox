@@ -55,7 +55,8 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
+#getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
+getopts('cb:B:h:l:o:O:Q:v:S:T', \%opts);    #svvd 31-10-2011: si -> v (snps,indels -> variants)
 #perldoc() if ( $opts{h});
 usage() if ( $opts{h});
 
@@ -72,22 +73,30 @@ EASIH::SNPs->New();
 if ( $opts{ Q }  ) {
 
   $opts{ Q } =~ s/\.bam//;
+  $opts{ Q } =~ s/\.vcf//;
   $opts{ Q } =~ s/\.snps.vcf//;
   $opts{ Q } =~ s/\.indels.vcf//;
 
   $opts{s} = "$opts{Q}.snps.vcf"   if ( -e "$opts{Q}.snps.vcf");
   $opts{i} = "$opts{Q}.indels.vcf" if ( -e "$opts{Q}.indels.vcf");
+  $opts{v} = "$opts{Q}.vcf" if ( -e "$opts{Q}.vcf");
   $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var_full.csv";
   $opts{O} = "$opts{Q}.var.csv";
 }
-  
-usage() if ( !$opts{s}  && !$opts{i});
 
-my $exit_count = 10;
+
+#print Dumper( \%opts );
+  
+#usage() if ( !$opts{s}  && !$opts{i});
+usage() if ( !$opts{v} && !$opts{s} && !$opts{i});
+
+#my $exit_count = 10;
+my $exit_count = 9;
 
 my $snp_vcf      = $opts{s};
 my $indel_vcf    = $opts{i};
+my $snp_indel_vcf= $opts{v};
 my $bam          = $opts{b};
 my $basecount    = $opts{c} || 0;
 my $from_36      = $opts{T} || 0;
@@ -97,7 +106,7 @@ my $leeway       = $opts{l} || 100;
 
 my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
 my $out          = $opts{o} || undef;
-my $full_out     = $opts{O} || undef;
+my $filtered_out = $opts{O} || undef;
 
 my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10, 
 		'STOP_GAINED'            => 10, 
@@ -128,18 +137,19 @@ my $DACstring = "";
 my $ANstring  = "";
 my $SMstring  = "";
 
-if ( $bam ) {
+if ( $bam && $baits ) {
 
   $DACstring = DepthAndCoverage($bam,$baits) if ( $baits);
   ($ANstring, my @SMstrings) = BamHead_ANSM($bam);
 
-  die "\n\n ALERT!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
   if($ANstring eq "hg18" && ! $from_36) {
     $from_36 = 1;
     print STDERR "**************************************\n";
     print STDERR "\nSetting -T flag automatically as reference is hg18\nPlease use -T<ransform> option so that the coordinates can be found in Ensembl\n";
     print STDERR "**************************************\n";
   }
+
+  die "\n\n ERROR!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
   
   $ANstring = "# Aligned2Reference: $ANstring";
   
@@ -157,7 +167,7 @@ if ( $bam ) {
 ############################
 
 open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
-open( my $full_out_fh, "> $full_out") || die "Could not write to '$full_out': $!\n" if ( $full_out );
+open( my $filtered_out_fh, "> $filtered_out") || die "Could not write to '$filtered_out': $!\n" if ( $filtered_out );
   
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
@@ -209,6 +219,7 @@ chomp( $samtools);
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $snp_vcf ) if ( $snp_vcf);
 readin_vcf( $indel_vcf ) if ( $indel_vcf);
+readin_vcf( $snp_indel_vcf ) if ( $snp_indel_vcf);
 
 my %grch37_remapping = ();
 
@@ -427,8 +438,8 @@ sub print_results {
     }
   }
 
-#  print $full_out_fh text_table( \@filtered_res          ) if ( $full_out );
-  print STDOUT text_table( \@filtered_res );
+  print $filtered_out_fh text_table( \@filtered_res ) if ( $filtered_out );
+  print STDOUT text_table( \@res );
 #  print STDOUT text_table( \@res );
 }
 
@@ -1116,18 +1127,15 @@ sub readin_vcf {
       $SNPs{$chr}{$pos}{genotype} = "HET" if ($info_hash{AF} == 0.50);
       $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ($info_hash{AF} != 1 && $info_hash{AF} != 0.5);
     }
-    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
-      my $indels = $1;
-      
-      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
-      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
-      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
-    }
-    else {
-      $SNPs{$chr}{$pos}{genotype} = "unknown $info_hash{IAC}";
-    }
-
-
+   elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
+     my $indels = $1;
+     
+     $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
+     $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
+     $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
+   }
+    
+    
   }
 
   print STDERR "Used: $used, Dropped: $dropped\n" if ($bait_regions);
@@ -1749,7 +1757,8 @@ sub BamHead_ANSM
       
       if(/\@SQ/)
       {
-	  $ANstring = "$1", if(/AN:(.*?)\s*/);
+	  #$ANstring = "$1", if(/AN:(.*?)\s*/);
+	  $ANstring = "$1", if(/AN:(.*)\s\z/);
 	  $count++;
       }
   }
@@ -1757,7 +1766,7 @@ sub BamHead_ANSM
   #$ANstring = "# Aligned2Reference: $ANstring";
 
   $ANstring = "hg19" if ( $ANstring eq "human_g1k_v37");
-  
+
   return($ANstring,@SMstrings);
 }
 
@@ -1770,9 +1779,11 @@ sub usage {
   
   $0 =~ s/.*\///;
 
-  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
+#  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
+  print "USAGE: $0 -b[am file] -v[ariant vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
 
-  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+#  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+  print "\nor extrapolate the standard <bam, vcf, output files> with the -Q <basefile name> option\n";
   print "EXAMPLE: $0 -Q [base name] -T<ransform>\n";
   print "\n";
 

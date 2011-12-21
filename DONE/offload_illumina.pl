@@ -31,6 +31,7 @@
 
 
 use strict;
+#use warnings;
 use Getopt::Std;
 
 
@@ -61,6 +62,9 @@ use EASIH;
 use EASIH::Mail;
 use EASIH::DONE;
 
+my $debug = 0;
+#$debug = 1;
+
 my %opts;
 getopts('hvd:', \%opts);
 
@@ -86,11 +90,11 @@ my $rid;
 
 my @dirs  = ('/seqs/illumina2/', 
 	     '/seqs/illumina3/', 
-#	     '/seqs/hiseq04/',
+	     '/seqs/illumina4/',
     );
 
 @dirs = split(/,/, $opts{ 'd' }) if ( $opts{ 'd' } );
-my $easih_toolbox = '/software/installed/easih-toolbox/scripts/';
+my $easih_toolbox = '/software/installed/easih-toolbox/';
 $easih_toolbox = '/home/kb468/easih-toolbox/' if ( $debug );
 
 foreach my $dir ( @dirs ) {
@@ -100,13 +104,14 @@ foreach my $dir ( @dirs ) {
  
   while( $RunDir = shift @files) {
     
-    next if ($RunDir ne "111107_MGILLUMINA3_00054_FC");
-    
     print "RID:: $RunDir --> $rid\n" if ( $verbose );
-    
+
+
+#    next if ($RunDir !~ /111123/);
     
     my $runfolder   = ${dir}.$RunDir;
     my $eventfile   = "$runfolder/Events.log"; 
+    my $RTAcomp     = "$runfolder/RTAComplete.txt";
     my $Intensities = "$runfolder/Data/Intensities"; 
     my $Basecalls   = "$runfolder/Data/Intensities/BaseCalls"; 
 
@@ -115,7 +120,7 @@ foreach my $dir ( @dirs ) {
 				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
 				  '04-poststatus' => "BCL2QSEQ_DONE"},
 	       
-	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 4;", 
+	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
 				  '02-prestatus'  => "MAKE_STARTED", 
 				  '03-failstatus' => "MAKE_FAILED", 
 				  '04-poststatus' => "MAKE_DONE"},
@@ -125,7 +130,7 @@ foreach my $dir ( @dirs ) {
 				  '03-failstatus' => "BCL2FQ_FAILED", 
 				  '04-poststatus' => "BCL2FQ_DONE"},
 	       
-	       '04-QC_Report' => {'01-command'    => "$easih_toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
+	       '04-QC_Report' => {'01-command'    => "$easih_toolbox/scripts/QC_report.pl -p illumina -f ", # exclude $fqfile param until you start processing it
 				  '02-prestatus'  => "QC_REPORT_STARTED", 
 				  '03-failstatus' => "QC_REPORT_FAILED", 
 				  '04-poststatus' => "QC_REPORT_DONE"},
@@ -138,10 +143,12 @@ foreach my $dir ( @dirs ) {
     );
 
         
-    if(-e "$eventfile") {
+    if( -e $eventfile || -e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt") {
 
-
-      chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
+      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt");
+      $checkstring = `grep -c "Copying logs to network run folder" $eventfile` 
+	  if (! $checkstring);
+      chomp( $checkstring );
       
       ### Update the status for old and unfinished runs ###
       if(!$checkstring) {
@@ -157,16 +164,13 @@ foreach my $dir ( @dirs ) {
       }
 
       $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
-
       my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
-
       print "$RunDir last status: $last_status\n" if ($verbose && $last_status);
       
-      next, if($last_status && $last_status ne "RETRY_OFFLOAD");
+      next if ($last_status && $last_status ne "RETRY_OFFLOAD");
 
 	my $failed_status = EASIH::DONE::fetch_offloading_failure( $rid ) if ( $last_status );
 	my $fixed_failed_program = 0;
-
 
 	### Start post processing for new runs ###
 	if($checkstring)
@@ -176,7 +180,6 @@ foreach my $dir ( @dirs ) {
 	    RunStatus("RUN_COMPLETED");
 	    SendEmail("RUN_COMPLETED","",1);
 	  }
-
 
             ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
 	    

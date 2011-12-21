@@ -12,6 +12,7 @@ package EASIH::SNPs;
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 use DBI;
 
@@ -22,6 +23,8 @@ my $ppdbi;
 
 my $sth_fetch_snp;
 my $sth_fetch_rs;
+my $sth_fetch_cm_up;
+my $sth_fetch_cm_down;
 
 my $dbhost;
 my $dbname;
@@ -38,8 +41,10 @@ sub New {
 
   $dbi = DBI->connect("DBI:mysql:$dbname:$dbhost", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
 
-  $sth_fetch_snp = $dbi->prepare("SELECT snp.* FROM snp WHERE chr=? AND pos = ?");
-  $sth_fetch_rs  = $dbi->prepare("SELECT snp.* FROM snp WHERE rs=?");
+  $sth_fetch_snp      = $dbi->prepare("SELECT snp.* FROM snp WHERE chr=? AND pos = ?");
+  $sth_fetch_rs       = $dbi->prepare("SELECT snp.* FROM snp WHERE rs=?");
+  $sth_fetch_cm_up    = $dbi->prepare("SELECT snp.* FROM snp WHERE chr = ? and pos <= ? AND centimorgan order by pos DESC limit 10; ");
+  $sth_fetch_cm_down  = $dbi->prepare("SELECT snp.* FROM snp WHERE chr = ? and pos >= ? AND centimorgan order by pos limit 10; ");
 
 }
 
@@ -101,6 +106,44 @@ sub fetch_snp {
   
   my $result = $sth_fetch_snp->fetchrow_hashref();
   return $result;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (16 Nov 2011)
+sub CM {
+  my ( $chr, $pos) = @_;
+
+  return undef if ( ! $chr || !$pos);
+
+  my @cms;
+
+  $sth_fetch_cm_up->execute( $chr, $pos );
+  while (my $result = $sth_fetch_cm_up->fetchrow_hashref() ) {
+    unshift @cms, [$$result{pos}, $$result{centimorgan}];
+  }
+
+  $sth_fetch_cm_down->execute( $chr, $pos );
+  while (my $result = $sth_fetch_cm_down->fetchrow_hashref() ) {
+    push @cms, [$$result{pos}, $$result{centimorgan}];
+  }
+#  print "chr:$pos\n";
+#  print Dumper( \@cms );
+  
+  for(my $i = 0; $i<@cms-1; $i++ ){ 
+    return $cms[$i][1] if ($cms[$i][0] == $pos);
+    if ($cms[$i][0] < $pos && $cms[$i + 1][0] > $pos) {
+      return $cms[$i + 1][1] if ( $cms[$i][0] ==  $cms[$i + 1][0]);
+      
+      return sprintf("%.2f", ($cms[$i][1]+$cms[$i + 1][1])/2);
+    }
+  }
+
+  
+  return "NA";
 }
 
 

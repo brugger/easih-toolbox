@@ -14,6 +14,8 @@ use DBI;
 
 my $dbi;
 
+my ($_dbname, $_dbhost);
+
 # 
 # 
 # 
@@ -23,7 +25,22 @@ sub Connect {
   $dbname ||= "done";
   $dbhost ||= "mgpc17.medschl.cam.ac.uk";
 
-  $dbi = DBI->connect("DBI:mysql:$dbname:$dbhost", 'easih_admin','easih') || die "Could not connect to database: $DBI::errstr";
+  ($_dbname, $_dbhost) = ($dbname, $dbhost);
+
+  $dbi = DBI->connect("DBI:mysql:$_dbname:$_dbhost", 'easih_admin','easih') || die "Could not connect to database: $DBI::errstr";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (13 Jun 2011)
+sub check_connection {
+
+  unless ($dbi->ping) {
+    $dbi = DBI->connect("DBI:mysql:$_dbname:$_dbhost", 'easih_admin','easih') || die "Could not connect to database: $DBI::errstr";
+  }
 }
 
 
@@ -38,6 +55,7 @@ BEGIN {
 # Kim Brugger (13 Jun 2011)
 sub fetch_files_from_run {
   my ($run) = @_;
+  check_connection();
   my $sth = $dbi->prepare("SELECT f.name FROM file as f, run as r WHERE r.name = ? and r.rid = f.rid");
   $sth->execute( $run );
   my @res;
@@ -55,6 +73,7 @@ sub fetch_files_from_run {
 # Kim Brugger (13 Jun 2011)
 sub fetch_samples_from_run {
   my ($run) = @_;
+  check_connection();
   my $sth = $dbi->prepare("SELECT f.sid FROM file as f, run as r WHERE r.name = ? and r.rid = f.rid  group by f.sid;");
   $sth->execute( $run );
   my @res;
@@ -72,6 +91,7 @@ sub fetch_samples_from_run {
 # Kim Brugger (13 Jun 2011)
 sub fetch_files_from_rid {
   my ($rid) = @_;
+  check_connection();
   my $sth = $dbi->prepare("SELECT name FROM file WHERE rid = ?");
   $sth->execute( $rid );
   my @res;
@@ -89,6 +109,7 @@ sub fetch_files_from_rid {
 # Kim Brugger (13 Jun 2011)
 sub fetch_files_from_rid_by_sample {
   my ($rid) = @_;
+  check_connection();
   my $sth = $dbi->prepare("select f.name, s.name from file as f, run as r, sample as s WHERE r.rid=? and r.rid = f.rid AND s.sid=f.sid");
   $sth->execute( $rid );
   my %res;
@@ -104,6 +125,7 @@ sub fetch_files_from_rid_by_sample {
 # 
 # Kim Brugger (13 Jun 2011)
 sub fetch_files {
+  check_connection();
   my $sth = $dbi->prepare("SELECT * FROM file");
   $sth->execute(  );
   my @res;
@@ -122,6 +144,7 @@ sub fetch_files {
 sub run_log {
   my ($run ) = @_;
 
+  check_connection();
   my $rid = fetch_run_id( $run );
 
   my $entries  = fetch_offloading_entries($rid);
@@ -164,6 +187,7 @@ sub run_log {
 # Kim Brugger (13 Jun 2011)
 sub add_offloading_status {
   my ($rid, $status) = @_;
+  check_connection();
   my $timestamp = Time::HiRes::gettimeofday()*100000;
   my $sth = $dbi->prepare("INSERT INTO offloading (rid, stamp, status) VALUES (?,?,?) ");
   $sth->execute( $rid, $timestamp, $status );
@@ -176,6 +200,7 @@ sub add_offloading_status {
 sub fetch_offloading_entries {
   my ($rid) = @_;
   
+  check_connection();
   my $q = "SELECT * FROM offloading where rid = ? ORDER BY stamp";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid );
@@ -198,6 +223,7 @@ sub fetch_offloading_entries {
 # Kim Brugger (13 Jun 2011)
 sub fetch_latest_offloading_status {
   my ( $rid ) = @_;
+  check_connection();
 
   my $entries = fetch_offloading_entries( $rid );
   my $status;
@@ -213,6 +239,7 @@ sub fetch_latest_offloading_status {
 sub fetch_platform {
   my ( $run ) = @_;
 
+  check_connection();
   my $q = "SELECT platform from run where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $run );
@@ -231,6 +258,7 @@ sub fetch_platform {
 sub fetch_offloading_failure {
   my ($rid) = @_;
 
+  check_connection();
   my $entries = fetch_offloading_entries( $rid );
   my $status;
   $status =  $$entries[-2][1] if ($$entries[-2]);
@@ -244,6 +272,7 @@ sub fetch_offloading_failure {
 sub fetch_adaptors {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x, percent FROM adaptors where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -263,6 +292,7 @@ sub fetch_adaptors {
 sub add_adaptors {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -282,7 +312,7 @@ sub add_adaptors {
 sub _add_adaptor {
   my ( $fid, $x, $perc ) = @_;
 
-
+  check_connection();
   my $q = "REPLACE INTO adaptors (fid, x, percent) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
@@ -297,6 +327,7 @@ sub _add_adaptor {
 sub fetch_duplicate_seqs {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT sequence, percentage, source FROM duplicated_seqs where fid = ? ORDER BY percentage";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -316,6 +347,7 @@ sub fetch_duplicate_seqs {
 sub add_duplicate_seqs {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -335,6 +367,7 @@ sub add_duplicate_seqs {
 sub _add_duplicate_seq {
   my ( $fid, $sequence, $perc, $source ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO duplicated_seqs (fid, sequence, percentage, source) VALUES (?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute(  $fid, $sequence, $perc, $source ) || die "$DBI::errstr";
@@ -349,6 +382,7 @@ sub _add_duplicate_seq {
 sub fetch_duplicates {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x,observations FROM duplicates where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -368,6 +402,7 @@ sub fetch_duplicates {
 sub add_duplicates {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -387,6 +422,7 @@ sub add_duplicates {
 sub _add_duplicate {
   my ( $fid, $x, $dups ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO duplicates (fid, x, observations) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $dups ) || die "$DBI::errstr";
@@ -399,6 +435,7 @@ sub _add_duplicate {
 sub fetch_gc_distribution {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x,percent_gc FROM GC_distribution where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -419,6 +456,7 @@ sub fetch_gc_distribution {
 sub add_gc_distribution {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -438,6 +476,7 @@ sub add_gc_distribution {
 sub _add_gc_dist {
   my ( $fid, $x, $perc ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO GC_distribution (fid, x, percent_gc) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $perc ) || die "$DBI::errstr";
@@ -451,6 +490,7 @@ sub _add_gc_dist {
 sub fetch_base_distribution {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x,A,C,G,T,N FROM base_distribution where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -471,6 +511,7 @@ sub fetch_base_distribution {
 sub add_basedists {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -490,6 +531,7 @@ sub add_basedists {
 sub _add_basedist {
   my ( $fid, $x, $A, $C, $G, $T, $N ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO base_distribution (fid, x, A, C, G, T, N) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $A, $C, $G, $T, $N ) || die "$DBI::errstr";
@@ -507,6 +549,7 @@ sub _add_basedist {
 sub fetch_qvs_histogram {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x,height FROM qv_histogram where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -527,6 +570,7 @@ sub fetch_qvs_histogram {
 sub add_qvs_histogram {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -546,6 +590,7 @@ sub add_qvs_histogram {
 sub _add_qv_hist {
   my ( $fid, $x, $height ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO qv_histogram (fid, x, height) VALUES (?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $height ) || die "$DBI::errstr";
@@ -560,6 +605,7 @@ sub _add_qv_hist {
 sub fetch_qvs_boxplot {
   my ($fid) = @_;
   
+  check_connection();
   my $q = "SELECT x,q0,q1,q2,q3,q4,q5,q6,q7 FROM qv_boxplot where fid = ? ORDER BY x";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -580,6 +626,7 @@ sub fetch_qvs_boxplot {
 sub add_qvs_boxplot {
   my ( $fid, $values ) = @_;
 
+  check_connection();
   my $check_file_name = fetch_filename( $fid );
   if ( ! $check_file_name ) {
     print "'$fid' does not exist in the database\n";
@@ -599,6 +646,7 @@ sub add_qvs_boxplot {
 sub _add_qv_boxplot {
   my ( $fid, $x, $q0, $q1, $q2, $q3, $q4, $q5, $q6, $q7 ) = @_;
 
+  check_connection();
   my $q = "REPLACE INTO qv_boxplot (fid, x, q0, q1, q2, q3, q4, q5, q6, q7) VALUES (?,?,?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid, $x, $q0, $q1, $q2, $q3, $q4, $q5, $q6, $q7 ) || die "$DBI::errstr";
@@ -614,6 +662,7 @@ sub add_mapping_stats {
   my ( $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) = @_;
 
   
+  check_connection();
   my $q = "REPLACE INTO mapping_stats ( fid1, fid2, reference, unique_hits, non_unique_hits, duplicates) VALUES (?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
   $sth->execute(  $fid1, $fid2, $reference, $unique_hits, $nonunique_hits, $duplicates ) || die "$DBI::errstr";
@@ -626,6 +675,7 @@ sub add_mapping_stats {
 # Kim Brugger (23 Jun 2011)
 sub fetch_mapping_stats {
   my ( $fid1, $fid2 ) = @_;
+  check_connection();
   my $sth;
   if ( $fid2 ) {
     my $q = "SELECT * FROM  mapping_stats where fid1 = ? AND fid2 = ?  ORDER BY reference";
@@ -651,12 +701,13 @@ sub fetch_mapping_stats {
 # 
 # 
 # Kim Brugger (23 Jun 2011)
-sub add_illumina_multiplex_stats {
-  my ( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $pass_filter, $ratio ) = @_;
+sub add_illumina_sample_stats {
+  my ( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $ratio ) = @_;
 
-  my $q = "REPLACE INTO illumina_multiplex_stats ( rid, fid, lane, read_nr, sample, bcode, total_reads, pass_filter, ratio) VALUES (?,?,?,?,?,?,?,?,?)";
+  check_connection();
+  my $q = "REPLACE INTO illumina_sample_stats ( rid, fid, lane, read_nr, sample, bcode, total_reads, ratio) VALUES (?,?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $pass_filter, $ratio ) || die "$DBI::errstr";
+  $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $bcode, $total_reads, $ratio ) || die "$DBI::errstr";
 }
 
 
@@ -664,9 +715,10 @@ sub add_illumina_multiplex_stats {
 # 
 # 
 # Kim Brugger (23 Jun 2011)
-sub fetch_illumina_multiplex_stats_by_rid {
+sub fetch_illumina_sample_stats_by_rid {
   my ( $rid ) = @_;
-  my $q = "SELECT * FROM  illumina_multiplex_stats where rid = ?";
+  check_connection();
+  my $q = "SELECT * FROM  illumina_sample_stats where rid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid ) || die "$DBI::errstr";
   my @res;
@@ -678,18 +730,51 @@ sub fetch_illumina_multiplex_stats_by_rid {
 }
 
 
-
-
 # 
 # 
 # 
 # Kim Brugger (23 Jun 2011)
 sub add_illumina_lane_stats {
-  my ( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) = @_;
+  my ( $rid, $read_nr, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases ) = @_;
+  check_connection();
 
-  my $q = "REPLACE INTO illumina_lane_stats ( rid, fid, lane, read_nr, sample, total_reads, pass_filter) VALUES (?,?,?,?,?,?,?)";
+  my $q = "REPLACE INTO illumina_lane_stats ( rid, read_nr, lane, total_reads, pass_filter, total_bases, QV30_bases) VALUES (?,?,?,?,?,?,?)";
   my $sth = $dbi->prepare($q);
-  $sth->execute( $rid, $fid, $lane, $read_nr, $sample, $total_reads, $pass_filter ) || die "$DBI::errstr";
+  $sth->execute( $rid, $read_nr, $lane, $total_reads, $pass_filter, $total_bases, $QV30_bases) || die "$DBI::errstr";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (18 Nov 2011)
+sub add_illumina_lane_stats_summary {
+  my ($rid, $summary) = @_;
+  
+  my @entries = fetch_illumina_lane_stats_by_rid($rid);
+  my %entries;
+  map {$entries{$$_[0]}{$$_[1]}{$$_[2]} = $_} @entries;
+
+
+  foreach my $read_nr ( keys %$summary ) {
+    foreach my $lane ( keys %{$$summary{ $read_nr }} ) {
+      # the information for read2 was not stored, so we create it now.
+      if ( $read_nr == 2 && ! $entries{$rid}{$read_nr}{$lane} ) {
+	$entries{$rid}{1}{$lane}[1] = 2;
+	print "@{$entries{$rid}{1}{$lane}}\n";
+	add_illumina_lane_stats(@{$entries{$rid}{1}{$lane}});
+      }
+      my @values;
+      foreach my $key ( sort keys %{$$summary{ $read_nr }{$lane}} ) {
+	push @values, "$key = '$$summary{ $read_nr }{$lane}{ $key }' ";
+      }
+      my $q = "UPDATE  illumina_lane_stats SET " . join(", ", @values) . "WHERE rid=$rid AND read_nr=$read_nr AND lane=$lane";
+      my $sth = $dbi->prepare($q);
+      $sth->execute() || die "$DBI::errstr";
+    }
+  }
+  
 }
 
 
@@ -699,7 +784,8 @@ sub add_illumina_lane_stats {
 # Kim Brugger (23 Jun 2011)
 sub fetch_illumina_lane_stats_by_rid {
   my ( $rid ) = @_;
-  my $q = "SELECT * FROM  illumina_lane_stats where rid = ?";
+  check_connection();
+  my $q = "SELECT * FROM illumina_lane_stats where rid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid ) || die "$DBI::errstr";
   my @res;
@@ -710,7 +796,6 @@ sub fetch_illumina_lane_stats_by_rid {
 }
 
 
-
 # 
 # 
 # 
@@ -718,6 +803,7 @@ sub fetch_illumina_lane_stats_by_rid {
 sub update_file {
   my ( $fid, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
   
+  check_connection();
   return if (!$total_reads && !$read_length && !$sample_size && !$Q30bases && !$duplicates && !$partial_adaptors & !$Avg_AC);
 
   my $q = "UPDATE file SET ";
@@ -744,6 +830,7 @@ sub update_file {
 # Kim Brugger (23 Jun 2011)
 sub add_file {
   my ( $file, $sample, $project, $run, $platform, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC ) = @_;
+  check_connection();
 
   my $file_id = fetch_file_id( $file );
   return $file_id if ( $file_id );
@@ -775,6 +862,7 @@ sub add_file {
 # Kim Brugger (23 Jun 2011)
 sub fetch_file_info {
   my ( $fid ) = @_;
+  check_connection();
   my $q = "SELECT name, total_reads, read_length, sample_size, Q30bases, duplicates, partial_adaptors, Avg_AC, sid, rid  FROM file where fid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -790,6 +878,7 @@ sub fetch_file_info {
 # Kim Brugger (23 Jun 2011)
 sub fetch_filename {
   my ( $fid ) = @_;
+  check_connection();
   my $q = "SELECT name FROM file where fid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $fid ) || die "$DBI::errstr";
@@ -804,6 +893,7 @@ sub fetch_filename {
 # Kim Brugger (23 Jun 2011)
 sub fetch_file_id {
   my ( $file ) = @_;
+  check_connection();
   my $q = "SELECT fid FROM file where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $file ) || die "$DBI::errstr";
@@ -819,6 +909,7 @@ sub fetch_file_id {
 # Kim Brugger (23 Jun 2011)
 sub add_sample {
   my ( $sample, $project ) = @_;
+  check_connection();
 
   # check to see if it already exists.
   my $sample_id = fetch_sample_id( $sample);
@@ -845,6 +936,7 @@ sub add_sample {
 # Kim Brugger (23 Jun 2011)
 sub fetch_sample_id {
   my ( $sample ) = @_;
+  check_connection();
   my $q = "SELECT sid FROM sample where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $sample ) || die "$DBI::errstr";
@@ -860,6 +952,7 @@ sub fetch_sample_id {
 # Kim Brugger (23 Jun 2011)
 sub fetch_sample_name {
   my ( $sid ) = @_;
+  check_connection();
   my $q = "SELECT name FROM sample where sid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $sid ) || die "$DBI::errstr";
@@ -872,6 +965,7 @@ sub fetch_sample_name {
 # 
 # Kim Brugger (23 Jun 2011)
 sub fetch_samples {
+  check_connection();
   my $q = "SELECT * FROM sample";
   my $sth = $dbi->prepare($q);
   $sth->execute( ) || die "$DBI::errstr";
@@ -890,6 +984,7 @@ sub fetch_samples {
 # Kim Brugger (23 Jun 2011)
 sub add_run {
   my ( $run, $platform ) = @_;
+  check_connection();
   
   # check to see if it already exists.
   my $run_id = fetch_run_id( $run );
@@ -910,6 +1005,7 @@ sub add_run {
 # Kim Brugger (23 Jun 2011)
 sub fetch_runs {
   
+  check_connection();
   my $q = "SELECT * FROM run";
   my $sth = $dbi->prepare($q);
   $sth->execute( ) || die "$DBI::errstr";
@@ -930,6 +1026,7 @@ sub fetch_runs {
 # Kim Brugger (24 Jun 2011)
 sub fetch_run_name {
   my ( $rid ) = @_;
+  check_connection();
   my $q = "SELECT name FROM run where rid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $rid ) || die "$DBI::errstr";
@@ -944,6 +1041,7 @@ sub fetch_run_name {
 # Kim Brugger (24 Jun 2011)
 sub fetch_run_id {
   my ( $run ) = @_;
+  check_connection();
   my $q = "SELECT rid FROM run where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $run ) || die "$DBI::errstr";
@@ -958,6 +1056,7 @@ sub fetch_run_id {
 # Kim Brugger (23 Jun 2011)
 sub add_project {
   my ( $project ) = @_;
+  check_connection();
   
   # check to see if it already exists.
   my $project_id = fetch_project_id( $project);
@@ -977,6 +1076,7 @@ sub add_project {
 # Kim Brugger (23 Jun 2011)
 sub fetch_project_id {
   my ( $project ) = @_;
+  check_connection();
   my $q = "SELECT pid FROM project where name = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $project ) || die "$DBI::errstr";
@@ -990,6 +1090,7 @@ sub fetch_project_id {
 # Kim Brugger (23 Jun 2011)
 sub fetch_project_name {
   my ( $pid ) = @_;
+  check_connection();
   my $q = "SELECT name FROM project where pid = ?";
   my $sth = $dbi->prepare($q);
   $sth->execute( $pid ) || die "$DBI::errstr";
@@ -1005,6 +1106,7 @@ sub fetch_project_name {
 # Kim Brugger (23 Jun 2011)
 sub fetch_projects {
   my $q = "SELECT * FROM project";
+  check_connection();
   my $sth = $dbi->prepare($q);
   $sth->execute( ) || die "$DBI::errstr";
   my @data;
@@ -1023,6 +1125,7 @@ sub fetch_projects {
 # Kim Brugger (20 Jul 2011)
 sub fetch_files_from_project {
   my ($pid) = @_;
+  check_connection();
 
   my $q = "select s.*, f.fid, f.name from file f, sample s where s.pid= ? and s.sid = f.sid ";
   my $sth = $dbi->prepare($q);
@@ -1042,6 +1145,7 @@ sub fetch_files_from_project {
 sub fetch_files_from_sample {
   my ($sid) = @_;
 
+  check_connection();
   my $q = "select f.fid, f.name, r.* from file f, run r where f.sid= ? and r.rid = f.rid";
   my $sth = $dbi->prepare($q);
   $sth->execute( $sid ) || die "$DBI::errstr";

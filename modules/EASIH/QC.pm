@@ -487,8 +487,9 @@ sub mappings {
 sub analyse {
   my ( $seq, $qual, $res) = @_;
 
-  chomp($seq);
-  chomp($qual);
+
+  chomp($seq) if ( $seq );
+  chomp($qual) if ($qual);
 
   my @seq  = split("", $seq)  if ( $seq );
   my @qual = split("", $qual) if ( $qual );

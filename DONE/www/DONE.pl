@@ -14,6 +14,7 @@ use EASIH::HTML;
 use EASIH::DONE;
 
 
+#EASIH::DONE::Connect('done_dev');
 
 
 
@@ -24,36 +25,56 @@ print EASIH::HTML::start('EASIH-DONE', 'EASIH-DONE.css');
 
 if ( $EASIH::HTML::parameters{ 'QC' } ) {
 
-  my $fid = $EASIH::HTML::parameters{ 'fid' };
+
+#  $EASIH::HTML::parameters{ 'fid' } = 503;
+  my ($fid1, $fid2) = split(/,/, $EASIH::HTML::parameters{ 'fid' });
   
   print_header();
   my $boxid1 = "b1_boxplot";
-  print_boxplot($fid, $boxid1);
+  my $boxid2 = "b2_boxplot";
+  print_boxplot($fid1, $boxid1);
+  print_boxplot($fid2, $boxid2) if ($fid2);
   my $base1 = "basesplits1";
-  print_basesplits($fid, $base1);
+  my $base2 = "basesplits2";
+  print_basesplits($fid1, $base1);
+  print_basesplits($fid2, $base2) if ($fid2);
   my $qvshist1 = "qvshist1";
-  print_qv_histogram($fid, $qvshist1);
+  my $qvshist2 = "qvshist2";
+  print_qv_histogram($fid1, $qvshist1);
+  print_qv_histogram($fid2, $qvshist2) if ($fid2);
   my $gc1 = "gc1";
-  print_gc($fid, $gc1);
+  my $gc2 = "gc2";
+  print_gc($fid1, $gc1) if (!$fid2);
+#  print_gc($fid2, $gc2) if ($fid2);
+  my $gc3 = "gc3";
+  print_combined_gc($fid1, $fid2, $gc3) if ($fid2);
   my $ad1 = "ad1";
-  print_adaptor_histogram($fid, $ad1);
+  my $ad12 = "ad12";
+  print_adaptor_histogram($fid1, $ad1) if ( 1 || $fid2);
+  print_combined_adaptor_histogram($fid1, $fid2, $ad12) if ( $fid2);
   my $dh1 = "dh1";
-  print_dups_histogram($fid, $dh1);
+  my $dh12 = "dh12";
+  print_dups_histogram($fid1, $dh1) if ($fid2);
+  print_combined_dups_histogram($fid1, $fid2, $dh12) if ($fid2);
   
-  my ( $name, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC, $sid, $rid ) = EASIH::DONE::fetch_file_info( $fid );
+  my ( $name, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC, $sid, $rid ) = EASIH::DONE::fetch_file_info( $fid1 );
   
   $name =~ s/.*\///;
   
 
-  my @traffic_light = ([{value => 'Bases >=Q30:'}, {value=>'<70%', bgcolor=>'red'},{value=>'70-90%', bgcolor=>'yellow'},{value=>'>90%', bgcolor=>'#00DD00'}],
-		       [{value => 'Duplicates sequences:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}],
-		       [{value => 'Partial adaptors:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}],
-		       [{value => 'Mean AC:'}, {value=>'<40% or > 60%', bgcolor=>'red'},{value=>'40-45% or 55-60%', bgcolor=>'yellow'},{value=>'45-55%', bgcolor=>'#00DD00'}]);
+  my @traffic_light;
+  push @traffic_light,["NOT ANALYSED YET..."] if (!$Q30bases && !$duplicates && !$partial_adaptors && !$Avg_AC );
+  push @traffic_light,[{value => 'Bases >=Q30:'}, {value=>'<70%', bgcolor=>'red'},{value=>'70-90%', bgcolor=>'yellow'},{value=>'>90%', bgcolor=>'#00DD00'}] if ( $Q30bases );
+  push @traffic_light,[{value => 'Duplicates sequences:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}] if ( $duplicates );
+  push @traffic_light, [{value => 'Partial adaptors:'}, {value=>'>10%', bgcolor=>'red'},{value=>'1-10%', bgcolor=>'yellow'},{value=>'<1%', bgcolor=>'#00DD00'}] if ( $partial_adaptors );
+  push @traffic_light, [{value => 'Mean AC:'}, {value=>'<40% or > 60%', bgcolor=>'red'},{value=>'40-45% or 55-60%', bgcolor=>'yellow'},{value=>'45-55%', bgcolor=>'#00DD00'}] if ( $Avg_AC );
   
 
   easih_top();
   
-  print " <H1>QC report for: $name</H1>";
+  $name =~ s/\.[1|2].*gz//;
+
+  print " <H1>QC report for: $name [$fid1,$fid2]</H1>";
   
 
   my @data = ([{value=>'Filename:', bgcolor => 'grey'}, {value=>"$name", bgcolor => 'grey'}],
@@ -69,43 +90,45 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   $colour = 'yellow' if ($Q30bases >= 70 );
   $colour = '#00DD00'  if ($Q30bases >= 90 );
   
-  push @data, [{value=>'Q30 bases:', bgcolor => $colour}, {value=>"$Q30bases %", bgcolor => $colour}];
+  push @data, [{value=>'Q30 bases:', bgcolor => $colour}, {value=>"$Q30bases %", bgcolor => $colour}] if ($Q30bases);
   
   $colour = 'red';
   $colour = 'yellow' if ($duplicates <10 );
   $colour = '#00DD00'  if ($duplicates < 1 );
-  push @data, [{value=>'Duplicates:', bgcolor => $colour}, {value=>"$duplicates %", bgcolor => $colour}];
+  push @data, [{value=>'Duplicates:', bgcolor => $colour}, {value=>"$duplicates %", bgcolor => $colour}] if ($duplicates);
   
   $colour = 'red';
   $colour = 'yellow' if ($partial_adaptors < 10  );
   $colour = '#00DD00'  if ($partial_adaptors < 1 );
-  push @data, [{value=>'Partial adaptors:', bgcolor => $colour}, {value=>"$partial_adaptors %", bgcolor => $colour}];
+  push @data, [{value=>'Partial adaptors:', bgcolor => $colour}, {value=>"$partial_adaptors %", bgcolor => $colour}] if ($partial_adaptors);
   
   $colour = 'red';
   $colour = 'yellow' if ($Avg_AC > 40 && $Avg_AC < 60);
   $colour = '#00DD00'  if ($Avg_AC > 45 && $Avg_AC < 55);
-  push @data, [{value=>'Mean AC:', bgcolor => $colour}, {value=>"$Avg_AC %", bgcolor => $colour}];
+  push @data, [{value=>'Mean AC:', bgcolor => $colour}, {value=>"$Avg_AC %", bgcolor => $colour}] if ($Avg_AC);
   
-#, $partial_adaptors, $Avg_AC
-
-
   print EASIH::HTML::advanced_table(\@data, 1, 0, 0, 'lightgrey', 0, '700px') . "<br>\n";
   
   print EASIH::HTML::advanced_table(\@traffic_light, 1, 0, 0, 'lightgrey', 0, '700px');
 
-  print "
-    <div id='$boxid1' style='width: 900px; height: 300px;'></div>
-    <div id='$qvshist1' style='width: 900px; height: 300px;'></div>
-    <div id='$dh1' style='width: 900px; height: 300px;'></div>
-    <div id='$ad1' style='width: 900px; height: 300px;'></div>
-    <div id='$base1' style='width: 900px; height: 300px;'></div>     
-    <div id='$gc1' style='width: 900px; height: 300px;'></div>
-";
+#   print "<h4>Read1</h4><div id='$boxid1' style='width: 900px; height: 300px;'></div>";
+#   print "<h4>Read2</h4><div id='$boxid2' style='width: 900px; height: 300px;'></div>" if ($fid2);
+#   print "<h4>Read1</h4><div id='$qvshist1' style='width: 900px; height: 300px;'></div>";
+#   print "<h4>Read2</h4><div id='$qvshist2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+   print "<h4>Read1</h4><div id='$dh1' style='width: 900px; height: 300px;'></div>" if ( !$fid2);
+   print "<h4>Read2</h4><div id='$dh12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+
+   print "<h4>Read1</h4><div id='$ad1' style='width: 900px; height: 300px;'></div>" if (!$fid2);
+   print "<h4>Read1+2</h4><div id='$ad12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+   print "<h4>Read1</h4><div id='$base1' style='width: 900px; height: 300px;'></div>";
+   print "<h4>Read2</h4><div id='$base2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+  print "<h4>Read1</h4><div id='$gc1' style='width: 900px; height: 300px;'></div>" if (! $fid2);
+  print "<h4>Read1+2</h4><div id='$gc3' style='width: 900px; height: 300px;'></div>"if ( $fid2);
 
 
   my @mappings = (['database', 'Hits', 'non-unique hits', 'duplicates']);
   
-  my @mapping_stats = EASIH::DONE::fetch_mapping_stats($fid);
+  my @mapping_stats = EASIH::DONE::fetch_mapping_stats($fid1);
   my ($max_ref, $max) = (undef, -1);
   
   foreach my $mapping ( @mapping_stats ) {
@@ -159,42 +182,143 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
   my $run_name = EASIH::DONE::fetch_run_name( $rid );
   easih_top();
-  print "<h1> Stats for run: $run_name</h1>";
-
+  print "<h1> Stats for run: '$run_name'</h1>";
 
   my @lanes  = EASIH::DONE::fetch_illumina_lane_stats_by_rid($rid);
-  my @mplexs = EASIH::DONE::fetch_illumina_multiplex_stats_by_rid($rid);
+  my @mplexs = EASIH::DONE::fetch_illumina_sample_stats_by_rid($rid);
 
-  my @data = (["lane", "Sample", "total", "Pass filter", "Percentage PF"]);
-  foreach my $lane ( @lanes) {
-    
-    
-    my @lvs = ("lane $$lane[2].$$lane[3]", "<a href=$0?QC=1&fid=$$lane[1]> $$lane[4]</a>", $$lane[5], $$lane[6], sprintf("%.2f %%", $$lane[6]*100/$$lane[5]));
+#  print STDERR Dumper( @lanes );
 
-    @lvs = ("lane $$lane[2].$$lane[3]", $$lane[4], $$lane[5], $$lane[6], sprintf("%.2f %%", $$lane[6]*100/$$lane[5])) if ($$lane[4] eq "MULTIPLEXED");
+  my @run1data;
+  my @run2data;
 
-    
+  foreach my $lane ( sort { $$a[1] <=> $$b[1] || $$a[2] <=> $$b[2] } @lanes ) {
+    my @lane_data;
 
-    if ($$lane[5] < 30_000_000 || $$lane[6]*100/$$lane[5] < 75 ) {
-      my @clvs;
-      foreach my $lv ( @lvs ) {
-	push @clvs, {value=> $lv, bgcolor=>'#CC0000'};
-      }
-      @lvs = @clvs;
-
+    #lane_nr, total_reads, readsPF
+    push @lane_data, $$lane[2], _round($$lane[3]), _round($$lane[4]);
+    # %PF
+    push @lane_data, sprintf("%.2f%%", $$lane[4]*100/$$lane[3]);
+    # %QV30+ bases
+    if ($$lane[6] && $$lane[5] ) {
+      push @lane_data, sprintf("%.2f%%", $$lane[6]*100/$$lane[5]) ;
     }
-
-    push @data, \@lvs;
-
-    if ( $$lane[4] eq "MULTIPLEXED") {
-      foreach my $mplex (@mplexs ) {
-	if ( $$lane[2] == $$mplex[2] && $$lane[3] == $$mplex[3]) {
-	  push @data, [undef, "<a href=$0?QC=1&fid=$$mplex[1]>$$mplex[4]</a>", $$mplex[5], $$mplex[7], "$$mplex[6] %"];
-	}
-      }
+    else {
+      push @lane_data, "NA";
     }
-
+    # clusters
+    if ($$lane[7] && $$lane[8] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",_round($$lane[7]),_round($$lane[8]));
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # clustersPF
+    if ($$lane[9] && $$lane[10] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",_round($$lane[9]),_round($$lane[10]));
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # phasing/prephasing
+    if ($$lane[11] && $$lane[12] ) {
+      push @lane_data, sprintf("%s/%s",$$lane[11],$$lane[12]);
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # PhiX align
+    if ($$lane[13] && $$lane[14] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",$$lane[13],$$lane[14]);
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # % Error
+    if ($$lane[15] && $$lane[16] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",$$lane[15],$$lane[16]);
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # First int
+    if ($$lane[19] && $$lane[20] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",$$lane[19],$$lane[20]);
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    # 20th int
+    if ($$lane[21] && $$lane[22] ) {
+      push @lane_data, sprintf("%s&plusmn;%s",$$lane[21],$$lane[22]);
+    }
+    else {
+      push @lane_data, "NA";
+    }
+    
+#    push @lane_data,                 "$$lane[7]&plusmn;$$lane[8]", "$$lane[9]&plusmn;$$lane[10]",  "$$lane[11] / $$lane[12]", 
+#                     "$$lane[13]&plusmn;$$lane[14]","$$lane[15]&plusmn;$$lane[16]","$$lane[17]&plusmn;$$lane[18]",
+#                     "$$lane[19]&plusmn;$$lane[20]","$$lane[21]&plusmn;$$lane[22]";
+    push @run1data, \@lane_data if ($$lane[1] == 1);
+    push @run2data, \@lane_data if ($$lane[1] == 2);
   }
+
+  if (@run1data) {
+    
+    unshift @run1data,['lane', '#reads', 'readsPF', '%PF', '%QV30+ bases', 'clusters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', 'clustersPF&nbsp;&nbsp;&nbsp;&nbsp;', 'phas/preph','%alig', 'Error rate', 'First Int', '20th Int'];
+    
+    print "<H3>Read 1</H3>\n";
+    print EASIH::HTML::advanced_table(\@run1data, 1, 1, 1, undef, undef, 800);
+  }
+
+  if (@run2data) {
+    unshift @run2data,['lane', '#reads', 'readsPF', '%PF', '%QV30+ bases', 'clusters&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', 'clustersPF&nbsp;&nbsp;&nbsp;&nbsp;', 'phas/preph','%alig', 'Error rate', 'First Int', '20th Int'];
+
+    print "<BR><H3>Read 2</H3>\n";
+    print EASIH::HTML::advanced_table(\@run2data, 1, 1, 1, undef, undef, 800);
+  }
+
+
+  print "<BR><H3>Sample statistics</H3>\n";
+
+  my @data = (["Lane", "Sample", "reads", "Barcode","% split"]);
+
+  my %sample_stats;
+  foreach my $mplex (sort {$$a[2] <=> $$b[2] } @mplexs ) {
+#    next if ($$mplex[3]  != 1 );
+
+#    push @data, [$$mplex[2], $$mplex[4], $$mplex[5], $$mplex[7], $$mplex[6]];
+    push @{$sample_stats{$$mplex[4]}{fids}}, $$mplex[1];
+    $sample_stats{$$mplex[4]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
+    $sample_stats{$$mplex[4]}{ lane } = $$mplex[2];
+    $sample_stats{$$mplex[4]}{ bcode } = $$mplex[5] || "&nbsp;";
+    $sample_stats{$$mplex[4]}{ reads } = _round($$mplex[7]);
+    $sample_stats{$$mplex[4]}{ perc } = $$mplex[6] || "&nbsp;";
+  }
+
+
+    
+  foreach my $sample (sort {$sample_stats{$a}{lane} <=> $sample_stats{$b}{lane}} keys %sample_stats ) {
+
+    $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
+    
+    $sample_stats{$sample}{ filename } =~ s/^.*\///;
+    $sample_stats{$sample}{ filename } =~ s/\.gz//;
+    $sample_stats{$sample}{ filename } =~ s/\.fq//;
+    $sample_stats{$sample}{ filename } =~ s/\.[12]\z//;
+
+    my $colour = "grey";
+    $colour = "lightgrey" if ( $sample_stats{$sample}{lane} % 2);
+    
+    
+    push @data, [{value=>$sample_stats{$sample}{lane}, bgcolor => $colour},
+		 {value=>"<a href=$0?QC=1&fid=$sample_stats{$sample}{fids}>$sample</a>", bgcolor => $colour},
+		 {value=>$sample_stats{$sample}{ reads }, bgcolor => $colour}, 
+		 {value=>$sample_stats{$sample}{ bcode }, bgcolor => $colour}, 
+		 {value=>"$sample_stats{$sample}{ perc } %", bgcolor => $colour}];
+  }
+  
+  
   print EASIH::HTML::advanced_table(\@data, 1, 1, 1, undef, undef, 600);
 
   easih_foot();
@@ -245,9 +369,10 @@ elsif( $EASIH::HTML::parameters{ 'runs' } ) {
   print "<h1> Runs in database </h1>";
 
   my @runs = (['Run', 'Platform', 'Samples']) ;
-  foreach my $run ( sort {$$b[1] cmp $$a[1] } EASIH::DONE::fetch_runs()) {
-    
+  foreach my $run ( sort {$$b[0] <=> $$a[0] } EASIH::DONE::fetch_runs()) {
+
     my $files = int( EASIH::DONE::fetch_samples_from_run($$run[1]));
+    next if (! $files );
     push @runs, ["<a href='$0?rid=$$run[0]'> $$run[1]</a>", $$run[2], $files];
   }
 
@@ -425,6 +550,40 @@ else {
 # 
 # 
 # 
+# Kim Brugger (25 Nov 2011)
+sub _round {
+  my ($value) = @_;
+
+  return $value if ($value !~ /^\d+\z/ && $value =~ /^\d+\.\d+\z/ );
+
+
+
+
+  if ( $value > 100 && $value < 1000) {
+    $value = sprintf("%.2fK", $value/1000);
+  }
+  elsif ( $value > 1000 && $value < 10000) {
+    $value = sprintf("%.1fK", $value/1000);
+  }
+  elsif ( $value > 10000 && $value < 100000) {
+    $value = sprintf("%.1fK", $value/1000);
+  }
+  elsif ( $value > 100000 && $value < 1000000) {
+    $value = sprintf("%dK", $value/1000);
+  }
+  elsif ( $value > 1000000 && $value < 10000000) {
+    $value = sprintf("%.1fM", $value/1000000);
+  }
+  elsif ( $value > 10000000) {
+    $value = sprintf("%dM", $value/1000000);
+  }
+  return $value;
+}
+
+
+# 
+# 
+# 
 # Kim Brugger (19 Jul 2011)
 sub easih_top {
 
@@ -484,22 +643,19 @@ sub print_basesplits {
   my ($fid, $domid) = @_;
 
   print '<script type="text/javascript">
-      var queryString = "";
-      var dataUrl = "";
+      google.load("visualization", "1", {packages:["imagechart"]});
 
-      function onLoadCallback() {
-        if (dataUrl.length > 0) {
-          var query = new google.visualization.Query(dataUrl);
-          query.setQuery(queryString);
-          query.send(handleQueryResponse);
-        } else {
+      google.setOnLoadCallback(drawChart);
+
+      function drawChart() {
+          var queryString = "";
           var dataTable = new google.visualization.DataTable();
 
-         dataTable.addColumn("number");
-         dataTable.addColumn("number");
-         dataTable.addColumn("number");
-         dataTable.addColumn("number");
-         dataTable.addColumn("number");
+          dataTable.addColumn("number");
+          dataTable.addColumn("number");
+          dataTable.addColumn("number");
+          dataTable.addColumn("number");
+          dataTable.addColumn("number");
 ';
 
   my @data;
@@ -513,47 +669,26 @@ sub print_basesplits {
   }
 
   print '
-  draw(dataTable);
-        }
-      }
-
-      function draw(dataTable) {
         var vis = new google.visualization.ImageChart(document.getElementById("'.$domid .'"));
-        var options = {
-          chxl: "",
-          chxp: "",
-          chxr: "",
-          chxs: "",
-          chxtc: "",
-          chxt: "y,x",
-          cht: "bvs",
-          chco: "00CC00,0000CC,000000,CC0000,999999",
-          chd: "s:UNYOYV,TZUTUS,999999",
-          chdl: "A|C|G|T|N",
-          chp: "0,0.017",
-          chm: "r,FF0000,0,0,0",
-          chtt: "Base splits pr cycle"
-        };
-        vis.draw(dataTable, options);
+        vis.draw(dataTable, { chxl: "",
+                              chxp: "",
+                              chxr: "",
+                              chxs: "",
+                              chxtc: "",
+                              chxt: "y,x",
+                              cht: "bvs",
+                              chco: "00CC00,0000CC,000000,CC0000,999999",
+                              chd: "s:UNYOYV,TZUTUS,999999",
+                              chdl: "A|C|G|T|N",
+                              chp: "0,0.017",
+                              chm: "r,FF0000,0,0,0",
+                              chtt: "Base splits pr cycle"});
       }
 
-      function handleQueryResponse(response) {
-        if (response.isError()) {
-          alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
-          return;
-        }
-        draw(response.getDataTable());
-      }
-
-      google.load("visualization", "1", {packages:["imagechart"]});
-      google.setOnLoadCallback(onLoadCallback);
 
 </script> 
 ';  
 }
-
-
-
 
 
 # 
@@ -563,17 +698,6 @@ sub print_basesplits {
 sub print_adaptor_histogram {
   my ($fid, $domid) = @_;
 
-  print '
-    <script type="text/javascript">
-      google.load("visualization", "1", {packages:["corechart"]});
-      google.setOnLoadCallback(drawChart);
-      function drawChart() {
-        var data = new google.visualization.DataTable();
-        data.addColumn("string", "Position");
-        data.addColumn("number", "Counts");
-';
-
-
   my @data;
   my @adaptors = EASIH::DONE::fetch_adaptors( $fid );
 
@@ -581,6 +705,18 @@ sub print_adaptor_histogram {
   foreach my $split ( @adaptors ) {
     $splits{$$split[0]} = $$split[1];
   }
+
+  return if ( !@adaptors);
+
+  print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "Position");
+        data.addColumn("number", "read 1");
+';
 
   print"          data.addRows(".(keys %splits ).");\n";
 
@@ -597,7 +733,66 @@ sub print_adaptor_histogram {
   var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
         chart.draw(data, {title: "Partial adaptor mapping",
                           hAxis: {title: "Count"},
-                          vAxis: {title: "QVs"}
+                          vAxis: {title: "Adaptor"}
+                         });
+      }
+    </script>
+';
+
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_adaptor_histogram {
+  my ($fid2, $fid1, $domid) = @_;
+
+  my @data;
+  my @adaptors1 = EASIH::DONE::fetch_adaptors( $fid1 );
+  my %splits1;
+  foreach my $split ( @adaptors1 ) {
+    $splits1{$$split[0]} = $$split[1];
+  }
+
+  my @adaptors2 = EASIH::DONE::fetch_adaptors( $fid2 );
+  my %splits2;
+  foreach my $split ( @adaptors2 ) {
+    $splits2{$$split[0]} = $$split[1];
+  }
+
+  return if ( !@adaptors1 && !@adaptors2);
+
+
+  print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "Position");
+        data.addColumn("number", "read 1");
+        data.addColumn("number", "read 2");
+';
+
+  print"          data.addRows(".(keys %splits1 ).");\n";
+
+    for (my $i=0; $i < $adaptors1[-1][0]; $i++){
+      
+      $splits1{ $i } ||= 0;
+      $splits2{ $i } ||= 0;
+      
+      print "          data.setValue($i, 0, '$i');\n";
+      print "          data.setValue($i, 1, $splits1{$i});\n";
+      print "          data.setValue($i, 2, $splits2{$i});\n";
+    }
+    
+    print '
+  var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "Partial adaptor mapping",
+                          hAxis: {title: "Count"},
+                          vAxis: {title: "Adaptor"}
                          });
       }
     </script>
@@ -613,6 +808,17 @@ sub print_adaptor_histogram {
 sub print_qv_histogram {
   my ($fid, $domid) = @_;
 
+
+  my @data;
+  my @splits = EASIH::DONE::fetch_qvs_histogram( $fid );
+
+  my %splits;
+  foreach my $split ( @splits ) {
+    $splits{$$split[0]} = $$split[1];
+  }
+
+  return if ( !@splits);
+
   print '
     <script type="text/javascript">
       google.load("visualization", "1", {packages:["corechart"]});
@@ -622,15 +828,6 @@ sub print_qv_histogram {
         data.addColumn("string", "QV Score");
         data.addColumn("number", "Counts");
 ';
-
-
-  my @data;
-  my @splits = EASIH::DONE::fetch_qvs_histogram( $fid );
-
-  my %splits;
-  foreach my $split ( @splits ) {
-    $splits{$$split[0]} = $$split[1];
-  }
 
   print"          data.addRows(".($splits[-1][0]  ).");\n";
 
@@ -662,6 +859,10 @@ sub print_qv_histogram {
 sub print_dups_histogram {
   my ($fid, $domid) = @_;
 
+  my @dups = EASIH::DONE::fetch_duplicates( $fid );
+
+  return if (!@dups);
+
   print '
     <script type="text/javascript">
       google.load("visualization", "1", {packages:["corechart"]});
@@ -671,9 +872,6 @@ sub print_dups_histogram {
         data.addColumn("string", "QV Score");
         data.addColumn("number", "Counts");
 ';
-
-
-  my @dups = EASIH::DONE::fetch_duplicates( $fid );
 
   my %splits;
   foreach my $dup ( @dups ) {
@@ -688,6 +886,64 @@ sub print_dups_histogram {
 
     print "          data.setValue($i, 0, '$i');\n";
     print "          data.setValue($i, 1, $splits{$i});\n";
+  }
+
+  print '
+  var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "Duplicates",
+                          hAxis: {title: "Duplicates"},
+                          vAxis: {title: "Sequences"}
+                         });
+      }
+    </script>
+';
+
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_dups_histogram {
+  my ($fid1, $fid2, $domid) = @_;
+
+  my @dups1 = EASIH::DONE::fetch_duplicates( $fid1 );
+  my @dups2 = EASIH::DONE::fetch_duplicates( $fid2 );
+
+  return if (!@dups1 && !@dups2);
+
+  print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "QV Score");
+        data.addColumn("number", "read 1");
+        data.addColumn("number", "read 2");
+';
+
+  my %splits1;
+  foreach my $dup ( @dups1 ) {
+    $splits1{$$dup[0]} = $$dup[1];
+  }
+
+  my %splits2;
+  foreach my $dup ( @dups2 ) {
+    $splits2{$$dup[0]} = $$dup[1];
+  }
+
+  print"          data.addRows(".($dups1[-1][0] +1 ).");\n";
+
+  for (my $i=2;$i<= $dups2[-1][0]; $i++){
+    
+    $splits1{ $i } ||= 0;
+    $splits2{ $i } ||= 0;
+
+    print "          data.setValue($i, 0, '$i');\n";
+    print "          data.setValue($i, 1, $splits1{$i});\n";
+    print "          data.setValue($i, 1, $splits2{$i});\n";
   }
 
   print '
@@ -747,6 +1003,63 @@ print '
     </script>
 ';
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_gc {
+  my ($fid1, $fid2, $domid) = @_;
+
+  return print_gc($fid1) if (! $fid2 );
+
+print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "GC");
+        data.addColumn("number", "Read 1");
+        data.addColumn("number", "Read 2");
+';
+
+  my @data;
+  my @gcs1 = EASIH::DONE::fetch_gc_distribution( $fid1 );
+  my @gcs2 = EASIH::DONE::fetch_gc_distribution( $fid2 );
+  
+  my %splits1;
+  foreach my $gc ( @gcs1 ) {
+    $splits1{$$gc[0]} = $$gc[1];
+  }
+  my %splits2;
+  foreach my $gc ( @gcs2 ) {
+    $splits2{$$gc[0]} = $$gc[1];
+  }
+  
+  print"          data.addRows(21);\n";
+  
+  for (my $i=0;$i < 21; $i++){
+    my $bin = $i*5;
+    $splits1{ $bin } ||= 0;
+    $splits2{ $bin } ||= 0;
+    
+    print "          data.setValue($i, 0, '$bin');\n";
+    print "          data.setValue($i, 1, $splits1{$bin});\n";
+    print "          data.setValue($i, 2, $splits2{$bin});\n";
+  }
+
+print '
+        var chart = new google.visualization.LineChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "%GC"});
+      }
+    </script>
+';
+}
+
+
 # 
 # 
 # 

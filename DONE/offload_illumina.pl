@@ -31,6 +31,7 @@
 
 
 use strict;
+#use warnings;
 use Getopt::Std;
 
 
@@ -61,8 +62,11 @@ use EASIH;
 use EASIH::Mail;
 use EASIH::DONE;
 
+my $debug = 0;
+#$debug = 1;
+
 my %opts;
-getopts('hv', \%opts);
+getopts('hvd:', \%opts);
 
 if($opts{h})
 {
@@ -79,57 +83,72 @@ my $verbose = $opts{v} || 0;
 my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
 $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
 #$to = 'kim.brugger@easih.ac.uk'; #global
-my $dir = "/seqs/illumina2/";
+#my $dir = "/seqs/illumina3/";
 #my $dir = "/seqs/babraham/";
 my $RunDir; #global
 my $rid;
 
-opendir(DIR, "$dir");
-my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
-closedir(DIR);
+my @dirs  = ('/seqs/illumina2/', 
+	     '/seqs/illumina3/', 
+	     '/seqs/illumina4/',
+    );
 
+@dirs = split(/,/, $opts{ 'd' }) if ( $opts{ 'd' } );
+my $easih_toolbox = '/software/installed/easih-toolbox/';
+$easih_toolbox = '/home/kb468/easih-toolbox/' if ( $debug );
+
+foreach my $dir ( @dirs ) {
+  opendir(DIR, "$dir");
+  my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
+  closedir(DIR);
  
-while( $RunDir = shift @files) {
+  while( $RunDir = shift @files) {
     
     print "RID:: $RunDir --> $rid\n" if ( $verbose );
+
+
+#    next if ($RunDir !~ /111123/);
     
     my $runfolder   = ${dir}.$RunDir;
     my $eventfile   = "$runfolder/Events.log"; 
+    my $RTAcomp     = "$runfolder/RTAComplete.txt";
     my $Intensities = "$runfolder/Data/Intensities"; 
     my $Basecalls   = "$runfolder/Data/Intensities/BaseCalls"; 
 
-    my %Execute = ('01-BCL2QSEQ'  => {'01-command'    => "cd $Intensities; /software/bin/setupBclToQseq.py --in-place --overwrite -o BaseCalls -b BaseCalls", 
+    my %Execute = ('01-BCL2QSEQ'  => {'01-command'    => "cd $Intensities; /software/bin/setupBclToQseq.py --no-eamss --in-place --overwrite -o BaseCalls -b BaseCalls", 
 				  '02-prestatus'  => "BCL2QSEQ_SETUP", 
 				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
 				  '04-poststatus' => "BCL2QSEQ_DONE"},
 	       
-	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 4;", 
+	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
 				  '02-prestatus'  => "MAKE_STARTED", 
 				  '03-failstatus' => "MAKE_FAILED", 
 				  '04-poststatus' => "MAKE_DONE"},
 	       
-	       '03-BCL2FQ'    => {'01-command'    => "/software/installed/easih-toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
+	       '03-BCL2FQ'    => {'01-command'    => "$easih_toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
 				  '02-prestatus'  => "BCL2FQ_STARTED", 
 				  '03-failstatus' => "BCL2FQ_FAILED", 
 				  '04-poststatus' => "BCL2FQ_DONE"},
 	       
-	       '04-QC_Report' => {'01-command'    => "/software/installed/easih-toolbox/scripts/QC_report.pl -p illumina -r -f ", # exclude $fqfile param until you start processing it
+	       '04-QC_Report' => {'01-command'    => "$easih_toolbox/scripts/QC_report.pl -p illumina -f ", # exclude $fqfile param until you start processing it
 				  '02-prestatus'  => "QC_REPORT_STARTED", 
 				  '03-failstatus' => "QC_REPORT_FAILED", 
 				  '04-poststatus' => "QC_REPORT_DONE"},
-
-
-	       '05-QC_DB' => {'01-command'    => "/software/installed/easih-toolbox/DONE/QC_report.pl -p illumina -r ",
+		   
+		   
+	       '05-QC_DB' => {'01-command'    => "$easih_toolbox/DONE/QC_report.pl -p illumina -r ",
 			      '02-prestatus'  => "QC_DB_STARTED", 
 			      '03-failstatus' => "QC_DB_FAILED", 
 			      '04-poststatus' => "QC_DB_DONE"},
     );
 
         
-    if(-e "$eventfile") {
+    if( -e $eventfile || -e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt") {
 
-
-      chomp(my $checkstring = `grep -c "Copying logs to network run folder" $eventfile`);
+      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt");
+      $checkstring = `grep -c "Copying logs to network run folder" $eventfile` 
+	  if (! $checkstring);
+      chomp( $checkstring );
       
       ### Update the status for old and unfinished runs ###
       if(!$checkstring) {
@@ -145,16 +164,13 @@ while( $RunDir = shift @files) {
       }
 
       $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
-
       my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
-
       print "$RunDir last status: $last_status\n" if ($verbose && $last_status);
       
-      next, if($last_status && $last_status ne "RETRY_OFFLOAD");
+      next if ($last_status && $last_status ne "RETRY_OFFLOAD");
 
 	my $failed_status = EASIH::DONE::fetch_offloading_failure( $rid ) if ( $last_status );
 	my $fixed_failed_program = 0;
-
 
 	### Start post processing for new runs ###
 	if($checkstring)
@@ -164,7 +180,6 @@ while( $RunDir = shift @files) {
 	    RunStatus("RUN_COMPLETED");
 	    SendEmail("RUN_COMPLETED","",1);
 	  }
-
 
             ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
 	    
@@ -248,7 +263,7 @@ while( $RunDir = shift @files) {
 	  $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
 	    
 	  if($last_status eq "QC_DB_DONE") {
-		
+	    
 	    ### Processing done status and email ###
 	    my $end = "PROCESSING_DONE";
 	    RunStatus($end);
@@ -257,6 +272,7 @@ while( $RunDir = shift @files) {
 	}
     }
   NEXT_RUNFOLDER:
+  }
 }
 
 ###########################################################

@@ -8,7 +8,7 @@
 #DROP TABLE duplicates;
 #DROP TABLE duplicated_seqs;
 #DROP TABLE adaptors;
-#DROP TABLE illumina_multiplex_stats;
+#DROP TABLE illumina_sample_stats;
 #DROP TABLE illumina_lane_stats;
 #DROP TABLE run;
 
@@ -47,20 +47,41 @@ CREATE TABLE offloading (
 CREATE TABLE illumina_lane_stats (
 
   rid                 INT NOT NULL,
-  fid                 INT ,
+  read                INT,
   lane		      INT NOT NULL,
-  read_nr	      INT NOT NULL,
-  sample              VARCHAR(20) NOT NULL ,
   total_reads	      INT,
   pass_filter	      INT,
+  total_bases	      INT,
+  QV30_bases	      INT,
 
-  PRIMARY KEY (rid, lane, read_nr),
+  clusters	      FLOAT,
+  clustersSD	      FLOAT,
+  clustersPF	      FLOAT,
+  clustersPFSD	      FLOAT,
+
+  phas   	      FLOAT,
+  preph	              FLOAT,
+
+  PrcAlign	      FLOAT,
+  PrcAlignSD	      FLOAT,
+
+  ErrRate	      FLOAT,
+  ErrRateSD	      FLOAT,
+
+  PrcPFClusters	      FLOAT,
+  PrcPFClustersSD     FLOAT,
+
+  FirstCycleInt	      FLOAT,
+  FirstCycleIntSD     FLOAT,
+  20CyclesInt	      FLOAT,
+  20CyclesIntSD	      FLOAT,
+
+  PRIMARY KEY (rid, lane),
   KEY rid_idx (rid),
-  KEY fid_idx (fid)
 
 );
 
-CREATE TABLE illumina_multiplex_stats (
+CREATE TABLE illumina_sample_stats (
   rid                 INT NOT NULL,
   fid                 INT NOT NULL,
   lane		      INT NOT NULL,
@@ -69,7 +90,6 @@ CREATE TABLE illumina_multiplex_stats (
   bcode		      VARCHAR(20),
   ratio		      float,
   total_reads	      INT,
-  pass_filter	      INT,
 
   PRIMARY KEY (rid, fid, lane, read_nr, bcode),
   KEY rid_idx (rid),

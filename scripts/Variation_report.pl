@@ -55,7 +55,8 @@ use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 my @argv = @ARGV;
 
 my %opts;
-getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
+#getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
+getopts('cb:B:h:l:o:O:Q:v:S:T', \%opts);    #svvd 31-10-2011: si -> v (snps,indels -> variants)
 #perldoc() if ( $opts{h});
 usage() if ( $opts{h});
 
@@ -72,33 +73,40 @@ EASIH::SNPs->New();
 if ( $opts{ Q }  ) {
 
   $opts{ Q } =~ s/\.bam//;
+  $opts{ Q } =~ s/\.vcf//;
   $opts{ Q } =~ s/\.snps.vcf//;
   $opts{ Q } =~ s/\.indels.vcf//;
 
   $opts{s} = "$opts{Q}.snps.vcf"   if ( -e "$opts{Q}.snps.vcf");
   $opts{i} = "$opts{Q}.indels.vcf" if ( -e "$opts{Q}.indels.vcf");
+  $opts{v} = "$opts{Q}.vcf" if ( -e "$opts{Q}.vcf");
   $opts{b} = "$opts{Q}.bam" if ( -e "$opts{Q}.bam" );
   $opts{o} = "$opts{Q}.var_full.csv";
   $opts{O} = "$opts{Q}.var.csv";
 }
-  
-usage() if ( !$opts{s}  && !$opts{i});
 
-my $exit_count = 10;
+
+#print Dumper( \%opts );
+  
+#usage() if ( !$opts{s}  && !$opts{i});
+usage() if ( !$opts{v} && !$opts{s} && !$opts{i});
+
+#my $exit_count = 10;
+my $exit_count = 9;
 
 my $snp_vcf      = $opts{s};
 my $indel_vcf    = $opts{i};
+my $snp_indel_vcf= $opts{v};
 my $bam          = $opts{b};
 my $basecount    = $opts{c} || 0;
 my $from_36      = $opts{T} || 0;
-#my $at_ENSEMBL   = $opts{E} || 0;
 
 my $baits        = $opts{B} || "";
 my $leeway       = $opts{l} || 100;
 
 my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
 my $out          = $opts{o} || undef;
-my $full_out     = $opts{O} || undef;
+my $filtered_out = $opts{O} || undef;
 
 my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10, 
 		'STOP_GAINED'            => 10, 
@@ -125,32 +133,41 @@ my %effects  = ('ESSENTIAL_SPLICE_SITE'  => 10,
     );
 
 
-###svvd###
+my $DACstring = "";
+my $ANstring  = "";
+my $SMstring  = "";
 
-my $DACstring = DepthAndCoverage($bam,$baits) if ( $bam && $baits);
+if ( $bam && $baits ) {
 
-my($ANstring,@SMstrings) = BamHead_ANSM($bam) if ( $bam );
+  $DACstring = DepthAndCoverage($bam,$baits) if ( $baits);
+  ($ANstring, my @SMstrings) = BamHead_ANSM($bam);
 
+  if($ANstring eq "hg18" && ! $from_36) {
+    $from_36 = 1;
+    print STDERR "**************************************\n";
+    print STDERR "\nSetting -T flag automatically as reference is hg18\nPlease use -T<ransform> option so that the coordinates can be found in Ensembl\n";
+    print STDERR "**************************************\n";
+  }
 
-$ANstring = "hg19" if ( $ANstring eq "human_g1k_v37");
-die "\n\n ALERT!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
-
-$ANstring = "# Aligned2Reference: $ANstring";
-
-my $SMstring = "# SampleName: ";
-
-foreach my $string(@SMstrings)
-{
+  die "\n\n ERROR!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
+  
+  $ANstring = "# Aligned2Reference: $ANstring";
+  
+  $SMstring = "# SampleName: ";
+  
+  foreach my $string(@SMstrings) {
     $SMstring .= "$string,";
+  }
+  
+  $SMstring =~ s/,$//;
 }
 
-$SMstring =~ s/,$//;
 
 
 ############################
 
 open (*STDOUT, "> $out") || die "Could not open '$out': $!\n" if ( $out );
-open( my $full_out_fh, "> $full_out") || die "Could not write to '$full_out': $!\n" if ( $full_out );
+open( my $filtered_out_fh, "> $filtered_out") || die "Could not write to '$filtered_out': $!\n" if ( $filtered_out );
   
 # get registry
 my $reg = 'Bio::EnsEMBL::Registry';
@@ -202,6 +219,7 @@ chomp( $samtools);
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $snp_vcf ) if ( $snp_vcf);
 readin_vcf( $indel_vcf ) if ( $indel_vcf);
+readin_vcf( $snp_indel_vcf ) if ( $snp_indel_vcf);
 
 my %grch37_remapping = ();
 
@@ -288,14 +306,17 @@ sub text_table {
 
   my $return_string = "";
   foreach my $line ( @$cells ) {
-    $return_string .= join("\t", @$line) . "\n";
+    for my $l (@$line) {
+      $l ='' if not defined $l;
+    }
+    $return_string .= join("\t", @$line) . "\n"; 
   }
 
   return $return_string;
 }
 
 
-my ($printed_header) = (0);
+my $printed_header = 0;
 
 # 
 # 
@@ -304,36 +325,35 @@ my ($printed_header) = (0);
 sub print_results {
   my ( $mapping ) = @_;
 
-#  print Dumper($effects);
-
   my (@res, @filtered_res);
-  if ( ! $printed_header++ ) {
+  if ( ! $printed_header ) {
+
     $0 =~ s/.*\///;
     my @header;
-    push @header, [ "#EASIH Variation Report v1.20"];
+    push @header, [ "#EASIH Variation Report v1.20.1"];
     push @header, [ "#commandline: $0 @argv"];
     push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
-    push @header, [ "#version: $version"];
+    push @header, [ "#script version: $version"];
     
     push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
-
-    push @header, ["$DACstring"];
-    push @header, ["$SMstring"];
-    push @header, ["$ANstring"];
-
+    
+    push @header, ["$DACstring"] if ( $DACstring );
+    push @header, ["$SMstring"]  if ( $SMstring  );
+    push @header, ["$ANstring"]  if ( $ANstring  );
+  
     push @header, [ q{##INFO=<Field=Position,ExampleValue=X:2715425,Description="Chromosome and coordinate">}];
     push @header, [ q{##INFO=<Field=Change,ExampleValue=A>G,Description="Base change">}];
-    push @header, [ q{##INFO=<Field=filter,ExampleValue=PASS,Description="SNPs can be filtered based on certain criteria such as sequence depth">}];
-    push @header, [ q{##INFO=<Field=score,ExampleValue=1548.43,Description="SNP confidence score determined by GATK">}];
-    push @header, [ q{##INFO=<Field=depth,ExampleValue=11,Description="Number of reads covering base">}];
-    push @header, [ q{##INFO=<Field=type,ExampleValue=HOMO,Description="Nature of SNP">}];
-    push @header, [ q{##INFO=<Field=gene,ExampleValue=XG,Description="Gene Name or Ensembl gene ID, if there is no gene name ">}];
-    push @header, [ q{##INFO=<Field=transcript,ExampleValue=NM_175569.2,Description="Refseq id or Ensembl transcript ID if no efseq id">}];
-    push @header, [ q{##INFO=<Field=region,ExampleValue=NON_SYNONYMOUS_CODING,Description="Indicates whether the variation is in gene, etc">}];
-    push @header, [ q{##INFO=<Field=codon pos,ExampleValue=c.546,Description="Which codon the variation occurs in">}];
+    push @header, [ q{##INFO=<Field=Filter,ExampleValue=PASS,Description="SNPs can be filtered based on certain criteria such as sequence depth">}];
+    push @header, [ q{##INFO=<Field=Score,ExampleValue=1548.43,Description="SNP confidence score determined by GATK">}];
+    push @header, [ q{##INFO=<Field=Depth,ExampleValue=11,Description="Number of reads covering base">}];
+    push @header, [ q{##INFO=<Field=Genotype,ExampleValue=HOMO,Description="Nature of SNP">}];
+    push @header, [ q{##INFO=<Field=Gene,ExampleValue=XG,Description="Gene Name or Ensembl gene ID, if there is no gene name ">}];
+    push @header, [ q{##INFO=<Field=Transcript,ExampleValue=NM_175569.2,Description="Refseq id or Ensembl transcript ID if no efseq id">}];
+    push @header, [ q{##INFO=<Field=Effect,ExampleValue=NON_SYNONYMOUS_CODING,Description="Indicates whether the variation is in gene, etc">}];
+    push @header, [ q{##INFO=<Field=Codon pos,ExampleValue=c.546,Description="Which codon the variation occurs in">}];
     push @header, [ q{##INFO=<Field=AA change,ExampleValue=p.Ser157 Phe,Description="Amino acid change: p.FromPosition To">}];
     push @header, [ q{##INFO=<Field=Grantham score,ExampleValue=155,Description="Measure of difference between reference and mutation amino acid">}];
-    push @header, [ q{##INFO=<Field=external ref,ExampleValue=rs111382948,Description="External Database ref e.g., dbSNP">}];
+    push @header, [ q{##INFO=<Field=dbsnp,ExampleValue=rs111382948,Description="External Database ref e.g., dbSNP">}];
     push @header, [ q{##INFO=<Field=dbsnp flags,ExampleValue=VLD;KGPilot1VC=SNP,Description="dbSNP details">}];
     push @header, [ q{##INFO=<Field=HGMD,ExampleValue=Y,Description="Is the SNP present in the HGMD database">"}];
     push @header, [ q{##INFO=<Field=pfam,ExampleValue=Sulfatase,Description="PFAM domain">}];
@@ -341,31 +361,33 @@ sub print_results {
     push @header, [ q{##INFO=<Field=SIFT,ExampleValue=benign/0,Description="Estimates if the SNP is pathogenic">}];
     push @header, [ q{##INFO=<Field=Condel,ExampleValue=neutral/0.391,Description="Estimates if the SNP is pathogenic">}];
     push @header, [ q{##INFO=<Field=GERP,ExampleValue=800.7,Description="The genomic evolutionary rate for the nucleotide in mammals">}];
-
-
+    
+    
     push @res, @header;
     push @filtered_res, @header;
     push @filtered_res, ["#filtered for most important snp effect"];
     
     my @annotations = ('Position', 'Change', 'Filter', 'Score', 'Depth', 'Genotype');
-    push @annotations, ('', '', '', '', '') if ( $bam );
-      
+    push @annotations, ('', '', '', '', '') if ( $bam && $basecount);
+    
     push @annotations, ('gene', 'transcript', 'Effect', 'codon pos', 'AA change');
     push @annotations, ('Grantham score');
     push @annotations, ('dbsnp');
     push @annotations, ('dbsnp flags');
     push @annotations, ('HGMD');
-
+    
     push @annotations, 'pfam';
     push @annotations, 'PolyPhen';
     push @annotations, 'SIFT';
     push @annotations, 'Condel';
     push @annotations, 'GERP';
-
+    
     push @res, [@annotations];
     push @filtered_res, [@annotations];
+    
+    $printed_header++;  
   }
-
+  
   foreach my $name ( sort keys %$mapping ) {
 
     my @line;
@@ -380,9 +402,6 @@ sub print_results {
       map { push @line, $$mapping{$name}{base_dist}{$_} if ($$mapping{$name}{base_dist}{$_})} ( 'A', 'C', 'G', 'T', 'N');
     }
 
-
-#    @{$$mapping{$name}{res}} = sort { $effects{ $$b{effect} } <=> $effects{ $$a{effect} } } @{$$mapping{$name}{res}};
-
     $$mapping{$name}{res} = sort_effects( $$mapping{$name}{res});
 
     my $first = 1;
@@ -390,10 +409,8 @@ sub print_results {
     foreach my $effect ( @{$$mapping{$name}{res}} ) {
 
     # find the most important/interesting variation effect
-#    foreach my $snp_effect ( @$effect ) {
-#    my $snp_effect = $$mapping{ $name }{ res };
       my @effect_line;
-	
+      
       push @effect_line, $$effect{ gene_id } || "";
       
       push @effect_line, $$effect{ transcript_id } || "";
@@ -421,8 +438,9 @@ sub print_results {
     }
   }
 
-  print $full_out_fh text_table( \@filtered_res          ) if ( $full_out );
+  print $filtered_out_fh text_table( \@filtered_res ) if ( $filtered_out );
   print STDOUT text_table( \@res );
+#  print STDOUT text_table( \@res );
 }
 
 
@@ -441,6 +459,8 @@ sub sort_effects {
   foreach my $effect (@$in_effects ) {
 
     $$effect{ effect } ||= "INTERGENIC";
+    $$effect{ gene_id } ||= "";
+    $$effect{ transcript_id } ||= "";
 
     if ( $$effect{ gene_id}       !~ /^ENSG\d+/ &&
 	 $$effect{ transcript_id} !~ /^ENST\d+/ ) {
@@ -508,7 +528,15 @@ sub variation_effects {
     # get consequences
     # results are stored attached to reference VF objects
     # so no need to capture return value here
-    foreach my $tv (@{$vf->get_all_TranscriptVariations}) {
+
+    my $all_trans_var = $vf->get_all_TranscriptVariations;
+
+    #print "LENGTH: [", scalar @$all_trans_var, "]\n";
+    if (scalar @$all_trans_var == 0) {
+	    push @{$$vars{ $name }{res}}, {};
+    }
+
+    foreach my $tv (@{$all_trans_var}) {
 
       if($tv->cdna_start && $tv->cdna_end && $tv->cdna_start > $tv->cdna_end) {
 	($tv->{'cdna_start'}, $tv->{'cdna_end'}) = ($tv->{'cdna_end'}, $tv->{'cdna_start'});
@@ -613,327 +641,25 @@ sub variation_effects {
 }
 
 
-#     my $name = $vf->variation_name();
-#     # find any co-located existing VFs
-#     my $existing_vf = "";
-#     my $regulations;
-    
-#     if(defined($vf->adaptor->db)) {
-#       my $fs = $vf->feature_Slice;
-
-#       if($fs->start > $fs->end) {
-# 	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
-#       }
-#       foreach my $existing_vf_obj(@{$vf->adaptor->fetch_all_by_Slice($fs)}) {
-# 	$existing_vf = $existing_vf_obj->variation_name
-# 	    if ($existing_vf_obj->seq_region_start == $vf->seq_region_start &&
-# 		$existing_vf_obj->seq_region_end   == $vf->seq_region_end );
-#       }
-
-     
-#     }
-
-
-
-# #	$existing_vf = "";
-#     my ($dbsnp_flags, $dbsnp_freq, $HGMD, $phylop, $phast) = ('','', '', '', '');
-#     if ( $use_local_dbsnp ) {
-#       my ($chr, $pos);
-#       if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
-# 	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
-# #	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
-#       }
-#       else {
-# 	($chr, $pos) = split(":", $vf->variation_name());
-#       }
-
-#       my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
-
-#       if ( $result->{rs} ) {
-# 	$existing_vf = $result->{rs};
-# 	$dbsnp_flags = $result->{flags} || "";
-# 	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
-# 	$HGMD        = $result->{hgmd};
-#       }
-
-#       $phylop = EASIH::SNPs::phylop_score_GRCh37($chr, $pos); 
-#       $phast  = EASIH::SNPs::phast_score_GRCh37($chr, $pos); 
-	  
-#     }
-
-	
-#     # the get_all_TranscriptVariations here now just retrieves the
-#     # objects that were attached above - it doesn't go off and do
-#     # the calculation again		
-#     foreach my $tva (@{$vf->get_all_TranscriptVariations}) {
-
-#       my %gene_res;
-#       $gene_res{ name } = $name;
-      
-#       foreach my $string (@{$tva->consequence_type}) {
-	
-# 	$gene_res{ position } = $string;
-
-# 	if($tva->cdna_start && $tva->cdna_end && $tva->cdna_start > $tva->cdna_end) {
-# 	  ($tva->{'cdna_start'}, $tva->{'cdna_end'}) = ($tva->{'cdna_end'}, $tva->{'cdna_start'});
-# 	}
-	
-# 	if($tva->translation_start &&  $tva->translation_end && $tva->translation_start > $tva->translation_end) {
-# 	  ($tva->{'translation_start'}, $tva->{'translation_end'}) = ($tva->{'translation_end'}, $tva->{'translation_start'});
-# 	}
-
-# 	if ( $con->transcript ) {
-
-
-# 	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
-	  
-# 	  $gene_res{ external_name } = $gene->external_name;
-# 	  $gene_res{ stable_id}      = $gene->stable_id;
-# 	  $gene_res{ transcript_id}  = $con->transcript->stable_id;
-
-# 	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
-  
-# 	  $gene_res{ xref } = $$xref[0]->display_id
-# 	      if ( $$xref[0] );
-
-# 	  $gene_res{ cpos } = "";
-# 	  $gene_res{ ppos } = "";
-
-
-# 	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
-
-
-
-# 	  if ( $con->translation_start) {
-# 	    my ( $old, $new ) = ("","");
-# 	    if ($con->pep_allele_string) {
-# 	      ( $old, $new ) = split("\/", $con->pep_allele_string);
-	      
-# 	      $new = $old if ( !$new || $new eq "");
-# 	      $old = one2three( $old );
-# 	      $new = one2three( $new );
-# 	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
-# 	      $gene_res{ grantham } = grantham_score($old, $new);
-# 	    }
-
-# 	    my $protein = $con->transcript->translation();
-
-# 	    my $prot_feats = $protein->get_all_ProteinFeatures();
-	    
-# 	    while (my $prot_feat = shift @{ $prot_feats }) {
-# 	      my $logic_name = $prot_feat->analysis()->logic_name();
-	      
-# 	      next if ( $logic_name ne 'Pfam');
-	      
-# 	      if ($con->translation_start >= $prot_feat->start() and
-# 		  $con->translation_end <= $prot_feat->end() ) {
-		
-# 		$gene_res{ pfam }     = $prot_feat->idesc();
-# 		$gene_res{ interpro } = $prot_feat->interpro_ac();
-# 	      } 
-# 	    }
-# 	  }
-# 	}
-
-# 	$gene_res{ regulation } = $regulations; 
-
-# 	$gene_res{ rs_number }   = $existing_vf || "";
-# 	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
-# 	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
-# 	$gene_res{ HGMD   } = $HGMD || "";
-# 	$gene_res{ phylop } = $phylop || "";
-# 	$gene_res{ phast  } = $phast || "";
-
-# 	push @{$res[$feature]}, \%gene_res;
-
-#       }
-#     }
-#     $feature++;
-#   }
-
-#   return \@res;
-# }
-
-
 sub format_coords {
-	my ($start, $end) = @_;
-	
-	if(!defined($start)) {
-		return '-';
-	}
-	elsif(!defined($end)) {
-		return $start;
-	}
-	elsif($start == $end) {
-		return $start;
-	}
-	elsif($start > $end) {
-		return $end.'-'.$start;
-	}
-	else {
-		return $start.'-'.$end;
-	}
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (28 May 2010)
-sub variation_effects_old {
-  my ($var_features) = @_;
-
-
-  my @res = ();
-  my $feature = 0;
+  my ($start, $end) = @_;
   
-  # get consequences
-  # results are stored attached to reference VF objects
-  # so no need to capture return value here
-  $tva->fetch_all_by_VariationFeatures( $var_features );
-  foreach my $vf (@$var_features) {    
-
-    my $name = $vf->variation_name();
-    # find any co-located existing VFs
-    my $existing_vf = "";
-    
-    if(defined($vf->adaptor->db)) {
-      my $fs = $vf->feature_Slice;
-
-      if($fs->start > $fs->end) {
-	($fs->{'start'}, $fs->{'end'}) = ($fs->{'end'}, $fs->{'start'});
-      }
-      foreach my $existing_vf_obj(@{$vf->adaptor->fetch_all_by_Slice($fs)}) {
-	$existing_vf = $existing_vf_obj->variation_name
-	    if ($existing_vf_obj->seq_region_start == $vf->seq_region_start &&
-		$existing_vf_obj->seq_region_end   == $vf->seq_region_end );
-      }
-
-      
-    }
-
-
-
-#	$existing_vf = "";
-    my ($dbsnp_flags, $dbsnp_freq, $HGMD, $phylop, $phast) = ('','', '', '', '');
-    if ( $use_local_dbsnp ) {
-      my ($chr, $pos);
-      if ($from_36 && $grch37_remapping{$vf->variation_name()}) {
-	($chr, $pos) = split(":", $grch37_remapping{$vf->variation_name()});
-#	print "looking for snp at: $chr $pos ($existing_vf) ". ($vf->variation_name())."\n";
-      }
-      else {
-	($chr, $pos) = split(":", $vf->variation_name());
-      }
-
-      my $result = EASIH::SNPs::fetch_snp_GRCh37($chr, $pos);
-
-      if ( $result->{rs} ) {
-	$existing_vf = $result->{rs};
-	$dbsnp_flags = $result->{flags} || "";
-	$dbsnp_freq  = EASIH::SNPs::population_stats($existing_vf);
-	$HGMD        = $result->{hgmd};
-      }
-
-      $phylop = EASIH::SNPs::phylop_score_GRCh37($chr, $pos); 
-      $phast  = EASIH::SNPs::phast_score_GRCh37($chr, $pos); 
-	  
-    }
-
-	
-    # the get_all_TranscriptVariations here now just retrieves the
-    # objects that were attached above - it doesn't go off and do
-    # the calculation again		
-    foreach my $con (@{$vf->get_all_TranscriptVariations}) {
-
-      my %gene_res;
-      $gene_res{ name } = $name;
-      
-      foreach my $string (@{$con->consequence_type}) {
-	
-	$gene_res{ position } = $string;
-
-	if($con->cdna_start && $con->cdna_end && $con->cdna_start > $con->cdna_end) {
-	  ($con->{'cdna_start'}, $con->{'cdna_end'}) = ($con->{'cdna_end'}, $con->{'cdna_start'});
-	}
-	
-	if($con->translation_start &&  $con->translation_end && $con->translation_start > $con->translation_end) {
-	  ($con->{'translation_start'}, $con->{'translation_end'}) = ($con->{'translation_end'}, $con->{'translation_start'});
-	}
-
-	if ( $con->transcript ) {
-
-
-	  my $gene = $ga->fetch_by_transcript_stable_id($con->transcript->stable_id);
-	  
-	  $gene_res{ external_name } = $gene->external_name;
-	  $gene_res{ stable_id}      = $gene->stable_id;
-	  $gene_res{ transcript_id}  = $con->transcript->stable_id;
-
-	  my $xref = $con->transcript->get_all_DBEntries('RefSeq_dna' );
-  
-	  $gene_res{ xref } = $$xref[0]->display_id
-	      if ( $$xref[0] );
-
-	  $gene_res{ cpos } = "";
-	  $gene_res{ ppos } = "";
-
-
-	  $gene_res{ cpos } = "c.".$con->cdna_start if ( $con->cdna_start);
-
-
-
-	  if ( $con->translation_start) {
-	    my ( $old, $new ) = ("","");
-	    if ($con->pep_allele_string) {
-	      ( $old, $new ) = split("\/", $con->pep_allele_string);
-	      
-	      $new = $old if ( !$new || $new eq "");
-	      $old = one2three( $old );
-	      $new = one2three( $new );
-	      $gene_res{ ppos } = "p.$old".$con->translation_start . " $new";
-	      $gene_res{ grantham } = grantham_score($old, $new);
-	    }
-
-	    my $protein = $con->transcript->translation();
-
-	    my $prot_feats = $protein->get_all_ProteinFeatures();
-	    
-	    while (my $prot_feat = shift @{ $prot_feats }) {
-	      my $logic_name = $prot_feat->analysis()->logic_name();
-
-	      print STDERR "LN :: $logic_name\n";
-	      
-	      next if ( $logic_name ne 'Pfam');
-	      
-	      if ($con->translation_start >= $prot_feat->start() and
-		  $con->translation_end <= $prot_feat->end() ) {
-		
-		$gene_res{ pfam }     = $prot_feat->idesc();
-		$gene_res{ interpro } = $prot_feat->interpro_ac();
-	      } 
-	    }
-	  }
-	}
-
-
-	$gene_res{ rs_number }   = $existing_vf || "";
-	$gene_res{ dbsnp_freq }  = $dbsnp_freq || "";
-	$gene_res{ dbsnp_flags } = $dbsnp_flags || "";
-	$gene_res{ HGMD   } = $HGMD || "";
-	$gene_res{ phylop } = $phylop || "";
-	$gene_res{ phast  } = $phast || "";
-
-	push @{$res[$feature]}, \%gene_res;
-
-      }
-    }
-    $feature++;
+  if(!defined($start)) {
+    return '-';
   }
-
-  return \@res;
+  elsif(!defined($end)) {
+    return $start;
+  }
+  elsif($start == $end) {
+    return $start;
+  }
+  elsif($start > $end) {
+    return $end.'-'.$start;
+  }
+  else {
+    return $start.'-'.$end;
+  }
 }
-
 
 
 # 
@@ -1401,18 +1127,15 @@ sub readin_vcf {
       $SNPs{$chr}{$pos}{genotype} = "HET" if ($info_hash{AF} == 0.50);
       $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ($info_hash{AF} != 1 && $info_hash{AF} != 0.5);
     }
-    elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
-      my $indels = $1;
-      
-      $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
-      $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
-      $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
-    }
-    else {
-      $SNPs{$chr}{$pos}{genotype} = "unknown $info_hash{IAC}";
-    }
-
-
+   elsif ( ($info_hash{AC} && $info_hash{AC}  =~ /^(\d+),\d+\z/ )) {
+     my $indels = $1;
+     
+     $SNPs{$chr}{$pos}{genotype} = "HOMO" if ( $indels*100/$depth > 75 );
+     $SNPs{$chr}{$pos}{genotype} = "HET" if ( $indels*100/$depth <= 75 && $indels*100/$depth > 35 );
+     $SNPs{$chr}{$pos}{genotype} = "UNKNOWN" if ( $indels*100/$depth <= 35 );
+   }
+    
+    
   }
 
   print STDERR "Used: $used, Dropped: $dropped\n" if ($bait_regions);
@@ -2034,13 +1757,16 @@ sub BamHead_ANSM
       
       if(/\@SQ/)
       {
-	  $ANstring = "$1", if(/AN:(.*?)\s*/);
+	  #$ANstring = "$1", if(/AN:(.*?)\s*/);
+	  $ANstring = "$1", if(/AN:(.*)\s\z/);
 	  $count++;
       }
   }
   
   #$ANstring = "# Aligned2Reference: $ANstring";
-  
+
+  $ANstring = "hg19" if ( $ANstring eq "human_g1k_v37");
+
   return($ANstring,@SMstrings);
 }
 
@@ -2053,9 +1779,11 @@ sub usage {
   
   $0 =~ s/.*\///;
 
-  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
+#  print "USAGE: $0 -b[am file] -i[indel vcf file] -s[np vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
+  print "USAGE: $0 -b[am file] -v[ariant vcf file] -T<ranform, use if mapped against hg18> -B[ait file] -l[eeway, default 100 bp] -c[ount bases, need a -b as well]\n";
 
-  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+#  print "\nor extrapolate the standard <bam, SNP vcf, indel vcf, output files> with the -Q <basefile name> option\n";
+  print "\nor extrapolate the standard <bam, vcf, output files> with the -Q <basefile name> option\n";
   print "EXAMPLE: $0 -Q [base name] -T<ransform>\n";
   print "\n";
 

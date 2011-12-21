@@ -15,6 +15,24 @@ BEGIN {
   EASIH::Barcodes::barcode_set('illumina');
 }
 
+# 
+# Examines a sample_sheet_hash to determine if it is a barcoded run.
+# 
+# Kim Brugger (13 Sep 2011)
+sub indexed_run {
+  my ( $sample_hash ) = @_;
+  
+  
+  foreach my $lane ( keys %{$sample_hash})  {
+    if ( ref($$sample_hash{ $lane }) eq "HASH" &&
+	 !$$sample_hash{ $lane }{'default'} ) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 
 
 # 
@@ -22,7 +40,7 @@ BEGIN {
 # 
 # Kim Brugger (27 Jul 2011)
 sub readin {
-  my ( $sample_sheet) = @_;
+  my ( $sample_sheet ) = @_;
 
   my (%res );
   my $errors = "";
@@ -116,14 +134,21 @@ sub validate {
 
 
 	if ( $bcode =~ /^[ACGT]+\z/ ) {
+	  die "Both indexed and non-indexed samples in lane $lane\n" if ($$hash{$lane}{'default'});
+	  EASIH::Barcodes::barcode_set('illumina');
+
 	  ($bcode, my $valid) = EASIH::Barcodes::validate_barcode( $bcode );
-	  $errors .= "$bcode  in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
+	  $errors .= "'$bcode' in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
 	}
-	elsif($bcode =~ /^(\w+?)_(\w+)([F|R]{1,2})/) {
+	elsif( 0 && $bcode =~ /^(\w+?)_(\w+)([F|R]{1,2})/) {
 	  my $barcode_set = $1;
 	  my $tag = $2;
 	  my $directions = $3;
-	  
+
+	  die "Only supports ill9 EASIH barcodes, not $barcode_set\n" if ( $barcode_set ne "ill9");
+	  die "Only supports m13 cloning site, not '$tag'\n" if ( $tag ne "m13");
+
+
 	}
 	else {
 	  $errors .= "'$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n"; 
@@ -142,7 +167,42 @@ sub validate {
 
 
 
+# 
+# 
+# 
+# Kim Brugger (20 Sep 2011)
+sub remove_easih_barcodes {
+  my ( $sample_sheet ) =  @_;
+
+
+  my %removed;
+
+
+  foreach my $lane_nr ( keys %$sample_sheet ) {
+
+    next if ( ref ($$sample_sheet{ $lane_nr }) ne "HASH");
+    next if ( ref ($$sample_sheet{ $lane_nr }) eq "HASH" && ! $$sample_sheet{ $lane_nr }{'default'});
+
+
+    $removed{$lane_nr}{ 'default' } = $$sample_sheet{ $lane_nr }{'default'};
+    delete( $$sample_sheet{ $lane_nr }{'default'} );
+    # this is a mixture of non-index and indexed samples in this lane, remove the non-indexed one as 
+    # all the junk will go to this bin.
+#    foreach my $barcode ( keys %{$$sample_sheet{ $lane_nr }} ) {
+#      next if ( $barcode eq 'default');
+#      $removed{$lane_nr}{ $barcode } = $$sample_sheet{ $lane_nr }{ $barcode };
+#    }
+    
+#    $$sample_sheet{$lane_nr} = $$sample_sheet{ $lane_nr }{'default'};
+    
+  }
+
+
+  return ($sample_sheet, \%removed);
+
+  exit;
+}
+
+
+
 1;
-
-
-

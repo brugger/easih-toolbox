@@ -23,10 +23,14 @@ CREATE TABLE snp (
   class                  VARCHAR(30),
   hgmd                   VARCHAR(1),
   flags			 VARCHAR(200),
+  centimorgan            FLOAT,
 
   PRIMARY KEY (chr,pos),
-  KEY rs_idx (rs)
+  KEY rs_idx (rs),
+  KEY chr_idx (chr),
+  KEY pos_idx (pos)
 );
+
 
 CREATE TABLE flags (
   short VARCHAR(25) PRIMARY KEY NOT NULL,

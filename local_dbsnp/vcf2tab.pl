@@ -8,15 +8,7 @@
 use strict;
 use warnings;
 use Data::Dumper;
-
-require DBI;
-my $dbi = DBI->connect('DBI:mysql:dbsnp132:mgpc17', 'easih_ro') || die "Could not connect to database: DBI::errstr";
-
-my $hgmd = shift || die " $0 hgmd-file dbsnp-VCF-file\n";
-my $vcf  = shift || die "needs a dbsnp vcf file\n";
-
-my $ref_id_GRCh37 = check_ref( "GRCh37" );
-my $ref_id_hg18   = check_ref( "hg18" );
+use Getopt::Std;
 
 
 
@@ -29,7 +21,6 @@ use Bio::EnsEMBL::DBSQL::DBAdaptor;
 use Bio::EnsEMBL::AssemblyMapper;
 use Bio::EnsEMBL::Mapper::Coordinate;
 use Bio::EnsEMBL::DBSQL::SliceAdaptor;
-
 
 my $species     = "human";
 my $from        = 'NCBI36';
@@ -49,11 +40,21 @@ die "Unknown coord system: $to\n" if ( !$to_cs );
 my $mapper  = $asma->fetch_by_CoordSystems( $from_cs, $to_cs );
 
 
-my $hgmds = undef;#readin_hgmd($hgmd);
+my %opts;
+getopts('H:V:D:h', \%opts);
+usage() if ( $opts{h});
+
+my $hgmd   = $opts{'H'} || usage();
+my $vcf    = $opts{'V'} || usage();
+my $decode = $opts{'D'} || usage();
+
+my $hgmds  = readin_hgmd($hgmd);
+my $decodes = readin_decode($decode);
 
 open (my $flags, " > flags.txt") || die "Could not open 'flags.txt': $!\n";
 open (my $snps,  " > snp.txt"  ) || die "Could not open 'flags.txt': $!\n";
-open (my $meta,  " > meta.txt" ) || die "Could not open 'flags.txt': $!\n";
+#open (my $meta,  " > meta.txt" ) || die "Could not open 'flags.txt': $!\n";
+
 
 open( my $v, $vcf) || die "Could not open '$vcf': $!\n";
 while (<$v>) {
@@ -69,32 +70,66 @@ while (<$v>) {
   chomp;
   #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO    FORMAT
   my ($chr, $pos, $rs, $ref_base, $alt_base, undef, undef, $flags, $format) = split("\t");
+
   
   next if ( $chr eq "PAR");
 
   $chr =~ s/chr//;
 
-#  exit;
 
   my $class = "UNKNOWN";
   $flags =~ /VC=(.*?)\;/;
-  $class = $1;
+  $class = $1 || 'UNKNOWN';
 
   my @flags = split(";", $flags);
-  $flags = join(";", grep (/AF=|CDA=|CLN=|dbSNPBuildID=|G5=|G5A=|HD=|KGPilot|KGPROD=|KGVAL=|MUT=|NS=|OM=|PM=|VLD/, @flags));
+  foreach my $flag ( @flags ) {
+    if ( $flag =~ /GMAF=(.*)/) {
+      $flag = sprintf("GMAF=%.4f", $1);
+    }
+  }
+#  $flags = join(";", grep (/AF=|CDA=|CLN=|dbSNPBuildID=|G5=|G5A=|HD=|KGPilot|KGPROD=|KGVAL=|MUT=|NS=|OM=|PM=|VLD/, @flags));
+  $flags = join(";", grep (/GMAF=|dbSNPBuildID=|G5=|G5A=|HD=|KGPilot|KGPROD=|KGVAL=|MUT=|OM=|PM=|VLD/, @flags));
 
   
   my $HGMD = "N";
   $HGMD = "Y" if ( $$hgmds{$rs} || $$hgmds{$chr}{$pos});
+  my $CM = '';
+  $CM = $$decodes{$rs}        if ($$decodes{$rs});
+  $CM = $$decodes{$chr}{$pos} if ($$decodes{$chr}{$pos});
+#  last if ( $CM && $CM > 1);
 
   my @rss = split(";", $rs);
   foreach ( @rss ) {
-    my @f = ($_, $chr, $pos, $ref_base, $alt_base, $class, $HGMD, $flags);
+    my @f = ($_, $chr, $pos, $ref_base, $alt_base, $class, $HGMD, $flags, $CM);
     print $snps join("\t", @f) . "\n";
   }
 
 }
 close($v);
+
+
+
+# 
+# 
+# 
+# Kim Brugger (16 Nov 2011)
+sub readin_decode {
+  my ($file) = @_;
+
+  my %res;
+
+  open(my $in, $file) || die "Could not open '$file': $!\n";
+  while(<$in>) {
+    chomp;
+    my ($chr, $pos, $rs, $cm) = split(/\t/);
+    
+    $res{ $chr}{$pos} = $cm;
+    $res{ $rs} = $cm;
+  }
+  return \%res;
+}
+
+
 
 
 # 
@@ -145,16 +180,16 @@ sub readin_hgmd {
     $pos ||= -1;
 
     if ( $rs eq 'null' && $chr ne "null") {
-      next if ($done{$ref_id_hg18}{$chr}{$pos});
-      my @f = ('', $chr, $pos, '', '', $ref_id_hg18, "Y", '', '');
+      next if ($done{$chr}{$pos});
+#      my @f = ('', $chr, $pos, '', '', $ref_id_hg18, "Y", '', '');
 #      print join("\t", @f) . "\n";
 
-      $done{$ref_id_hg18}{$chr}{$pos}++;
+      $done{$chr}{$pos}++;
 
       ($chr, $pos) = remap($chr, $pos);
       next if ( ! $chr);
       $chr =~ s/chr//;
-      @f = ('', $chr, $pos, '', '', $ref_id_GRCh37, "Y", '', '');
+#      @f = ('', $chr, $pos, '', '', $ref_id_GRCh37, "Y", '', '');
 #      print join("\t", @f) . "\n";
 
       next;
@@ -177,6 +212,18 @@ sub readin_hgmd {
 }
 
 
+# 
+# 
+# 
+# Kim Brugger (16 Nov 2011)
+sub usage {
+  $0 =~ s/.*\///;
+  print STDERR "USAGE: $0 BLA BLA BLA\n";
+  exit -1;
+}
+
+
+__END__
 # 
 # 
 # 

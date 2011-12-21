@@ -37,7 +37,7 @@ my $lcount2 = 10*log($count2);
 my  ($chisquare, $degrees_of_freedom, $chip) =  EASIH::ChiSquare::chisquare_raw( [$lcount1, $lcount2] );
 
 
-print "SNP is Heterozygous\tP=$chip,read1=$count1,read2=$count2\n" if ( $chip*100 >= 5);
-print "SNP is Homozygous\tP=$chip,read1=$count1,read2=$count2\n" if ( $chip*100 < 5);
+print "SNP is Heterozygous\tP=$chip,read1=$count1,read2=$count2\n" if ( $chip*100 < 5);
+print "SNP is Homozygous\tP=$chip,read1=$count1,read2=$count2\n" if ( $chip*100 >= 5);
 
 

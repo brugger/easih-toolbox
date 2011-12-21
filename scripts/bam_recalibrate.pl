@@ -320,7 +320,8 @@ sub patch_alignment {
 
 
   foreach my $patch ( @cigar ) {
-    my ($length, $type) =  $patch =~ /(\d+)(\w)/;
+    my ($length, $type) =  $patch =~ /(\d*)(\w)/;
+    $length ||= 1;
 
     if ( $type eq 'M') {
       $offset += $length;

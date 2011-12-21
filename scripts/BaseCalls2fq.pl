@@ -46,11 +46,14 @@ use EASIH::Parallel;
 
 EASIH::DONE::Connect('done_dev') if ($debug); 
 
+my $tile2seq = "/software/installed/easih-toolbox/C/tile2seq/tile2seq";
+$tile2seq = "/home/kb468/easih-toolbox/C/tile2seq/tile2seq" if ( 1 || $debug);
+
 my %opts;
 getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhnbd", \%opts);
 
 my $limited_lanes = $opts{'l'};
-my $no_mismatches = $opts{n};
+my $no_mismatches = $opts{'n'};
 
 # 
 # 
@@ -152,6 +155,13 @@ my %reads_pr_sample;
 my %filenames;
 $sample_names = validate_lane_names( $sample_names);
 
+
+#print Dumper( $sample_names );
+
+
+#print "IR: $indexed_run, $paired_data\n";
+
+#exit;
 
 
 if ($datamonger) {
@@ -286,9 +296,17 @@ sub analyse_lane {
     last if ($debug);
   }
 
-  printf("lane $lane_nr\t\t$lane_total\t$lane_pass (%.2f %%)\t%.2f avg clusters per tile. %.2f%% bases >= QV30\n", $lane_pass*100/$lane_total, $lane_pass/120, 100*$lane_QV30/$lane_bases);
+  my $perc_lane_pass = 0;
+  $perc_lane_pass = $lane_pass*100/$lane_total if ($lane_pass && $lane_total);
 
+  my $tile_pass = 0;
+  $tile_pass    = $lane_pass/120 if ($lane_pass);
   
+  my $perc_QV30_bases = 0;
+  $perc_QV30_bases = 100*$lane_QV30/$lane_bases if ($lane_QV30 && $lane_bases);
+
+  printf("lane $lane_nr\t\t$lane_total\t$lane_pass (%.2f %%)\t%.2f avg clusters per tile. %.2f%% bases >= QV30\n", $perc_lane_pass, $tile_pass, $perc_QV30_bases);
+ 
 
   EASIH::DONE::add_illumina_lane_stats( $rid, 1, $lane_nr, $lane_total, $lane_pass, $lane_bases, $lane_QV30 )   
       if( $datamonger );
@@ -332,7 +350,6 @@ sub analyse_tile {
   $file2 =~ s/(s_\d)_1_/$1_2_/;
   $file3 =~ s/(s_\d)_1_/$1_3_/;
 
-  my $tile2seq = "/home/kb468/easih-toolbox/C/tile2seq/tile2seq";
 
   my ($fh1, $fh2, $fh3);
   open ($fh1, "$tile2seq $file1 |") || die "Could not open '$file1': $!\n" if ( -e $file1 );
@@ -341,7 +358,9 @@ sub analyse_tile {
 
   # this is a multiplexed run, so flip the file handle for file 2 & 3.
   # I am so going to regret this later on, I am sure of it...
-  ($fh2, $fh3) = ($fh3, $fh2) if ( $fh3 );
+  ($fh2, $fh3) = ($fh3, $fh2) if ( $indexed_run );
+
+#  $fh3 = $fh2 if (  $paired_data && ! $fh3);
 
   my $read_length;
   my %stats;
@@ -360,7 +379,7 @@ sub analyse_tile {
       next if ( ! $pf3 );
 
       chomp ( $line1 );
-      chomp ( $line2 );
+      chomp ( $line2 ) if ($line2);
 
       my $barcode = verify_bcode($bases3, @bar_codes) if (ref $$sample_names{ $lane_nr } eq "HASH");
       my ($name1, $bases1, $qual1, $pf1, $QV30_1) = split /\t/, $line1;
@@ -377,8 +396,6 @@ sub analyse_tile {
       if ($fh2) {
 	my $bfout = outfile("$sample_name.2", $lane_nr );
 	print $bfout "$name2\n$bases2\n+\n$qual2\n";
-	$paired_data = 1;
-
       }
 
       $stats{ $sample_name }++;
@@ -413,8 +430,6 @@ sub analyse_tile {
       if ($fh2) {
 	my $fout = outfile("$sample_name.2", $lane_nr );
 	print $fout "$name2\n$bases2\n+\n$qual2\n";
-	$paired_data = 1;
-
       }
 
       $stats{ $sample_name }++;
@@ -483,7 +498,7 @@ sub validate_lane_names {
 
 
 	if (( $indexed_run  && (-e "$indir/s_1_3_0001_qseq.txt" || -e "$indir/s_1_3_1101_qseq.txt")) ||
-	    ( !$indexed_run && (-e "$indir/s_1_2_0001_qseq.txt"|| -e "$indir/s_1_2_1101_qseq.txt"))) {
+	    ( !$indexed_run && (-e "$indir/s_1_2_0001_qseq.txt" || -e "$indir/s_1_2_1101_qseq.txt"))) {
 	  my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.2", $outdir);
 	  $filenames{ $lane }{ "$sample_name.2" } = "$base_filename";
 	  outfile("$sample_name.2", $lane);

@@ -44,16 +44,18 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   print_qv_histogram($fid2, $qvshist2) if ($fid2);
   my $gc1 = "gc1";
   my $gc2 = "gc2";
-  print_gc($fid1, $gc1);
-  print_gc($fid2, $gc2) if ($fid2);
+  print_gc($fid1, $gc1) if (!$fid2);
+#  print_gc($fid2, $gc2) if ($fid2);
+  my $gc3 = "gc3";
+  print_combined_gc($fid1, $fid2, $gc3) if ($fid2);
   my $ad1 = "ad1";
-  my $ad2 = "ad2";
-  print_adaptor_histogram($fid1, $ad1);
-  print_adaptor_histogram($fid2, $ad2) if ($fid2);
+  my $ad12 = "ad12";
+  print_adaptor_histogram($fid1, $ad1) if ( 1 || $fid2);
+  print_combined_adaptor_histogram($fid1, $fid2, $ad12) if ( $fid2);
   my $dh1 = "dh1";
-  my $dh2 = "dh2";
-  print_dups_histogram($fid1, $dh1);
-  print_dups_histogram($fid2, $dh2) if ($fid2);
+  my $dh12 = "dh12";
+  print_dups_histogram($fid1, $dh1) if ($fid2);
+  print_combined_dups_histogram($fid1, $fid2, $dh12) if ($fid2);
   
   my ( $name, $total_reads, $read_length, $sample_size, $Q30bases, $duplicates, $partial_adaptors, $Avg_AC, $sid, $rid ) = EASIH::DONE::fetch_file_info( $fid1 );
   
@@ -70,6 +72,8 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
 
   easih_top();
   
+  $name =~ s/\.[1|2].*gz//;
+
   print " <H1>QC report for: $name [$fid1,$fid2]</H1>";
   
 
@@ -107,18 +111,19 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   
   print EASIH::HTML::advanced_table(\@traffic_light, 1, 0, 0, 'lightgrey', 0, '700px');
 
-  print "<h4>Read1</h4><div id='$boxid1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$boxid2' style='width: 900px; height: 300px;'></div>" if ($fid2);
-  print "<h4>Read1</h4><div id='$qvshist1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$qvshist2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
-  print "<h4>Read1</h4><div id='$dh1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$dh2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
-  print "<h4>Read1</h4><div id='$ad1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$ad2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
-  print "<h4>Read1</h4><div id='$base1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$base2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
-  print "<h4>Read1</h4><div id='$gc1' style='width: 900px; height: 300px;'></div>";
-  print "<h4>Read2</h4><div id='$gc2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+#   print "<h4>Read1</h4><div id='$boxid1' style='width: 900px; height: 300px;'></div>";
+#   print "<h4>Read2</h4><div id='$boxid2' style='width: 900px; height: 300px;'></div>" if ($fid2);
+#   print "<h4>Read1</h4><div id='$qvshist1' style='width: 900px; height: 300px;'></div>";
+#   print "<h4>Read2</h4><div id='$qvshist2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+   print "<h4>Read1</h4><div id='$dh1' style='width: 900px; height: 300px;'></div>" if ( !$fid2);
+   print "<h4>Read2</h4><div id='$dh12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+
+   print "<h4>Read1</h4><div id='$ad1' style='width: 900px; height: 300px;'></div>" if (!$fid2);
+   print "<h4>Read1+2</h4><div id='$ad12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+   print "<h4>Read1</h4><div id='$base1' style='width: 900px; height: 300px;'></div>";
+   print "<h4>Read2</h4><div id='$base2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+  print "<h4>Read1</h4><div id='$gc1' style='width: 900px; height: 300px;'></div>" if (! $fid2);
+  print "<h4>Read1+2</h4><div id='$gc3' style='width: 900px; height: 300px;'></div>"if ( $fid2);
 
 
   my @mappings = (['database', 'Hits', 'non-unique hits', 'duplicates']);
@@ -677,7 +682,7 @@ sub print_basesplits {
                               chdl: "A|C|G|T|N",
                               chp: "0,0.017",
                               chm: "r,FF0000,0,0,0",
-                              chtt: "Base splits pr cyclexo"});
+                              chtt: "Base splits pr cycle"});
       }
 
 
@@ -710,7 +715,7 @@ sub print_adaptor_histogram {
       function drawChart() {
         var data = new google.visualization.DataTable();
         data.addColumn("string", "Position");
-        data.addColumn("number", "Counts");
+        data.addColumn("number", "read 1");
 ';
 
   print"          data.addRows(".(keys %splits ).");\n";
@@ -725,6 +730,65 @@ sub print_adaptor_histogram {
   }
 
   print '
+  var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "Partial adaptor mapping",
+                          hAxis: {title: "Count"},
+                          vAxis: {title: "Adaptor"}
+                         });
+      }
+    </script>
+';
+
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_adaptor_histogram {
+  my ($fid2, $fid1, $domid) = @_;
+
+  my @data;
+  my @adaptors1 = EASIH::DONE::fetch_adaptors( $fid1 );
+  my %splits1;
+  foreach my $split ( @adaptors1 ) {
+    $splits1{$$split[0]} = $$split[1];
+  }
+
+  my @adaptors2 = EASIH::DONE::fetch_adaptors( $fid2 );
+  my %splits2;
+  foreach my $split ( @adaptors2 ) {
+    $splits2{$$split[0]} = $$split[1];
+  }
+
+  return if ( !@adaptors1 && !@adaptors2);
+
+
+  print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "Position");
+        data.addColumn("number", "read 1");
+        data.addColumn("number", "read 2");
+';
+
+  print"          data.addRows(".(keys %splits1 ).");\n";
+
+    for (my $i=0; $i < $adaptors1[-1][0]; $i++){
+      
+      $splits1{ $i } ||= 0;
+      $splits2{ $i } ||= 0;
+      
+      print "          data.setValue($i, 0, '$i');\n";
+      print "          data.setValue($i, 1, $splits1{$i});\n";
+      print "          data.setValue($i, 2, $splits2{$i});\n";
+    }
+    
+    print '
   var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
         chart.draw(data, {title: "Partial adaptor mapping",
                           hAxis: {title: "Count"},
@@ -795,7 +859,6 @@ sub print_qv_histogram {
 sub print_dups_histogram {
   my ($fid, $domid) = @_;
 
-
   my @dups = EASIH::DONE::fetch_duplicates( $fid );
 
   return if (!@dups);
@@ -823,6 +886,64 @@ sub print_dups_histogram {
 
     print "          data.setValue($i, 0, '$i');\n";
     print "          data.setValue($i, 1, $splits{$i});\n";
+  }
+
+  print '
+  var chart = new google.visualization.ColumnChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "Duplicates",
+                          hAxis: {title: "Duplicates"},
+                          vAxis: {title: "Sequences"}
+                         });
+      }
+    </script>
+';
+
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_dups_histogram {
+  my ($fid1, $fid2, $domid) = @_;
+
+  my @dups1 = EASIH::DONE::fetch_duplicates( $fid1 );
+  my @dups2 = EASIH::DONE::fetch_duplicates( $fid2 );
+
+  return if (!@dups1 && !@dups2);
+
+  print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "QV Score");
+        data.addColumn("number", "read 1");
+        data.addColumn("number", "read 2");
+';
+
+  my %splits1;
+  foreach my $dup ( @dups1 ) {
+    $splits1{$$dup[0]} = $$dup[1];
+  }
+
+  my %splits2;
+  foreach my $dup ( @dups2 ) {
+    $splits2{$$dup[0]} = $$dup[1];
+  }
+
+  print"          data.addRows(".($dups1[-1][0] +1 ).");\n";
+
+  for (my $i=2;$i<= $dups2[-1][0]; $i++){
+    
+    $splits1{ $i } ||= 0;
+    $splits2{ $i } ||= 0;
+
+    print "          data.setValue($i, 0, '$i');\n";
+    print "          data.setValue($i, 1, $splits1{$i});\n";
+    print "          data.setValue($i, 1, $splits2{$i});\n";
   }
 
   print '
@@ -882,6 +1003,63 @@ print '
     </script>
 ';
 }
+
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2011)
+sub print_combined_gc {
+  my ($fid1, $fid2, $domid) = @_;
+
+  return print_gc($fid1) if (! $fid2 );
+
+print '
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawChart);
+      function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn("string", "GC");
+        data.addColumn("number", "Read 1");
+        data.addColumn("number", "Read 2");
+';
+
+  my @data;
+  my @gcs1 = EASIH::DONE::fetch_gc_distribution( $fid1 );
+  my @gcs2 = EASIH::DONE::fetch_gc_distribution( $fid2 );
+  
+  my %splits1;
+  foreach my $gc ( @gcs1 ) {
+    $splits1{$$gc[0]} = $$gc[1];
+  }
+  my %splits2;
+  foreach my $gc ( @gcs2 ) {
+    $splits2{$$gc[0]} = $$gc[1];
+  }
+  
+  print"          data.addRows(21);\n";
+  
+  for (my $i=0;$i < 21; $i++){
+    my $bin = $i*5;
+    $splits1{ $bin } ||= 0;
+    $splits2{ $bin } ||= 0;
+    
+    print "          data.setValue($i, 0, '$bin');\n";
+    print "          data.setValue($i, 1, $splits1{$bin});\n";
+    print "          data.setValue($i, 2, $splits2{$bin});\n";
+  }
+
+print '
+        var chart = new google.visualization.LineChart(document.getElementById("'.$domid.'"));
+        chart.draw(data, {title: "%GC"});
+      }
+    </script>
+';
+}
+
+
 # 
 # 
 # 

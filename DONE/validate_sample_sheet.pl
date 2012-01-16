@@ -55,7 +55,11 @@ my $error_message = "";
 #my $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
 my $to = 'kim.brugger@easih.ac.uk'; #global
 #my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
-my @input_dirs = ("/seqs/illumina2/");
+my @input_dirs = ("/seqs/illumina2/", 
+		  "/seqs/illumina3",
+		  "/seqs/illumina4",
+		  "/seqs/illumina5",
+    );
 
 foreach my $dir ( @input_dirs ) {
 

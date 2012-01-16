@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 my $debug = 0;
-#$debug = 1;
+$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -41,8 +41,9 @@ use EASIH::DONE;
 use EASIH::Sample;
 use EASIH::Illumina::Summary;
 use EASIH::Illumina::Sample_sheet;
+use EASIH::Illumina::Config;
 use EASIH::Parallel;
-
+use EASIH::MD5;
 
 EASIH::DONE::Connect('done_dev') if ($debug); 
 
@@ -155,6 +156,11 @@ my %reads_pr_sample;
 my %filenames;
 $sample_names = validate_lane_names( $sample_names);
 
+# The config file is checked to see if this was an indexed run anyway
+if ( !$indexed_run ) {
+  my $config = EASIH::Illumina::Config::readin( $indir );
+  $indexed_run = 1 if ($$config{Run}{RunParameters}{Barcode});
+}
 
 #print Dumper( $sample_names );
 
@@ -210,6 +216,25 @@ else {
   EASIH::Parallel::run_serial( );
 }
 
+foreach my $lane_nr  (keys %filenames) {
+  # Close all the file handles to the fq files.
+  foreach my $fh ( keys %{$fhs{ $lane_nr }} ) {
+    close ($fhs{ $lane_nr }{$fh}) || die "Could not close filehandle '$fh': $!\n";
+  }
+  # queue up the calculation of md5 sums
+  foreach my $filename (keys %{$filenames{ $lane_nr }}) {
+    EASIH::Parallel::job_push(\&EASIH::MD5::create_file, "$filenames{ $lane_nr }{$filename}.fq.gz");
+  }
+}
+
+
+if ( $parallel ) {
+  print EASIH::Parallel::run_parallel( );
+}
+else {
+  EASIH::Parallel::run_serial( );
+}
+
 
 
 if ( $datamonger ) {
@@ -221,7 +246,6 @@ if ( $datamonger ) {
 				     "ILLUMINA", 
 				     "BASECALLS2FQ_DONE");
 }
-
 
 
 # 
@@ -330,12 +354,6 @@ sub analyse_lane {
       }
     }
   }
-
-  foreach my $fh ( keys %{$fhs{ $lane_nr }} ) {
-    close $fh;
-  }
-
-
 }
 
 # 

@@ -20,11 +20,15 @@ sub create_file {
   my ($infile, $outfile) = @_;
   
   $outfile = "$infile.md5" if ( !$outfile );
+
+
+  print "md5sum $infile\n";
   
   open( my $p, "md5sum $infile | ") || die "Could not create md5sum pipe: $!\n";
   my $md5 = <$p>;
   close( $p );
   ($md5, $infile) = split(/\s+/, $md5);
+  print "$md5 $infile\n";
   $infile =~ s/.*\///;
   open( my $o, "> $outfile ") || die "Could not write to '$outfile': $!\n";
   print $o "$md5\t$infile\n";

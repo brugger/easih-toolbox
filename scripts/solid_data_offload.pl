@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 my %opts;
-getopts('coh', \%opts);
+getopts('clh', \%opts);
 my $live_run      = $opts{ l } || 0;
 my $compress_file = $opts{ c } || 0;
 
@@ -22,7 +22,7 @@ if ( $opts{h}) {
   print STDERR "\n";
   print STDERR "USAGE: script for copying data from a solid result folder to the shared disc. The script \n";
   print STDERR "USAGE: validates file names, and ensure that a counter is added if a this is a rerun\n";
-  print STDERR "USAGE: $0 -c<ompress> -o<ff load data, copies the data> -h<help> [input dir, default is latest result directory]\n";
+  print STDERR "USAGE: $0 -c<ompress> -l<ive offload, copies the data> -h<help> [input dir, default is latest result directory]\n";
   print STDERR "\n";
   exit -1;
 }

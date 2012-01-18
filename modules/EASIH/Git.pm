@@ -38,7 +38,8 @@ sub branch {
   $branch ||= "Unknown";
 
   chomp( $branch );
-  $branch =~ s/^\*//;
+  $branch =~ s/^\*\s+//;
+
 
   return $branch;
 }
@@ -76,6 +77,7 @@ sub version {
   $VERSION ||= "Unknown";
 
   chomp( $VERSION );
+
 
   return $VERSION;
 }

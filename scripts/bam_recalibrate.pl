@@ -16,7 +16,6 @@ getopts('b:d:R:B:hs:Sr:UM:m:L:l:s:m:o:', \%opts);
 my %calib_stats;
 my %calib_matrix;
 
-
 my $bam_file = $opts{'b'} || Usage();
 my $chr_file = $opts{'R'} || Usage();
 my $base_mutation_rate = $opts{'m'};
@@ -45,7 +44,7 @@ my ( $s, $d, $e, $b_pre, $b_post) = (0,0,0, 0, 0);
 
 my $region      = $opts{'r'};
 my $sample_size = $opts{'s'} || 0;
-$region = "'gi|170079663|ref|NC_010473.1|'";
+#$region = "'gi|170079663|ref|NC_010473.1|'";
 
 my $fasta;
 
@@ -70,20 +69,22 @@ if ( ! $region ) {
 else {
   $region =~ s/,//g;
   if ($region =~ /^(\w+):\d+-\d+/ || $region =~ /^(\w+):\d+\z/ ) {
-    $fasta = readfasta( $chr_file, $1 );
+    $fasta = readfasta( $chr_file, undef, $1 );
     analyse($region)
   }
   else {
-    $fasta = readfasta( $chr_file, $region );
+    $fasta = readfasta( $chr_file, undef, $region );
     analyse($region)
   }
 }
 
 
+print join("\t", "QV", "phred(QV)","phred(A)","phred(C)","phred(G)","phred(T)"," nr of QV","nr of QV (correct, wrong)") . "\n";
+
 foreach my $QV ( sort {$a <=> $b} keys %calib_stats ) {
 #x  print Dumper( $calib_stats{ $QV });
   $calib_matrix{ chr($QV + 33) } = chr(phred_value( $calib_stats{ $QV }{ M }, $calib_stats{ $QV }{ X }) + 33 );
-  printf("$QV\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%d (%d, %d)\n",
+  printf("$QV\t%d\t%d\t%d\t%d\t%d\t%d (%d, %d)\n",
 	 phred_value( $calib_stats{ $QV }{ M }, $calib_stats{ $QV }{ X }),
 	 phred_value( $calib_stats{ $QV }{ A }{ M }, $calib_stats{ $QV }{ A }{ X }),
 	 phred_value( $calib_stats{ $QV }{ C }{ M }, $calib_stats{ $QV }{ C }{ X }),
@@ -129,8 +130,6 @@ sub analyse {
   my (@splits, @ref_ids, @reads, @SNPs);
 
   my $current_pos = undef;
-
-#  print "$samtools view $bam_file $region\n";
 
   my ($reads_analysed, $bases_analysed) = (0,0);
 
@@ -262,7 +261,7 @@ sub analyse {
 
 
 # 
-# 
+# Calculate the phred value based on the observed mapped correct and wrong bases
 # 
 # Kim Brugger (11 Oct 2011)
 sub phred_value {
@@ -350,14 +349,17 @@ sub patch_alignment {
 # Read the fasta files and puts entries into a nice array
 #
 sub readfasta {
-  my ($file, $region) = @_;  
+  my ($file, $entry, $region) = @_;  
 
-  $region =~ s/:\d+-\d+//;
+  $region =~ s/:\d+-\d+// if ( $region );
 
   my $sequence;
   my $header;
 
-  open (my $f, "$samtools faidx $file $region|" ) || die "Could not open $file:$1\n";
+  my $f;
+
+  open ($f, "$samtools faidx $file $entry  |" ) || die "Could not open $file:$1\n" if ($entry);
+  open ($f, "$samtools faidx $file $region |" ) || die "Could not open $file:$1\n" if ( ! $entry && $region);
   while (<$f>) {
     chomp;
     if (/^\>/) {
@@ -370,7 +372,7 @@ sub readfasta {
     else {$sequence .= $_;}
   }
 
-  return $sequence;
+  return uc($sequence);
 }
 
 

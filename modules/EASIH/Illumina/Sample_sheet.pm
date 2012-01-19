@@ -44,9 +44,12 @@ sub readin {
 
   my (%res );
   my $errors = "";
+  my $warnings = "";
   
   my $text_delim = "";
   my $field_delim = "";
+  my %sample; #svvd2 Jan 17 2012
+  
 
   open(my $in, $sample_sheet) || die ("Could not open '$sample_sheet': $!\n");
   my @lines;
@@ -70,6 +73,12 @@ sub readin {
     }      
     else {
       my @F = split($field_delim, $_);
+      
+      my $fcount = @F; #svvd2 Jan 17 2012
+      $warnings .= "Warning: Missing columns - expecting 9 of them...\n", if($fcount < 9); #svvd2 Jan 17 2012
+      $warnings .= "Warning: Additional columns found - expecting only 9 of them", if($fcount > 9); #svvd2 Jan 17 2012
+
+      
       my (undef, $lane, $sample_id, undef, $index, undef) = @F;
 
       $index ||= "default";
@@ -78,20 +87,37 @@ sub readin {
       $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
 
+      $errors .= "Error: Lane number $lane is not a valid lane number - should be between 1 and 8\n", if($lane !~ /^[1-8]$/); #svvd2 18 Jan 2012 
+
+
       if ($res{$lane}{$index} && $res{$lane}{$index} ne $sample_id) {
 	if ($index eq "") {
-	  $errors .= "Lane $lane without an indexing has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n";
+	  $errors .= "Error: Lane $lane without an indexing has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n";
 	}
 	else {
-	  $errors .=  "Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n";
+	  $errors .=  "Error: Lane $lane with index '$index' has already been assigned to '$res{$lane}{$index}' and cannot be assigned to '$sample_id' as well\n";
 	}
 	next;
       }
 
-
+      
       $res{$lane}{$index} = $sample_id;
+    
+      $sample{$sample_id}++; #svvd2 Jan 17 2012
     }
   }
+
+
+ # print Dumper( %sample );
+  foreach my $samp (keys %sample)
+  {
+      if($sample{$samp} > 1)
+      {
+	  $warnings .= "Warning: Sample $samp is present in more than one lane\n";
+      }
+  } #svvd2 Jan 17 2012
+  
+
 
   foreach my $lane ( keys %res ) {
     if (keys %{$res{$lane}} == 1 && $res{$lane}{'default'}) {
@@ -99,9 +125,10 @@ sub readin {
     }
   }
 
-  return (undef, $errors) if ($errors ne "");
 
-  return (\%res, undef);
+  return (undef, $errors, $warnings) if ($errors ne "");
+
+  return (\%res, undef, $warnings);
 }
 
 
@@ -120,43 +147,43 @@ sub validate {
   for ( my $lane =1; $lane <=8;$lane++) {
     
     if (! $$hash{$lane} && !$limited_lanes) {
-      $errors .= "no lane information for lane $lane \n";
+      $errors .= "Error: no lane information for lane $lane \n";
       next;
     }
    
     if (ref ($$hash{$lane}) eq "HASH") {
       foreach my $bcode (keys %{$$hash{$lane}}) {
 	
-	$errors .= "$$hash{$lane}{$bcode}} for lane $lane is not an EASIH sample name\n" 
+	$errors .= "Error: $$hash{$lane}{$bcode} for lane $lane is not an EASIH sample name\n" 
 	    if ( !EASIH::Sample::validate_name($$hash{$lane}{$bcode}));
 
 	next if ($bcode eq 'default');
 
 
 	if ( $bcode =~ /^[ACGT]+\z/ ) {
-	  die "Both indexed and non-indexed samples in lane $lane\n" if ($$hash{$lane}{'default'});
+	  die "Error: Both indexed and non-indexed samples in lane $lane\n" if ($$hash{$lane}{'default'});
 	  EASIH::Barcodes::barcode_set('illumina');
 
 	  ($bcode, my $valid) = EASIH::Barcodes::validate_barcode( $bcode );
-	  $errors .= "'$bcode' in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
+	  $errors .= "Error: '$bcode' in lane $lane is not an valid illumina barcode\n" if ( ! $valid );
 	}
 	elsif( 0 && $bcode =~ /^(\w+?)_(\w+)([F|R]{1,2})/) {
 	  my $barcode_set = $1;
 	  my $tag = $2;
 	  my $directions = $3;
 
-	  die "Only supports ill9 EASIH barcodes, not $barcode_set\n" if ( $barcode_set ne "ill9");
-	  die "Only supports m13 cloning site, not '$tag'\n" if ( $tag ne "m13");
+	  die "Error: Only supports ill9 EASIH barcodes, not $barcode_set\n" if ( $barcode_set ne "ill9");
+	  die "Error: Only supports m13 cloning site, not '$tag'\n" if ( $tag ne "m13");
 
 
 	}
 	else {
-	  $errors .= "'$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n"; 
+	  $errors .= "Error: '$bcode' in lane $lane is not a valid value. It should be either be an illumina barcode or an EASIH barcode group\n"; 
 	}
       }
     }
     else {
-	$errors .= "$$hash{$lane} for lane $lane is not an  EASIH sample name\n" if ( !EASIH::Sample::validate_name($$hash{$lane}));
+	$errors .= "Error: $$hash{$lane} for lane $lane is not an  EASIH sample name\n" if ( !EASIH::Sample::validate_name($$hash{$lane}));
     }
   }
 

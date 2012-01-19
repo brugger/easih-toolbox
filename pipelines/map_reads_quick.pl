@@ -11,6 +11,7 @@ use Data::Dumper;
 
 use Getopt::Std;
 
+use lib '/home/kb468/easih-toolbox/modules';
 use lib '/home/kb468/easih-pipeline/modules';
 use EASIH::JMS;
 use EASIH::JMS::Misc;

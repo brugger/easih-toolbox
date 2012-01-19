@@ -79,7 +79,6 @@ if($opts{h})
 
 my $verbose = $opts{v} || 0;
 
-
 my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
 $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
 #$to = 'kim.brugger@easih.ac.uk'; #global
@@ -120,7 +119,7 @@ foreach my $dir ( @dirs ) {
 				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
 				  '04-poststatus' => "BCL2QSEQ_DONE"},
 	       
-	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
+	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 4;", 
 				  '02-prestatus'  => "MAKE_STARTED", 
 				  '03-failstatus' => "MAKE_FAILED", 
 				  '04-poststatus' => "MAKE_DONE"},
@@ -203,7 +202,7 @@ foreach my $dir ( @dirs ) {
 		goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
 	    }         
 
-	  print "$failed_status $fixed_failed_program\n";
+	  print "$failed_status $fixed_failed_program\n" if ($verbose );
 	    
 
 	  if (! $last_status || 

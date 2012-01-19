@@ -136,16 +136,16 @@ foreach my $dir ( @dirs ) {
 				  '04-poststatus' => "QC_REPORT_DONE"},
 		   
 		   
-	       '05-QC_DB' => {'01-command'    => "$easih_toolbox/DONE/QC_report.pl -p illumina -r ",
+	       '05-QC_DB' => {'01-command'    => "$easih_toolbox/DONE/QC_report.pl -p ILLUMINA -r ",
 			      '02-prestatus'  => "QC_DB_STARTED", 
 			      '03-failstatus' => "QC_DB_FAILED", 
 			      '04-poststatus' => "QC_DB_DONE"},
     );
 
         
-    if( -e $eventfile || -e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt") {
+    if( -e $eventfile || -e $RTAcomp || -e "$runfolder/RTAComplete.txt") {
 
-      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/Basecalling_Netcopy_complete.txt");
+      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/RTAComplete.txt");
       $checkstring = `grep -c "Copying logs to network run folder" $eventfile` 
 	  if (! $checkstring);
       chomp( $checkstring );

@@ -28,6 +28,7 @@ sub find_program {
   return $location if ( $location );
 
   push @paths, "/home/$username/bin/";
+  push @paths, "/home/$username/easih-toolbox/scripts/";
   
   foreach my $path ( @paths ) {
     return "$path/$program" if ( -e "$path/$program" );
@@ -81,6 +82,26 @@ sub tmp_file {
   $tmp_file =~ s/^\.\///;
 
   return "$tmp_file";
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (16 Feb 2012)
+sub random_string {
+  my ($length) = @_;
+
+  $length ||= 10;
+
+  my @charset = (('A'..'Z'), ('a'..'z'),(0..9));
+  my $string = "";
+  while( $length--) {
+    $string .= $charset[int(rand(@charset))];
+  }
+  
+  return $string;
 }
 
 

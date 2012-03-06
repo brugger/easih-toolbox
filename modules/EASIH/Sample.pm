@@ -14,13 +14,48 @@ use Data::Dumper;
 # 
 # 
 # Kim Brugger (13 Jun 2011)
-sub validate_name {
+sub validate_sample {
   my ($sample_name) = @_;
 
   # Takes the old names into consideration as well.
-  return 1 if ($sample_name =~ /^[A-Z]\d{6,7}\z/);
+  return 1 if ($sample_name =~ /^[A-Z]\d{6,7}[a-z]{0,1}\z/);
 
   return 0;
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (21 Feb 2012)
+sub extract_project {
+  my ($sample_name) = @_;
+  
+  return undef if ( ! validate_sample($sample_name));
+
+  my ($sample, $postfix) = $sample_name =~ /^([A-Z]\d{2})/;
+  
+  return $1;
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (21 Feb 2012)
+sub sample_n_version {
+  my ($sample_name) = @_;
+
+  my $version = 0;
+
+  my ($sample, $postfix) = $sample_name =~ /^([A-Z]\d{6,7}[a-z]{0,1})(.*)/;
+  if ( $postfix =~ /^_(\d+)(.*)/ ) {
+    $version = $1;
+    $postfix = $2;
+  }    
+
+  return ($sample, $version, $postfix);
 }
 
 

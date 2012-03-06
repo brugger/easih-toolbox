@@ -81,11 +81,11 @@ sub readin {
       
       my (undef, $lane, $sample_id, undef, $index, undef) = @F;
 
-      $index ||= "default";
 
       $lane      =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $sample_id =~ s/^$text_delim(.*)$text_delim\z/$1/;
       $index     =~ s/^$text_delim(.*)$text_delim\z/$1/;
+      $index ||= "default";
 
       $errors .= "Error: Lane number $lane is not a valid lane number - should be between 1 and 8\n", if($lane !~ /^[1-8]$/); #svvd2 18 Jan 2012 
 
@@ -155,7 +155,7 @@ sub validate {
       foreach my $bcode (keys %{$$hash{$lane}}) {
 	
 	$errors .= "Error: $$hash{$lane}{$bcode} for lane $lane is not an EASIH sample name\n" 
-	    if ( !EASIH::Sample::validate_name($$hash{$lane}{$bcode}));
+	    if ( !EASIH::Sample::validate_sample($$hash{$lane}{$bcode}));
 
 	next if ($bcode eq 'default');
 
@@ -183,7 +183,7 @@ sub validate {
       }
     }
     else {
-	$errors .= "Error: $$hash{$lane} for lane $lane is not an  EASIH sample name\n" if ( !EASIH::Sample::validate_name($$hash{$lane}));
+	$errors .= "Error: $$hash{$lane} for lane $lane is not an  EASIH sample name\n" if ( !EASIH::Sample::validate_sample($$hash{$lane}));
     }
   }
 

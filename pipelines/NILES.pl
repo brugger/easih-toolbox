@@ -60,40 +60,53 @@ my $out = $first;
 $out =~ s/.1.fq//;
 $out =~ s/.gz//;
 
-my $cmd = "$smalt map -f samsoft $smalt_db $first | egrep -v \\\# |  $samtools view -t $reference.fai -S - | $tag_sam -p TORRENT -r $first | $samtools view -t $reference.fai -Sb - | $samtools sort - $out; $samtools index $out.bam";
+#my $cmd = "$smalt map -f samsoft $smalt_db $first | egrep -v \\\# |  $samtools view -t $reference.fai -S - | $tag_sam -p TORRENT -r $first | $samtools view -t $reference.fai -Sb - | $samtools sort - $out; $samtools index $out.bam";
+my $cmd = "$smalt map -f samsoft $smalt_db $first | egrep -v \\\# | $tag_sam -p TORRENT -r $first | ";
 #print "$cmd\n";
-system $cmd;
+#system $cmd;
+
+my %regions;
+
+open( my $bam_out, " | $samtools view -t $reference.fai -Sb - | $samtools sort - $out" ) || die "Could not open stream: $!\n";
+open( my $bam_in,  $cmd ) || die "Could not open stream: $!\n";
+while(<$bam_in>) {
+  if (/^\@/) {
+    print $bam_out $_;
+  }
+  else {
+    my @F = split("\t");
+    if ( $F[2] =~ /(.*?):(\d+)-(\d+)/) {
+      my ($chr, $start, $end) = ($1,$2,$3);
+      $regions{ $F[2] }++;
+      $F[3] += $start - 1;
+      $F[2] = $chr;
+      print $bam_out join("\t", @F);
+    }
+  }
+}
+close($bam_out);
+close($bam_in);
+system "$samtools index $out.bam";
 
 $cmd = "$bam_recalib -R $reference -b $out.bam -o $out.re.bam > $out.recal.csv; $samtools index $out.re.bam";
-#print "$cmd\n";
+print "$cmd\n";
 system $cmd;
 
-$cmd = "$gatk -T UnifiedGenotyper -R $reference -I $out.re.bam --max_deletion_fraction 2  | egrep -v ^INFO | ";
-print "$cmd\n";
-open (my $o, "> $out.vcf") || die "Could not write to file '$out.vcf': $!\n";
-open (my $p, $cmd) || die "Could not open pipe: $!\n";
-while(<$p>) {
-  if (/\#/ ) {
-    print $o $_;
-    next;
-  }
-  print;
-  my ($chr, $pos, $rest) = split("\t", $_, 3);
-  next if (! $chr );
 
-  my ($new_chr, $offset, undef) = $chr =~ /^(.*?):(\d+)-(\d+)/;
-  $offset--;
-  
-
-  print $o "$new_chr\t".($pos+$offset)."\t$rest";
+open (my $var_out, " > $out.intervals") || die "Could not open file '$out.intervals': $!\n";
+foreach my $region (keys %regions) {
+  print $var_out "$region\n";
 }
-close($o);
-close($p);
+close( $var_out );
 
-$cmd = "~/easih-toolbox/scripts/Variation_report.pl -s $out.vcf -O $out.var.csv -o $out.var_full.csv\n";
+$cmd = "$gatk -T UnifiedGenotyper -R $reference -I $out.re.bam --max_deletion_fraction 2 -o $out.re.vcf -L $out.intervals ";
 print "$cmd\n";
 system $cmd;
 
+$cmd = "~/easih-toolbox/scripts/Variation_report.pl -s $out.re.vcf -O $out.var.csv -o $out.var_full.csv\n";
+print "$cmd\n";
+system $cmd;
+ 
 
 # 
 # 

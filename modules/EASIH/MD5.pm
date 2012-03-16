@@ -31,7 +31,7 @@ sub create_file {
   print "$md5 $infile\n";
   $infile =~ s/.*\///;
   open( my $o, "> $outfile ") || die "Could not write to '$outfile': $!\n";
-  print $o "$md5\t$infile\n";
+  print $o "$md5  $infile\n";
   close( $o );
 
   return $md5;
@@ -53,9 +53,11 @@ sub validate_file {
   $infile = $file if (! $infile );
 
   if (validate_sum($md5sum, $infile)) {
+    return 1;
     print "Good md5\n";
   }
   else {
+    return 0;
     print "Bad md5\n";
   }
 }

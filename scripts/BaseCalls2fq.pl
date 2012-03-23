@@ -11,13 +11,13 @@ use Data::Dumper;
 use Getopt::Std;
 
 my $debug = 0;
-$debug = 1;
+#$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
 BEGIN {
-  my $DYNAMIC_LIB_PATHS = 1;
+  my $DYNAMIC_LIB_PATHS = 0;
   if ( $DYNAMIC_LIB_PATHS ) {
     my $path = $0;
     if ($path =~ /.*\//) {
@@ -242,8 +242,7 @@ if ( $datamonger ) {
   my $res = EASIH::Illumina::Summary::readin_summaries($indir);
   EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
 
-  EASIH::DONE::add_offloading_status($runfolder, 
-				     "ILLUMINA", 
+  EASIH::DONE::add_offloading_status($rid, 
 				     "BASECALLS2FQ_DONE");
 }
 
@@ -641,11 +640,9 @@ sub fail {
   
   if ( $datamonger ) {
     print STDERR "$message\n";
-    EASIH::DONE::add_offloading_status($runfolder, 
-				       "ILLUMINA", 
+    EASIH::DONE::add_offloading_status($rid, 
 				       "$status");
-    EASIH::DONE::add_offloading_status($runfolder, 
-				       "ILLUMINA", 
+    EASIH::DONE::add_offloading_status($rid, 
 				       "BASECALLS2FQ_FAILED");
     exit -1;
   }

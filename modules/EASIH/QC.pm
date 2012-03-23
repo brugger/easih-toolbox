@@ -80,89 +80,6 @@ sub random_sample {
 
 
 # 
-# Does simple QC on a csfasta file without mapping it... If doing a PE run, call the function twice...
-# 
-# Kim Brugger (03 Aug 2010)
-sub csfastaQC  {
-  my ( $infile1, $res ) = @_;
-
-  if ( $random_sample ) {
-    if ( $infile1 =~ /gz/) {
-      $res = random_sample_csfasta_gz( $infile1, $res);
-    }
-    else {
-      $res = random_sample_csfasta( $infile1, $res);
-    }
-  }
-  else {
-    my $read = 0;
-    my $file1;
-    if ( $infile1 =~ /gz/) {
-      open ( $file1, "gunzip -c $infile1 | ") || die "Could not open '$infile1': $!\n";
-    }
-    else {
-      open ( $file1, "$infile1") || die "Could not open '$infile1': $!\n";
-    }
-    while (<$file1>) { 
-      next if (/#/ || /\>/);
-      chomp; 
-      my $sequence = substr($_, 1);
-      $read += length( $sequence );
-      last if ( $sample_size > 0 && $read > $sample_size );
-      $res = analyse( $sequence, undef, $res);
-    }
-  }
-
-  
-  return $res;
-}
-
-# Kim Brugger (03 Aug 2010)
-sub qualQC  {
-  my ( $infile1, $res) = @_;
-  
-  if ( $random_sample ) {
-    if ( $infile1 =~ /gz/) {
-      $res = random_sample_qual_gz( $infile1, $res);
-    }
-    else {
-      $res = random_sample_qual( $infile1, $res);
-    }
-  }
-  else {
-    my $read = 0;
-    my $file1;
-    if ( $infile1 =~ /gz/) {
-      open ( $file1, "gunzip -c $infile1 | ") || die "Could not open '$infile1': $!\n";
-    }
-    else {
-      open ( $file1, "$infile1") || die "Could not open '$infile1': $!\n";
-    }
-    while (<$file1>) { 
-      next if (/#/ || /\>/);
-      
-      chomp; 
-      
-      s/^(\d+)\s*//;
-      s/-1/0/g;
-      my $qual;
-      map { $qual .= chr($_+33)} split(/\s+/);
-      
-      $read += length( $qual );
-      last if ( $sample_size > 0 && $read > $sample_size );
-      
-      $res = analyse( undef, $qual, $res);
-      $res = mappable( $qual, $res); 
-    }
-  }
-
-  $$res{mappability} = sprintf("%.2f", 100*$$res{mappable}/$$res{quals});
-
-  return $res;
-}
-  
-
-# 
 # 
 # Kim Brugger (03 Aug 2010)
 sub fastQC {
@@ -244,13 +161,11 @@ sub sample_fastq_files {
 # 
 # Kim Brugger (26 Jan 2011)
 sub bamQC {
-  my ( $infile, $mappable) = @_;
+  my ( $infile) = @_;
 
   my ($res1, $res2);
   my ($read1, $read2) = (0, 0);
   
-  $mappable ||= 1;
-
   my $samtools = `which samtools`;
   chomp( $samtools);
    
@@ -271,45 +186,17 @@ sub bamQC {
     if ($flags & 0x0080 ) {
       $read2 += length($sequence);
       $res2 = analyse( $sequence, $quality, $res2);
-      $res2 = mappable( $quality, $res2) if ($mappable); 
     }
     else {
       $read1 += length($sequence);
       $res1 = analyse( $sequence, $quality, $res1);
-      $res1 = mappable( $quality, $res1) if ($mappable); 
     }
   }
   close( $pipe );
   
 
-  $$res1{mappability} = sprintf("%.2f", 100*$$res1{mappable}/$$res1{quals}) if ($mappable);
-  $$res2{mappability} = sprintf("%.2f", 100*$$res2{mappable}/$$res2{quals}) if ($mappable);
   return( $res1, $res2);
 }
-
-
-
-# 
-# 
-# 
-# Kim Brugger (28 Jan 2011)
-sub mappable {
-  my ( $quality, $res) = @_; 
-  
-  my $cutoff  =  9;
-  my $maximum =  11;
-#  $maximum = 0.22*length( $quality ) if (length( $quality ) != 50);
-
-  my $count = 0;
-  foreach my $QC ( map { (ord($_) - 33) } split("", $quality)) {
-    $count++ if ( $QC < $cutoff);
-  }
-  
-  $$res{mappable}++ if ( $count < $maximum);
-  return $res;
-}
-
-
 
 
 # 
@@ -394,8 +281,6 @@ sub mappings {
   my %libraries = (
     Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
     NCBI_ref       => "/data/refs/archive/human_genomic_transcript/ref_contig",
-    NCBI_alt       => "/data/refs/archive/human_genomic_transcript/alt_contig_HuRef",
-    NCBI_rna       => "/data/refs/archive/human_genomic_transcript/rna",
     Mouse          => "/data/refs/mm9/bowtie/mm9",
     Rat            => "/data/refs/archive/rn4/bowtie/rn4",
     Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
@@ -1195,8 +1080,8 @@ sub random_sample_fastq_gz_files {
   
   my (@res1, @res2);
 
-
-  while( $sample_size > $read && $max_counts > $counts++ ) {
+#  while( $sample_size > $read || $max_counts > $counts++ ) {
+  while( $sample_size > $read || $max_counts > $counts++ ) {
     
     $random_pos = $z1->tell() + int(rand(5120));
     if ( ! $z1->seek($random_pos, SEEK_SET) ) {
@@ -1233,7 +1118,6 @@ sub random_sample_fastq_gz_files {
 
 
       push @res1, [$name1, $seq1, $str1, $qual1];
-      $read += length($seq1);
 
       if ( $infile2 ) {
 	my $name2 = $z2->getline();;
@@ -1243,6 +1127,7 @@ sub random_sample_fastq_gz_files {
 
 	push @res2, [$name2, $seq2, $str2, $qual2];
       }
+      $read += length($seq1);
     }
   }
 
@@ -1287,7 +1172,6 @@ sub random_sample_fastq_gz {
       my $qual = $z->getline();
 
       $res = analyse( $seq, $qual, $res);
-      $res = mappable( $qual, $res);
       
       $read += length($seq);
     }
@@ -1351,173 +1235,6 @@ sub random_sample_fastq_files {
   return (\@res1, \@res2);
 }
 
-
-
-#
-#
-#
-# Kim Brugger (03 Aug 2010)
-sub random_sample_csfasta_gz {
-  my ($infile, $res ) = @_;
-
-  my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-
-  my $read = 0;
-  my $random_pos = int(rand(1048576));
-  
-  while( $sample_size > $read ) {
-    
-    $random_pos = $z->tell() + int(rand(5120));
-    if ( ! $z->seek($random_pos, SEEK_SET) ) {
-      close($z);
-      $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-#      print STDERR "Start from the beginning again\n";
-      $random_pos = int(rand(1048576));
-      next;
-    }
-
-    while ( $_ =  $z->getline() ) {
-      last if ( $_ =~ /^\>/);
-    }
-    
-    if ($_ && $_ =~ /^\>/) {
-      my $seq  = $z->getline();
-      $seq = substr($seq, 1);
-
-      $res = analyse( $seq, undef, $res);
-      
-      $read += length($seq);
-    }
-  }
-
-  return $res;
-}
-
-
-#
-#
-#
-# Kim Brugger (03 Aug 2010)
-sub random_sample_csfasta {
-  my ($infile1, $res) = @_;
-
-  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile1);
-  
-  open (my $file1, $infile1) || die "Could not open '$infile1': $!\n";
-  my $read = 0;
-  while( $sample_size > $read ) {
-
-    my $random_pos = int(rand($size));
-    seek( $file1, $random_pos, 0);
-    
-    while ( <$file1> ) {
-      last if ( $_ =~ /^\>/);
-    }
-    
-    if ($_ && $_ =~ /^>/) {
-      my $seq  = <$file1>;
-      $seq = substr($seq, 1);
-      $res = analyse( $seq, undef, $res);
-      
-      $read += length($seq);
-    }
-  }
-
-
-  return $res;
-}
-
-
-
-#
-#
-#
-# Kim Brugger (03 Aug 2010)
-sub random_sample_qual_gz {
-  my ($infile, $res ) = @_;
-
-  my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-
-  my $read = 0;
-  my $random_pos = int(rand(1048576));
-  
-  while( $sample_size > $read ) {
-    
-    $random_pos = $z->tell() + int(rand(5120));
-    if ( ! $z->seek($random_pos, SEEK_SET) ) {
-      close($z);
-      $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-      #print STDERR "Start from the beginning again\n"; 
-      $random_pos = int(rand(1048576));
-      next;
-    }
-
-    while ( $_ =  $z->getline() ) {
-      last if ( $_ =~ /^\>/);
-    }
-    
-    if ($_ && $_ =~ /^\>/) {
-      $_  = $z->getline();
-      chomp;
-      
-      s/^(\d+)\s*//;
-      s/-1/0/g;
-      my $qual;
-      map { $qual .= chr($_+33)} split(/\s+/, $_);
-    
-      $read += length( $qual );
-      last if ( $sample_size > 0 && $read > $sample_size );
-
-      $res = analyse( undef, $qual, $res);
-      $res = mappable( $qual, $res); 
-      $read += length($qual);
-    }
-  }
-
-  return $res;
-}
-
-
-#
-#
-#
-# Kim Brugger (03 Aug 2010)
-sub random_sample_qual {
-  my ($infile1, $res) = @_;
-
-  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile1);
-  
-  open (my $file1, $infile1) || die "Could not open '$infile1': $!\n";
-  my $read = 0;
-  while( $sample_size > $read ) {
-
-    my $random_pos = int(rand($size));
-    seek( $file1, $random_pos, 0);
-    
-    while ( <$file1> ) {
-      last if ( $_ =~ /^\>/);
-    }
-    
-    if ($_ && $_ =~ /^>/) {
-      $_ = <$file1>;
-      chomp;
-      
-      s/^(\d+)\s*//;
-      s/-1/0/g;
-      my $qual;
-      map { $qual .= chr($_+33)} split(/\s+/, $_);
-    
-      $read += length( $qual );
-      last if ( $sample_size > 0 && $read > $sample_size );
-
-      $res = analyse( undef, $qual, $res);
-      $res = mappable( $qual, $res); 
-      $read += length($qual);
-    }
-  }
-
-  return $res;
-}
 
 1;
 

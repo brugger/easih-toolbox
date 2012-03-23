@@ -50,7 +50,7 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   print_combined_gc($fid1, $fid2, $gc3) if ($fid2);
   my $ad1 = "ad1";
   my $ad12 = "ad12";
-  print_adaptor_histogram($fid1, $ad1) if ( 1 || $fid2);
+  print_adaptor_histogram($fid1, $ad1) if ( !$fid2);
   print_combined_adaptor_histogram($fid1, $fid2, $ad12) if ( $fid2);
   my $dh1 = "dh1";
   my $dh12 = "dh12";
@@ -111,19 +111,19 @@ if ( $EASIH::HTML::parameters{ 'QC' } ) {
   
   print EASIH::HTML::advanced_table(\@traffic_light, 1, 0, 0, 'lightgrey', 0, '700px');
 
-#   print "<h4>Read1</h4><div id='$boxid1' style='width: 900px; height: 300px;'></div>";
-#   print "<h4>Read2</h4><div id='$boxid2' style='width: 900px; height: 300px;'></div>" if ($fid2);
-#   print "<h4>Read1</h4><div id='$qvshist1' style='width: 900px; height: 300px;'></div>";
-#   print "<h4>Read2</h4><div id='$qvshist2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+   print "<h4>Read1</h4><div id='$boxid1' style='width: 900px; height: 300px;'></div>";
+   print "<h4>Read2</h4><div id='$boxid2' style='width: 900px; height: 300px;'></div>" if ($fid2);
+   print "<h4>Read1</h4><div id='$qvshist1' style='width: 900px; height: 300px;'></div>";
+   print "<h4>Read2</h4><div id='$qvshist2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
    print "<h4>Read1</h4><div id='$dh1' style='width: 900px; height: 300px;'></div>" if ( !$fid2);
-   print "<h4>Read2</h4><div id='$dh12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
+#   print "<h4>Read1+2</h4><div id='$dh12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
 
-   print "<h4>Read1</h4><div id='$ad1' style='width: 900px; height: 300px;'></div>" if (!$fid2);
+   print "<h4>Read1</h4><div id='$ad1' style='width: 900px; height: 300px;'></div>" if ( !$fid2);
    print "<h4>Read1+2</h4><div id='$ad12' style='width: 900px; height: 300px;'></div>" if ( $fid2);
    print "<h4>Read1</h4><div id='$base1' style='width: 900px; height: 300px;'></div>";
    print "<h4>Read2</h4><div id='$base2' style='width: 900px; height: 300px;'></div>" if ( $fid2);
   print "<h4>Read1</h4><div id='$gc1' style='width: 900px; height: 300px;'></div>" if (! $fid2);
-  print "<h4>Read1+2</h4><div id='$gc3' style='width: 900px; height: 300px;'></div>"if ( $fid2);
+  print "<h4>Read2</h4><div id='$gc3' style='width: 900px; height: 300px;'></div>"if ( $fid2);
 
 
   my @mappings = (['database', 'Hits', 'non-unique hits', 'duplicates']);

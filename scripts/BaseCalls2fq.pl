@@ -51,10 +51,10 @@ my $tile2seq = "/software/installed/easih-toolbox/C/tile2seq/tile2seq";
 $tile2seq = "/home/kb468/easih-toolbox/C/tile2seq/tile2seq" if ( 1 || $debug);
 
 my %opts;
-getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhnbd", \%opts);
+getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmbd", \%opts);
 
 my $limited_lanes = $opts{'l'};
-my $no_mismatches = $opts{'n'};
+my $mismatches    = $opts{'m'};
 
 # 
 # 
@@ -74,7 +74,7 @@ sub usage {
   print "USAGE: -d<ata monger mode, oh dont you dare>\n";
   print "USAGE: -b<arcoded run>.\n";
   print "USAGE: -l<imited lanes, by default the whole slide is extracted>.\n";
-  print "USAGE: -n<o mismatches in barcodes, normal is 1 error>.\n";
+  print "USAGE: -m<ismatches 1 bp error in barcodes>.\n";
   print "USAGE: -o<utput dir, default is /data/<project ID>/raw/, on a sample basis>.\n";
   print "USAGE: for barcoded lanes, please use a sample sheet.\n";
   print "USAGE: naming a (or all) lane with switches overrules all sample sheet checking.\n";
@@ -567,7 +567,7 @@ sub verify_bcode {
 
   foreach my $bc2 ( @bc2s ) {
 
-    if ( $no_mismatches) {
+    if ( $mismatches == 0) {
       return $bc1 if ($bc1 eq $bc2);
       next;
     }

@@ -76,7 +76,7 @@ sub readin {
       
       my $fcount = @F; #svvd2 Jan 17 2012
       $warnings .= "Warning: Missing columns - expecting 9 of them...\n", if($fcount < 9); #svvd2 Jan 17 2012
-      $warnings .= "Warning: Additional columns found - expecting only 9 of them", if($fcount > 9); #svvd2 Jan 17 2012
+      $warnings .= "Warning: Additional columns found - expecting only 9 of them\n", if($fcount > 9); #svvd2 Jan 17 2012
 
       
       my (undef, $lane, $sample_id, undef, $index, undef) = @F;

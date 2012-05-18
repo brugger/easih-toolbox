@@ -37,16 +37,16 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=02:05:00"},
 		 
 		 'std-aln'          => { function   => 'bwa_aln',
-					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=02:05:00"},
+					 hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=08:05:00"},
 		 
 		 'sai2bam'          => { function   => 'bwa_sai2bam',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=02:15:00",},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=04:15:00",},
 
 		 'std-sort'          => { function   => 'EASIH::JMS::Picard::sort',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=08:05:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=05:05:00"},
 
 		 'std-merge'         => { function   => 'EASIH::JMS::Picard::merge',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=20:00:00",
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=08:00:00",
 					  sync       => 1},
 
 		 'std-mark_dup'      => { function   => 'EASIH::JMS::Picard::mark_duplicates',
@@ -80,7 +80,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=04:00:00"},
 		 
 		 'identify_variation'     => { function   => 'identify_variation_mpi',
-					  hpc_param  => "-NEP-fqs -l nodes=4:ppn=4,walltime=02:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=3:ppn=4,walltime=02:00:00"},
 		 
 		 'filter_variation'       => { function   => 'filter_variation',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=02:00:00"},
@@ -96,7 +96,7 @@ our %analysis = ('fastq-split'      => { function   => 'fastq_split',
 					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=1,walltime=01:00:00"},
 
 		 'stats'             => { function   => 'stats',
-					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=01:00:00"},
+					  hpc_param  => "-NEP-fqs -l nodes=1:ppn=4,walltime=02:00:00"},
 
 		 'finished'          => { function   => 'finished',
 					  },
@@ -123,6 +123,9 @@ our %flow = (
 
 	      'identify_variation'=> 'merge_vcfs',
 	      'merge_vcfs'       =>  'filter_variation',
+#	      'merge_vcfs'       =>  ['get_indels','rescore_snps'],
+#	      'get_indels'       => 'filter_variation',
+#	      'rescore_snps'     => 'filter_variation',
 	      'filter_variation' => 'stats',
 	      'stats'            => 'finished'
 	      );
@@ -144,6 +147,7 @@ if ( $soft_reset ) {
   getopts($opts, \%opts);
 }
 elsif ( $hard_reset ) {
+  print "Doing a hard reset/restart\n";
   &EASIH::JMS::hard_reset($hard_reset);
   getopts($opts, \%opts);
 }
@@ -162,6 +166,13 @@ if ( $opts{Q} ) {
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
   $opts{'m'} = 1;
+
+  if ( $opts{'r'} ) {
+    $opts{'r'} = 1;
+  }
+
+  my $ref_dir       = $opts{'r'};
+
 
   my $freeze_file = "$opts{'o'}.maris";
   system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
@@ -187,7 +198,6 @@ our $report       = $opts{'o'}     || usage();
 my $platform      = uc($opts{'p'}) || usage();
 $platform = 'ILLUMINA'      if ( $platform eq 'ILLUMINA');
 my $print_filter  = $opts{'P'};
-my $sample        = $opts{'r'};
 our $reference    = $opts{'R'}     || usage();
 my $no_sw_pair    = $opts{'D'};
 my $align_param   = ' ';
@@ -453,11 +463,9 @@ sub bwa_sai2bam {
   $readgroup =~ s/\.[1|2].fq//;
 
   
-  if ( ! $sample ) {
-    $sample = $readgroup;
-    $sample =~ s/\..*//;
-    $sample =~ s/_\d*//;
-  }
+  my $sample = $readgroup;
+  $sample =~ s/\..*//;
+  $sample =~ s/_\d*//;
 
   
   $cmd .= " | $tag_sam -R $reference -p $platform -r $readgroup -s $sample ";
@@ -512,8 +520,8 @@ sub stats {
   open(my $cmds, ">$commands_file") || die "Could not write to '$commands_file': $!\n";
 
   print  $cmds "$samtools flagstat $report.bam > $report.flagstat\n";
-  print  $cmds "md5sum $report.bam > $input.bam.md5 \n";
-  print  $cmds "md5sum $report.bam.bai > $input.bam.bai.md5 \n";
+  print  $cmds "md5sum $report.bam > $report.bam.md5 \n";
+  print  $cmds "md5sum $report.bam.bai > $report.bam.bai.md5 \n";
   print  $cmds "md5sum $report.vcf > $report.vcf.md5 \n";
   print  $cmds "md5sum $report.maris > $report.maris.md5\n";
 
@@ -702,7 +710,7 @@ sub identify_variation_mpi {
   }
   close ($cmds );
 
-  my $cmd = "$mpi_q -c 16 $commands_file ";
+  my $cmd = "$mpi_q -c 12 $commands_file ";
   EASIH::JMS::submit_job($cmd, \@targets);
 }
 
@@ -719,7 +727,7 @@ sub filter_variation {
     EASIH::JMS::submit_system_job("mv $input $merged_file", "");
   }
   else {
-    my $cmd = "$gatk -T VariantFiltration  -R $reference  -B:variant,VCF $input  -o $merged_file $filter ";
+    my $cmd = "$gatk -T VariantFiltration  -R $reference  -V $input  -o $merged_file $filter ";
     EASIH::JMS::submit_job($cmd, "$merged_file");
   }
 
@@ -735,37 +743,72 @@ sub merge_vcfs {
     EASIH::JMS::submit_system_job("mv @$inputs $tmp_file", $tmp_file);
   }
   else {
-    my $cmd = "$gatk -T CombineVariants -R $reference -o $tmp_file  -genotypeMergeOptions UNIQUIFY ";
+    my $cmd = "$gatk -T CombineVariants -R $reference -o $tmp_file ";
     my $count = 1;
     foreach my $input ( @$inputs ) {
-      $cmd .= " -B:variant,VCF $input ";
+      $cmd .= " -V:variant $input ";
       $count++;
     }
     EASIH::JMS::submit_job($cmd, $tmp_file);
   }
 }
 
-sub cluster_snps {
+
+# 
+# Pulls out all the indels, so we can merge them back in later.
+# 
+# Kim Brugger (02 Dec 2011)
+sub get_indels {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file(".cluster");
-  my $cmd = "$gatk -T GenerateVariantClusters -R $reference -B:input,VCF $input --DBSNP $dbsnp -an QD -an SB -an HaplotypeScore -an HRun -clusterFile $tmp_file -nt 4";
-  EASIH::JMS::submit_system_job($cmd, "$tmp_file -B:input,VCF $input");
-}		
-		
-		
+  my $tmp_indel_file = EASIH::JMS::tmp_file(".indels.vcf");
+  my $cmd = "$gatk -T SelectVariants  -indels -R $reference -V $input -o $tmp_indel_file";
 
+  
+
+}
+
+
+
+# 
+# This only works for human data...
+# 
+# Kim Brugger (02 Dec 2011)
 sub rescore_snps {
   my ($input) = @_;
 
-  #This is where things fall apart and fails, read the wiki...
 
-  my $tmp_file = EASIH::JMS::tmp_file(".tranches");
-  $report =~ s/.vcf\z//;
-  my $cmd = "$gatk -T VariantRecalibrator -R $reference --DBSNP $dbsnp -clusterFile $input -o  $report.snps --target_titv 3.0 -tranchesFile $tmp_file -nt 4";
-  EASIH::JMS::submit_system_job($cmd, $report);
-}		
+  my $tmp_cmd_file   = EASIH::JMS::tmp_file(".sh");
+  open(my $cmds, "> $tmp_cmd_file") || die "Could not write to '$tmp_cmd_file': $!\n";
 
+  my $tmp_snp_file      = EASIH::JMS::tmp_file(".snps.vcf");
+  my $tmp_recalc_file   = EASIH::JMS::tmp_file(".recalc");
+  my $tmp_tranches_file = EASIH::JMS::tmp_file(".tranches");
+  my $tmp_recal_snps    = EASIH::JMS::tmp_file(".rc.snps.vcf");
+
+  # get all the snps from the VCF file...
+  print  $cmds "$gatk -T SelectVariants  -snps   -R $reference -V $input -o $tmp_snp_file\n";
+  #calculate the recalibration thingy
+
+
+#ref='/home/easih/refs/human_1kg/human_g1k_v37.fasta'
+#dbsnp='/home/easih/refs/GATK/dbsnp_132.b37.vcf'
+#indels='/home/easih/refs/GATK/1000G_indels_for_realignment.b37.vcf'
+#omni='/home/easih/refs/GATK/1000G_omni2.5.b37.sites.vcf'
+#hapmap='/home/easih/refs/GATK/hapmap_3.3.b37.sites.vcf'
+
+
+#  print  $cmds "$gatk -T VariantRecalibrator -nt 4  -R $reference -input $tmp_snp_file ";
+#  print  $cmds "-resource:hapmap,VCF,known=false,training=true,truth=true,prior=15.0 $hapmap ";
+#  print  $cmds "-resource:omni,VCF,known=false,training=true,truth=false,prior=12.0 $omni "; 
+#  print  $cmds "-resource:dbsnp,VCF,known=true,training=false,truth=false,prior=8.0 $dbsnp "; 
+#  print  $cmds "-an QD -an HaplotypeScore -an MQRankSum -an ReadPosRankSum -an FS -an MQ -mode SNP -mG 6 -recalFile $tmp_recalc_file -tranchesFile $tmp_tranches_file -rscriptFile ${name}_var_recal.plots.R\n";
+
+ print $cmds "$gatk -T ApplyRecalibration -R $reference -B:input,VCF $tmp_snp_file -recalFile $tmp_recalc_file -tranchesFile $tmp_tranches_file -o $tmp_recal_snps\n";
+
+
+  
+}
 
 
 # 
@@ -843,7 +886,7 @@ sub validate_input {
 
 
   push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
-  push @errors, "'$dbsnp' does end with .rod as expected\n" if ($dbsnp !~ /.rod\z/);
+  push @errors, "'$dbsnp' don't end with .vcf as expected\n" if ($dbsnp !~ /.vcf\z/);
 
   push @errors, "Platform must be either ILLUMINA or SOLID not '$platform'" if ( $platform ne "ILLUMINA" && $platform ne 'SOLID');
 

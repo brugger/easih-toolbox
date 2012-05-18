@@ -467,7 +467,6 @@ sub sam_add_tags {
   $readgroup =~ s/\.[1|2].fq//;
 
   
-
   my $sample = $readgroup;
   $sample =~ s/\..*//;
   $sample =~ s/_\d*//;

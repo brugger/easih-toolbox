@@ -10,19 +10,14 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/usr/local/lib/ensembl-variation/modules/';
-use lib '/usr/local/lib/ensembl-functgenomics/modules/';
-use lib '/usr/local/lib/ensembl/modules/';
-use lib '/usr/local/lib/bioperl/';
+use lib '/software/lib/ensembl-variation/modules/';
+use lib '/software/lib/ensembl-functgenomics/modules/';
+use lib '/software/lib/ensembl/modules/';
+use lib '/software/lib/bioperl/';
 
 
-use lib '/home/easih/lib/ensembl-variation/modules/';
-use lib '/home/easih/lib/ensembl-functgenomics/modules/';
-use lib '/home/easih/lib/ensembl/modules/';
-use lib '/home/easih/lib/bioperl/';
-
-
-use lib '/home/kb468/easih-toolbox/modules/';
+#use lib '/home/kb468/easih-toolbox/modules/';
+use lib '/software/installed/easih-toolbox/modules';
 use EASIH::SNPs;
 
 
@@ -33,6 +28,9 @@ use Bio::EnsEMBL::Registry;
 use Bio::EnsEMBL::Variation::DBSQL::VariationFeatureAdaptor;
 use Bio::EnsEMBL::Variation::DBSQL::TranscriptVariationAdaptor;
 use Bio::EnsEMBL::Funcgen::DBSQL::DBAdaptor;
+
+
+die "This script is deprecated, please use the Variation_report.pl instead\n";
 
 my @argv = @ARGV;
 
@@ -45,11 +43,16 @@ my $buffer_size = 100;
 my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
+
+
 if ( $opts{ Q }  ) {
+
+  $opts{ Q } =~ s/\.bam//;
+  $opts{ Q } =~ s/\.snps.vcf//;
 
   $opts{v} = "$opts{Q}.snps.vcf";
   $opts{b} = "$opts{Q}.bam";
-  $opts{o} = "$opts{Q}.snps.tab";
+  $opts{o} = "$opts{Q}.snps.csv";
   $opts{g} = 1;
   $opts{p} = 1;
   $opts{P} = 1;
@@ -94,7 +97,7 @@ my $reg = 'Bio::EnsEMBL::Registry';
 #  $reg->load_registry_from_db(-host => $host,-user => $user, -NO_CACHE => 0,);
 #}
 #else {
-  $reg->load_registry_from_db(-host => "localhost",-user => "easih_ro", -NO_CACHE => 0);
+  $reg->load_registry_from_db(-host => "mgpc17",-user => "easih_ro", -NO_CACHE => 0);
 #}
 # get variation adaptors
 my $vfa = $reg->get_adaptor($species, 'variation', 'variationfeature');
@@ -1008,6 +1011,7 @@ sub base_dist {
   my %res;
   my $alt_perc = 0;
   foreach my $base (sort {$base_stats{$b} <=> $base_stats{$a}} keys %base_stats ) {
+    next if ( ! $total );
     my $perc = sprintf("%.2f", $base_stats{$base}/$total*100);
     $alt_perc = $perc if ( $base eq $alt_base );
     my $qual = $qual_stats{$base} || 0;

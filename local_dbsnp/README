@@ -1,0 +1,29 @@
+
+A Very Short description of howto build the local dbsnp database
+Kim Brugger (12 May 2011), contact: kim.brugger@easih.ac.uk
+
+1) fetch the latest human dbsnp vcf file
+ftp://ftp.ncbi.nih.gov/snp/organisms/human_9606/VCF/v4.0/00-All.vcf
+
+2) HGMD data is in the repository, or Howard can do a new extraction
+
+3) create a database (be logged in to mgpc17 or whatever server you will be using)
+mysql -u easih_admin -peasih "create database dbsnp_132_human"
+
+4) load in the table schema
+mysql -u easih_admin -peasih dbsnp_132_human < tables.sql
+
+5) build the tables to load later
+./vcf2tab.pl HGMD-file 00-All.vcf
+
+6) import the tables into mysql
+ mysqlimport -u easih_admin -peasih -L dbsnp_132_human snp.txt 
+ mysqlimport -u easih_admin -peasih -L dbsnp_132_human flags.txt 
+
+
+
+
+TODO
+-=-=-=-=-=-=-=-=-=-
+
+1) write meta data to the database, file stamps and dbsnp version

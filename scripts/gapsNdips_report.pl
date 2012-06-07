@@ -10,10 +10,10 @@ use warnings;
 use Data::Dumper;
 
 
-use lib '/usr/local/lib/ensembl-variation/modules/';
-use lib '/usr/local/lib/ensembl-functgenomics/modules/';
-use lib '/usr/local/lib/ensembl/modules/';
-use lib '/usr/local/lib/bioperl/';
+use lib '/software/lib/ensembl-variation/modules/';
+use lib '/software/lib/ensembl-functgenomics/modules/';
+use lib '/software/lib/ensembl/modules/';
+use lib '/software/lib/bioperl/';
 
 use strict;
 use Getopt::Std;
@@ -32,6 +32,7 @@ my $host        = 'ensembldb.ensembl.org';
 my $user        = 'anonymous';
 
 my $host        = 'localhost';
+$host           = 'mgpc17';
 my $user        = 'easih_ro';
 
 
@@ -139,14 +140,16 @@ sub print_fullreport {
       $gene_id = "$$effect{ stable_id }" if (!$$effect{ external_name } && 
 					     $$effect{ stable_id } );
 	
+
+
+      $gene_id = "$$effect{ external_name }" if ($$effect{ external_name });
+
       $gene_id = "<a href='$ens_gene_link$$effect{ stable_id }'>$gene_id</a>"
 	  if ( $gene_id && $html_out && $$effect{ stable_id });
 	
       push @effect_line, $gene_id;
 
-      my $trans_id = "";
-	
-      $trans_id = "$$effect{ xref }/$$effect{ transcript_id }" if ($$effect{ xref } && 
+      my $trans_id = "$$effect{ xref }/$$effect{ transcript_id }" if ($$effect{ xref } && 
 								   $$effect{ transcript_id } );
       
       $trans_id = "$$effect{ transcript_id }" if (!$$effect{ xref } && 
@@ -155,11 +158,10 @@ sub print_fullreport {
       $trans_id = "<a href='$ens_trans_link$$effect{ transcript_id }'>$trans_id</a>"
 	  if ( $trans_id && $html_out && $$effect{ transcript_id });
 	
-	
       push @effect_line, $trans_id;
-      push @effect_line, ($$effect{ position } || "");
-      push @effect_line, ($$effect{ cpos } || "");
-      push @effect_line, ($$effect{ ppos } || "");
+#      push @effect_line, ($$effect{ position } || "");
+#      push @effect_line, ($$effect{ cpos } || "");
+#      push @effect_line, ($$effect{ ppos } || "");
       
       push @res, ["","", @effect_line];
     }
@@ -184,7 +186,8 @@ sub print_oneliner {
   if ( ! $printed_header++ ) {
     print table_start(1) if ( $html_out);
     
-    push @res, ['position', 'depth', 'gene', 'transcript', 'region', 'codon pos', 'protein pos' ];
+#    push @res, ['position', 'depth', 'gene', 'transcript', 'region', 'codon pos', 'protein pos' ];
+    push @res, ['position', 'depth', 'gene' ];
 
   }
 
@@ -193,7 +196,8 @@ sub print_oneliner {
     foreach my $effect ( @$effects ) {
       
       my @effect_line;
-      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+#      push @effect_line, "$$effect{ external_name }/$$effect{ stable_id }", "$$effect{ transcript_id }";
+      push @effect_line, "$$effect{ external_name }";
       push @effect_line, ($$effect{ position } || "");
       push @effect_line, ($$effect{ cpos } || "");
       push @effect_line, ($$effect{ ppos } || "");
@@ -430,6 +434,7 @@ sub region_effects {
 	  push @res, \%gene_res;
 	} 
       }
+      last;
     }
   }
 

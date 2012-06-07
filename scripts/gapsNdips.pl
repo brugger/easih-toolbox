@@ -17,7 +17,7 @@ getopts('b:m:hg:l:L:B:', \%opts);
 usage() if ( $opts{h});
 
 my $bam_file  = $opts{b} || usage();
-my $min_depth = 20;
+my $min_depth = 10;
 $min_depth = $opts{m} if ( defined $opts{m});
 my $gap_file  = $opts{g};
 my $low_file  = $opts{l};
@@ -129,7 +129,7 @@ sub print_report {
   $stream = *STDOUT if ( ! $stream );
 
   foreach my $entry ( @$entries ) {
-    next if ($entry == undef);
+    next if (!$entry);
     $$entry[3] ||= 0;
     print $stream "$$entry[0]:$$entry[1]-$$entry[2]\t$$entry[3]\n";
 #    print $stream join("\t",@$entry)."\n";

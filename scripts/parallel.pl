@@ -13,11 +13,15 @@ use POSIX  'tmpnam';
 use Getopt::Std;
 
 my %opts;
-getopts("c:", \%opts);
+getopts("c:ns:", \%opts);
+
+
 
 my $cpus = nr_of_cpus();
 my $MAX_NODES = $opts{c} || $cpus;
 my $infile = shift || die "USAGE $0 -c[pus to use, (runs on $cpus cpus by default)] COMMAND-INFILE \n";
+
+my $sleep_time = $opts{s} || 4;
 
 # Store the user specifed values in more readable named variables.
 my $INFILE    = $infile;
@@ -63,6 +67,11 @@ while ($_ = shift @commands ) {
 #    $command .= "> /dev/null 2>/dev/null";
       
 #    $total++;
+
+      if ( $opts{n}) {
+	print "$command\n";
+	next;
+      }
       
       my $cpid = create_child($command);
       $running_nodes++;
@@ -84,7 +93,7 @@ while ($_ = shift @commands ) {
 	  $running_nodes--;
 	}
       }
-      sleep 4;
+      sleep $sleep_time;
       printf( "         %1s       %5d           %7d                   %3.2f  \r",
               $running[$running_counter++ % 7], $total, $done, $done*100/$total);
       last if ($running_nodes < $MAX_NODES);
@@ -111,7 +120,7 @@ while ($done < $total) {
   }
   printf( "         %1s       %5d           %7d                   %3.2f \r",
 	  $running[$running_counter++ % 7], $total, $done, $done*100/$total);
-  sleep 4;
+  sleep $sleep_time;
 }
 
 print "All done.\n";

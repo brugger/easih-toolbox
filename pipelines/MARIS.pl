@@ -32,6 +32,10 @@ use EASIH::JMS;
 use EASIH::JMS::Misc;
 use EASIH::JMS::Samtools;
 use EASIH::JMS::Picard;
+use EASIH::Toolbox;
+
+my $easih_pipeline_version = EASIH::JMS::version();
+my $easih_toolbox_version  = EASIH::Toolbox::version();
 
 
 our %analysis = ('fastq-split'      => { function   => 'fastq_split',
@@ -162,7 +166,7 @@ our %flow = ( 'csfasta2fastq'     => 'std-aln',
 #EASIH::JMS::no_store();
 #EASIH::JMS::print_flow('fastq-split');
 
-my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:v';
+my $opts = '1:2:C:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:v';
 my %opts;
 getopts($opts, \%opts);
 
@@ -194,6 +198,8 @@ if ( $opts{Q} ) {
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
   $opts{'m'} = 1;
+  
+  $opts{'C'} = 1;
 
   my $freeze_file = "$opts{'o'}.maris";
   system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
@@ -223,10 +229,22 @@ my $readgroup     = $opts{'r'} || $report;
 our $reference    = $opts{'R'}     || usage();
 my $no_sw_pair    = $opts{'D'};
 my $align_param   = ' ';
-
+my $updated_repo  = $opts{'C'}     || undef;
 my $bam_file      = "$report.bam";
 
 #EASIH::JMS::verbosity(100) if ( $opts{v});
+
+
+
+if ( $updated_repo && 
+     ( $easih_pipeline_version =~ /dirty/ ||
+       $easih_toolbox_version =~ /dirty/)) {
+
+  print STDERR "Cannot run with unsubmitted changes to the repositories when doing a clinical run!\n";
+  print STDERR "Please check in changes in easih-toolbox\n"  if ($easih_toolbox_version =~ /dirty/);
+  print STDERR "Please check in changes in easih-pipeline\n" if ($easih_pipeline_version =~ /dirty/);
+  exit -1;
+}
 
 
 my $scrub_data    = $opts{s} || 0;
@@ -311,7 +329,7 @@ if ( $print_filter ) {
 
 #EASIH::JMS::verbosity(10);
 EASIH::JMS::backend('Darwin');
-#EASIH::JMS::backend('Kluster');
+#EASIH::JMS::backend('Local');
 EASIH::JMS::max_retry(0);
 
 
@@ -792,6 +810,7 @@ sub usage {
   print "EXAMPLE: $script -Q [base name] -l[oose mapping] -R[eference genome] -d[bsnp rod] -p[latform: illumina or solid]\n";
 
   print "\n";
+  print "extra flags: -C[lean git repositories, no unsublitted changes]\n";
   print "extra flags: -D[isable Smith-Waterman for the unmapped mate]\n";
   print "extra flags: -e[mail address, default: $username\@cam.ac.uk]\n";
   print "extra flags: -f[ilter: wgs,wgs-low,exon,exon-low. Default= exon] \n";
@@ -808,10 +827,8 @@ sub usage {
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
-  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
-
-  use EASIH::Toolbox;
-  print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";
+  print "easih-pipeline: $easih_pipeline_version\n";
+  print "easih-toolbox: $easih_toolbox_version\n";
 
   exit;
 

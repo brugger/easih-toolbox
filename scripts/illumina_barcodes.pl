@@ -205,8 +205,10 @@ sub process {
     # accepted tags, and also passes the ad-hoc checks, accept it.
 
     if ( ! intersect ($corrections, $detectable_errors)) {
-
-      if (validate_tag ($new_tag)) {
+      
+      my $known_tag = grep(/$new_tag/, @tags);
+      
+      if (! $known_tag && validate_tag ($new_tag)) {
 
         push @tags, $new_tag;
 
@@ -264,11 +266,19 @@ sub generate_tag ($) {
 
   my ($tag_len) = @_;
   my @bases;
+  
+  my $check_sum = 0;
 
   foreach my $i (1..$tag_len) {
     my $rand_ix = int(rand(@BASE_TAGS));
+    $check_sum += $rand_ix;
+
     push @bases, $BASE_TAGS[$rand_ix];
   }
+
+  $check_sum %= 4;
+  push @bases, $BASE_TAGS[$check_sum];
+  
 
   return join '', @bases;
 

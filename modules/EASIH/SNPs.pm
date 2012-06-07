@@ -1,13 +1,18 @@
 package EASIH::SNPs;
 #
-# Interface to local dbsnp + HGMD database + phylop_phast
+# Interface to the local dbsnp
 # 
 # 
 # 
 # Kim Brugger (08 Dec 2010), contact: kim.brugger@easih.ac.uk
+#
+# Revised 12 May 2011, kim.brugger@easih.ac.uk
+# 
+
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 use DBI;
 
@@ -15,134 +20,40 @@ my $snp_db;
 my $pp_db;
 my $dbi;
 my $ppdbi;
-my $ref_id_hg18;
-my $ref_id_GRCh37;
 
-my $sth_fetch_snp = $dbi->prepare("SELECT snp.*, ref.name as ref_name FROM snp, reference as ref WHERE chr=? AND pos = ? AND snp.ref_id=? AND snp.ref_id=ref.ref_id");
-my $sth_fetch_rs  = $dbi->prepare("SELECT snp.*, ref.name as ref_name FROM snp, reference as ref WHERE rs=? AND snp.ref_id=ref.ref_id");
-my $sth_fetch_pop = $dbi->prepare("select * from population where rs=?;");
+my $sth_fetch_snp;
+my $sth_fetch_rs;
+my $sth_fetch_cm_up;
+my $sth_fetch_cm_down;
 
-my %populations;
+my $dbhost;
+my $dbname;
 
-my $sth_phylop = $ppdbi->prepare("SELECT score from phylop where chr=? AND pos = ? AND ref_id=?");
-my $sth_phast  = $ppdbi->prepare("SELECT score from phast  where chr=? AND pos = ? AND ref_id=?");
 
+# 
+# 
+# 
+# Kim Brugger (12 May 2011)
+sub New {
+  (undef, $dbname, $dbhost) = @_;
+  $dbname ||= "dbsnp_132_human";
+  $dbhost ||= "mgpc17";
+
+  $dbi = DBI->connect("DBI:mysql:$dbname:$dbhost", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
+
+  $sth_fetch_snp      = $dbi->prepare("SELECT snp.* FROM snp WHERE chr=? AND pos = ?");
+  $sth_fetch_rs       = $dbi->prepare("SELECT snp.* FROM snp WHERE rs=?");
+  $sth_fetch_cm_up    = $dbi->prepare("SELECT snp.* FROM snp WHERE chr = ? and pos <= ? AND centimorgan order by pos DESC limit 10; ");
+  $sth_fetch_cm_down  = $dbi->prepare("SELECT snp.* FROM snp WHERE chr = ? and pos >= ? AND centimorgan order by pos limit 10; ");
+
+}
 
 # 
 # 
 # 
 # Kim Brugger (12 Jan 2011)
 sub db_info {
-
-  return "connected to $snp_db and  $pp_db at localhost (mgpc17)\n";
-  
-}
-
-
-#
-#
-#
-# Kim Brugger (08 Dec 2010)
-sub phast_score_GRCh37 {
-  my ( $chr, $pos) = @_;
-  return undef if ( ! $chr || !$pos);
-
-  $sth_phast->execute( $chr, $pos, $ref_id_GRCh37);
-  my $result = $sth_phast->fetchrow_hashref();
-
-  return $result->{score} || '';
-}
-
-
-#
-#
-#
-# Kim Brugger (08 Dec 2010)
-sub phast_score_hg18 {
-  my ( $chr, $pos) = @_;
-  return undef if ( ! $chr || !$pos);
-
-  $sth_phast->execute( $chr, $pos, $ref_id_hg18);
-  my $result = $sth_phast->fetchrow_hashref();
-
-  return $result->{score} || '';
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub phylop_score_GRCh37 {
-  my ( $chr, $pos) = @_;
-  return undef if ( ! $chr || !$pos);
-  
-  $sth_phylop->execute( $chr, $pos, $ref_id_GRCh37);
-  my $result = $sth_phylop->fetchrow_hashref();
-  
-  return $result->{score} || '';
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub phylop_score_hg18 {
-  my ( $chr, $pos) = @_;
-  return undef if ( ! $chr || !$pos);
-  
-  $sth_phylop->execute( $chr, $pos, $ref_id_hg18);
-  my $result = $sth_phylop->fetchrow_hashref();
-  
-  return $result->{score} || '';
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub fetch_populations {
-  
-  my $sth = $dbi->prepare("select * from populations;");
-  $sth->execute();
-  while (my $res = $sth->fetchrow_hashref()) {
-    $populations{ $res->{pop_id} }{short} = $res->{short};
-    $populations{ $res->{pop_id} }{descr} = $res->{descr};
-  }
-
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub population_stats {
-  my ( $rs, $population) = @_;
-
-  $sth_fetch_pop->execute( $rs );
-	
-  my ( $observations, $seen, $freq, $pop) = (0,0, 0);
-  while (my $ref2 = $sth_fetch_pop->fetchrow_hashref ) {
-    $pop++;
-    my $count = int($$ref2{allele_freq}*$$ref2{sample_size});
-    $observations += $$ref2{sample_size};
-
-    use Data::Dumper;
-
-    return "$count/$$ref2{allele_freq}" if ( $population && $populations{ $ref2->{pop_id} }{short} eq $population);
-
-    $seen += $count;
-    $freq += $$ref2{allele_freq};
-  }
-
-  return "" if ( $population);
-
-  return sprintf("$seen/%.2f", $freq/$pop) if ( $pop);
-  return "";
+  return "connected to $dbname at $dbhost";
 }
 
 
@@ -160,15 +71,7 @@ sub fetch_flags {
   my $result = $sth_fetch_rs->fetchrow_hashref();
 
   return undef if ( ! $result->{flags} );
-  my $flags = $result->{flags};
-  $flags =~ s/RV;//;
-  $flags =~ s/dbSNPBuildID=\d+;//;
-  $flags =~ s/WGT=\d+;//;
-  $flags =~ s/SLO;//;
-  $flags =~ s/VC=\w+?;//;
-  $flags =~ s/VP=.+?;//;
-  return $flags;
-  
+  return $result->{flags};
 }
 
 
@@ -195,66 +98,52 @@ sub fetch_rs {
 # 
 # 
 # Kim Brugger (08 Dec 2010)
-sub fetch_snp_hg18 {
+sub fetch_snp {
   my ( $chr, $pos) = @_;
   return undef if ( ! $chr || !$pos);
   
-  $sth_fetch_snp->execute( $chr, $pos, $ref_id_hg18);
-  my $result = $sth_fetch_snp->fetchrow_hashref();
+  $sth_fetch_snp->execute( $chr, $pos );
   
+  my $result = $sth_fetch_snp->fetchrow_hashref();
   return $result;
 }
 
 
+
 # 
 # 
 # 
-# Kim Brugger (08 Dec 2010)
-sub fetch_snp_GRCh37 {
+# Kim Brugger (16 Nov 2011)
+sub CM {
   my ( $chr, $pos) = @_;
+
   return undef if ( ! $chr || !$pos);
-  
-  $sth_fetch_snp->execute( $chr, $pos, $ref_id_GRCh37);
-  
-  my $result = $sth_fetch_snp->fetchrow_hashref();
-#  while ( my $res2  = $sth_fetch_snp->fetchrow_hashref()) {
-#    $$result{rs} .= ";". $$res2{rs};
-#    $$result{hgmd} = $$res2{hgmd} if ($$res2{hgmd} eq "Y");
-#  }
 
-  return $result;
-}
+  my @cms;
 
-# 
-# 
-# 
-# Kim Brugger (08 Dec 2010)
-sub fetch_ref_id {
-  my ($name) = @_;
-
-  my $sth = $dbi->prepare("select ref_id from reference where name='$name';");
-  $sth->execute();
-  my @entries =  $sth->fetchrow_array();
-  if (@entries) {
-    return $entries[0];
+  $sth_fetch_cm_up->execute( $chr, $pos );
+  while (my $result = $sth_fetch_cm_up->fetchrow_hashref() ) {
+    unshift @cms, [$$result{pos}, $$result{centimorgan}];
   }
 
-  die "Could not find or insert reference '$name'\n";
-}
+  $sth_fetch_cm_down->execute( $chr, $pos );
+  while (my $result = $sth_fetch_cm_down->fetchrow_hashref() ) {
+    push @cms, [$$result{pos}, $$result{centimorgan}];
+  }
+#  print "chr:$pos\n";
+#  print Dumper( \@cms );
+  
+  for(my $i = 0; $i<@cms-1; $i++ ){ 
+    return $cms[$i][1] if ($cms[$i][0] == $pos);
+    if ($cms[$i][0] < $pos && $cms[$i + 1][0] > $pos) {
+      return $cms[$i + 1][1] if ( $cms[$i][0] ==  $cms[$i + 1][0]);
+      
+      return sprintf("%.2f", ($cms[$i][1]+$cms[$i + 1][1])/2);
+    }
+  }
 
-# 
-# Hard coded for now, change later...
-# 
-# Kim Brugger (08 Dec 2010)
-BEGIN {
-  $snp_db = "dbsnp_132";
-  $pp_db  = "phylop_phast";
-
-  $dbi = DBI->connect("DBI:mysql:$snp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ppdbi = DBI->connect("DBI:mysql:$pp_db", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
-  $ref_id_hg18   = fetch_ref_id('hg18');
-  $ref_id_GRCh37 = fetch_ref_id('GRCh37');
-  fetch_populations();
+  
+  return "NA";
 }
 
 

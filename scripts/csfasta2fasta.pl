@@ -10,9 +10,6 @@ use warnings;
 use Data::Dumper;
 
 
-die "program csfasta shift\nif shift is 1, the first base is omitted in the output\n" if (@ARGV < 1);
-
-my $csfasta = shift || die "$0 colour_space_string \n";
 my %colourspace = (
     "A0" => "A",
     "C0" => "C",
@@ -31,17 +28,55 @@ my %colourspace = (
     "G1" => "T",
     "T1" => "G" );
 
-my @letters = split( //, $csfasta );
-my $first_base = $letters[0];
-for( my $i = 1; $i < @letters ; $i++ ){
-	
-  my $colour = $letters[$i];
-  my $encoding = $first_base.$colour;
-  $first_base = $colourspace{ $encoding };
-  $letters[ $i ] = $first_base;    
-}
-shift @letters;
-print join("",@letters)."\n";
+#die "program csfasta shift\nif shift is 1, the first base is omitted in the output\n" if (@ARGV < 1);
 
+my $csfasta = shift || die "$0 colour_space_string or csfasta file\n";
+
+if (! -e $csfasta ) {
+  print decode( $csfasta) ."\n";
+}
+else {
+  my ($name, $seq);
+  open(my $in, $csfasta) || die "Could not open 'csfasta': $!\n";
+  while(<$in>) {
+    
+#    print ;
+
+    if (/^\>/) {
+      $name = $_;
+      next;
+    }
+    elsif (/^[ACGT]\d+\Z/ && $name) {
+      print $name . decode($_) . "\n";
+      $name = undef;
+    }
+  }
+}    
+
+
+  
+# 
+# 
+# 
+# Kim Brugger (29 Mar 2011)
+sub decode {
+  my ($cs) = @_;
+
+  $cs =~ s/\n//g;
+
+  my @letters = split( //, $cs );
+  my $first_base = $letters[0];
+  for( my $i = 1; $i < @letters ; $i++ ){
+    
+    my $colour = $letters[$i];
+    my $encoding = $first_base.$colour;
+    $first_base = $colourspace{ $encoding };
+    $letters[ $i ] = $first_base;    
+  }
+  shift @letters;
+  return join("",@letters);
+}
+  
+  
 
 

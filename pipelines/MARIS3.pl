@@ -27,10 +27,8 @@ use Getopt::Std;
 use lib '/home/kb468/projects/BRC_exomes/easih-toolbox/modules';
 use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
 
-use EASIH::JMS;
-use EASIH::JMS::Misc;
-use EASIH::JMS::Samtools;
-use EASIH::JMS::Picard;
+use EASIH::Pipeline;
+use EASIH::Pipeline::Misc;
 
 
 my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:vV';
@@ -43,12 +41,12 @@ my $soft_reset    = $opts{'S'};
 
 if ( $soft_reset ) {
   print "Doing a soft reset/restart\n";
-  &EASIH::JMS::reset($soft_reset);
+  &EASIH::Pipeline::reset($soft_reset);
   getopts($opts, \%opts);
 }
 elsif ( $hard_reset ) {
   print "Doing a hard reset/restart\n";
-  &EASIH::JMS::hard_reset($hard_reset);
+  &EASIH::Pipeline::hard_reset($hard_reset);
   getopts($opts, \%opts);
 }
 
@@ -65,10 +63,6 @@ if ( $opts{Q} ) {
   $opts{'l'} = 1;
   $opts{'m'} = 1;
 
-  my $freeze_file = "$opts{'o'}.maris";
-  system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
-
-  EASIH::JMS::freeze_file($freeze_file);
 }  
 
 my $first          = $opts{'1'}     || usage();
@@ -85,12 +79,22 @@ my $reference_dir = $opts{'r'}     || usage();
 
 my $reference = glob("$reference_dir/*.fasta");
 my ($dbsnp)     = grep(!/excluding/, glob("$reference_dir/dbsnp_*.vcf"));
+my ($hapmap)    = glob("$reference_dir/hapmap_*.sites.vcf");
+my ($omni)      = glob("$reference_dir/*omni*.sites.vcf");
 
 my $bam_file      = "$report.bam";
-
+my $vcf_file      = "$report.vcf";
 my $host_cpus      = nr_of_cpus();
 
-#EASIH::JMS::verbosity(100) if ( $opts{v});
+my $freeze_file = "$opts{'o'}.maris";
+system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
+
+EASIH::Pipeline::freeze_file($freeze_file);
+
+
+my $run_id = "MGILLUMINA4_75";
+
+#EASIH::Pipeline::verbosity(100) if ( $opts{v});
 
 open (*STDOUT, ">> $log") || die "Could not open '$log': $!\n" if ( $log );
 
@@ -99,81 +103,94 @@ my $align_param .= " -q 15 ";
 # and loose mapping
 $align_param    .= " -e5 "     if ( $loose_mapping);
 
-my $bwa             = EASIH::JMS::Misc::find_program('bwa');
-my $samtools        = EASIH::JMS::Misc::find_program('samtools');
-my $gatk            = EASIH::JMS::Misc::find_program('gatk');
-my $picard          = EASIH::JMS::Misc::find_program('picard');
+my $bwa             = EASIH::Pipeline::Misc::find_program('bwa_0.6.1-tpx');
+my $samtools        = EASIH::Pipeline::Misc::find_program('samtools');
+my $gatk            = EASIH::Pipeline::Misc::find_program('gatk_1.6.5');
+my $picard          = EASIH::Pipeline::Misc::find_program('picard');
 
 my $mpi_q = "/home/kb468/easih-pipeline/tools/mpiexec_queue.pl";
 
 #validate_input();
 
 
-#EASIH::JMS::verbosity(10);
-EASIH::JMS::backend('Darwin');
-#EASIH::JMS::backend('Local');
-EASIH::JMS::max_retry(0);
+#EASIH::Pipeline::verbosity(10);
+#EASIH::Pipeline::backend('Darwin');
+EASIH::Pipeline::backend('Local');
+EASIH::Pipeline::max_jobs( $host_cpus );
+EASIH::Pipeline::max_retry(0);
 
-EASIH::JMS::add_start_step('bwa_aln');
-EASIH::JMS::add_step('bwa_aln', 'bwa_sampe', );
-EASIH::JMS::add_step('bwa_sampe', 'bam_sort');
-EASIH::JMS::add_step('bam_sort', 'mark_dups');
-EASIH::JMS::add_step('mark_dups', 'bam_realign');
-EASIH::JMS::add_step('bam_realign', 'bam_recalibrate');
-EASIH::JMS::add_step('bam_recalibrate', 'gatk_vcf');
-EASIH::JMS::add_step('bam_recalibrate', 'samtools_vcf');
-EASIH::JMS::add_merge_step('gatk_vcf', 'vcf_merge');
-EASIH::JMS::add_merge_step('samtools_vcf', 'vcf_merge');
-EASIH::JMS::add_step('vcf_merge', 'stats');
+EASIH::Pipeline::add_start_step('bwa_aln');
+EASIH::Pipeline::add_step('bwa_aln', 'bwa_sampe', );
+EASIH::Pipeline::add_step('bwa_sampe', 'bam_sort');
+EASIH::Pipeline::add_merge_step('bam_sort', 'bam_merge');
+EASIH::Pipeline::add_step('bam_merge', 'mark_dups');
+EASIH::Pipeline::add_step('mark_dups', 'bam_index');
+EASIH::Pipeline::add_step('bam_index', 'realign_targets');
+EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
+EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge2' );
+EASIH::Pipeline::add_step('bam_merge2', 'bam_index2');
+EASIH::Pipeline::add_step('bam_index2', 'count_covariates');
+EASIH::Pipeline::add_step('count_covariates', 'table_recalibration');
+EASIH::Pipeline::add_step('table_recalibration', 'bam_index3');
+EASIH::Pipeline::add_step('bam_index3', 'UnifiedGenotyper');
+EASIH::Pipeline::add_step('UnifiedGenotyper', 'VariantAnnotator');
+EASIH::Pipeline::add_step('VariantAnnotator', 'SelectSNPVariants');
+EASIH::Pipeline::add_step('SelectSNPVariants', 'VariantRecalibrator');
+EASIH::Pipeline::add_step('VariantRecalibrator', 'ApplyRecalibration');
+EASIH::Pipeline::add_merge_step('ApplyRecalibration', 'CombineVariants');
+EASIH::Pipeline::add_step('VariantAnnotator', 'SelectIndelVariants');
+EASIH::Pipeline::add_step('SelectIndelVariants', 'VariantFiltration');
+EASIH::Pipeline::add_merge_step('VariantFiltration', 'CombineVariants');
+EASIH::Pipeline::add_step('CombineVariants', 'run_stats');
+EASIH::Pipeline::add_step('run_stats', 'finished');
 
+EASIH::Pipeline::print_flow();
 
-EASIH::JMS::print_flow();
+#exit;
+&EASIH::Pipeline::run();
 
-exit;
-&EASIH::JMS::run();
-
-&EASIH::JMS::store_state();
+&EASIH::Pipeline::store_state();
 
 my $extra_report = "1 ==> @$first\n";
 $extra_report .= "bamfile ==> $bam_file\n";
 $extra_report .= "snp_file ==> $report.snps\n";
 $extra_report .= "indel_file ==> $report.indel\n";
-$extra_report .= "easih-pipeline: " . EASIH::JMS::version() . "\n";
+$extra_report .= "easih-pipeline: " . EASIH::Pipeline::version() . "\n";
 
 $extra_report .= "align_param ==> $align_param\n";
 $extra_report .= "Binaries used..\n";
-$extra_report .= "BWA: " . EASIH::JMS::Misc::bwa_version( $bwa ) . "\n";
-$extra_report .= "Samtools: " . EASIH::JMS::Samtools->version() ."\n";
+$extra_report .= "BWA: " . EASIH::Pipeline::Misc::bwa_version( $bwa ) . "\n";
+$extra_report .= "Samtools: " . samtools_version() ."\n";
 #$extra_report .= "GATK: " .`$gatk --version`;
-$extra_report .= "Picard: " . EASIH::JMS::Picard->version() ."\n";
-$extra_report .= "Command line: $0 ".EASIH::JMS::args() ."\n";
+$extra_report .= "Picard: " . picard_version() ."\n";
+$extra_report .= "Command line: $0 ".EASIH::Pipeline::args() ."\n";
 
 
-EASIH::JMS::mail_report($email, $bam_file, $extra_report);
+#EASIH::Pipeline::mail_report($email, $bam_file, $extra_report);
 
 
-#EASIH::JMS::delete_tmp_files();
+#EASIH::Pipeline::delete_tmp_files();
 
-my %split2files;
+my %file2bam;
 
 sub bwa_aln {
   my ($input) = @_;
 
   foreach my $first_file ( @$first ) {
-    my $second_file = shift @$second if ( @$second );
+    my $second_file = shift @$second;
     
-    my $tmp_sai1  = EASIH::JMS::tmp_file(".sai");
-    my $tmp_sai2  = EASIH::JMS::tmp_file(".sai");
+    my $tmp_sai1  = EASIH::Pipeline::tmp_file(".sai");
+    my $tmp_sai2  = EASIH::Pipeline::tmp_file(".sai");
     
-    my $cmd = "$bwa aln -t $host_cpus $align_param -f $tmp_sai1 $reference $first_file ;";
-    $cmd   .= "$bwa aln -t $host_cpus $align_param -f $tmp_sai1 $reference $second_file ;";
+    my $cmd = "$bwa aln -t $host_cpus $align_param -f $tmp_sai1 $reference $first_file ; ";
+    $cmd   .= "$bwa aln -t $host_cpus $align_param -f $tmp_sai2 $reference $second_file";
     
     my $output = { "first_fq"   => $first_file,
 		   "first_sai"  => $tmp_sai1,
 		   "second_fq"  => $second_file,
 		   "second_sai" => $tmp_sai2};
     
-    EASIH::JMS::submit_job($cmd, $output);
+    EASIH::Pipeline::submit_job($cmd, $output);
   }
 
 }
@@ -182,47 +199,14 @@ sub bwa_aln {
 sub bwa_sampe {
   my ($input) = @_;
 
-  my $tmp_file = EASIH::JMS::tmp_file(".sam");
+  my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $cmd;
-  $cmd = "$bwa sampe -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+  $cmd = "$bwa sampe -t $host_cpus -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} | samtools view  -T $reference -Sb - > $tmp_file";
 
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
+  $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
-
-
-# 
-# 
-# 
-# Kim Brugger (01 Aug 2011)
-sub bwa_sai2bam {
-
-  my ($input) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-
-  my $cmd;
-  if (defined($$input{'second_sai'}) ) {
-    $cmd = "$bwa sampe -P  $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} ";
-  }
-  else {
-    $cmd = "$bwa samse  $reference $$input{first_sai} $$input{first_fq} ";
-  }
-
-  my $readgroup = $split2files{ $$input{first_fq} };
-  $readgroup =~ s/\.gz//;
-  $readgroup =~ s/\.[1|2].fq//;
-
-  
-  my $sample = $readgroup;
-  $sample =~ s/\..*//;
-  $sample =~ s/_\d*//;
-
-  $cmd .= " | $samtools view -T $reference -Sb -  >  $tmp_file ";
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-  
+  EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
 
@@ -232,7 +216,136 @@ sub bwa_sai2bam {
 # 
 # Kim Brugger (25 Jun 2012)
 sub bam_sort {
+  my ($input) = @_;
+
+  my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
+
+  my $readgroup =   $file2bam{ $input };
+  $readgroup =~ s/\.gz//;
+  $readgroup =~ s/\.[1|2].fq//;
   
+  my $sample = $readgroup;
+  $sample =~ s/\..*//;
+  $sample =~ s/_\d*//;
+
+  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT ";
+
+  EASIH::Pipeline::submit_job($cmd, $tmp_file);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub bam_merge {
+  my (@inputs) = @_;
+
+
+  @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
+
+
+  my $tmp_file = EASIH::Pipeline::tmp_file(".merged.bam");
+
+  if (@inputs == 1 ) {
+    EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
+  }
+  else {
+
+    # remove empty files as they crash the merging step.
+    my @non_empty_files;
+    foreach my $input ( @inputs ) {
+      push @non_empty_files, $input if ( ! -z $input );
+    }
+
+    my $username = scalar getpwuid $<;
+
+    my $cmd = "$picard -T MergeSamFiles USE_THREADING=true O=$tmp_file  I= " . join(" I= ", @non_empty_files) . " VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/";
+    EASIH::Pipeline::submit_job($cmd, $tmp_file);
+  }
+  
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub bam_merge2 {
+  my (@inputs) = @_;
+
+
+  @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
+
+
+  my $tmp_file = EASIH::Pipeline::tmp_file(".merged.bam");
+
+  if (@inputs == 1 ) {
+    EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
+  }
+  else {
+
+    # remove empty files as they crash the merging step.
+    my @non_empty_files;
+    foreach my $input ( @inputs ) {
+      push @non_empty_files, $input if ( ! -z $input );
+    }
+
+    my $username = scalar getpwuid $<;
+
+    my $cmd = "$picard -T MergeSamFiles USE_THREADING=true O=$tmp_file  I= " . join(" I= ", @non_empty_files) . " VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/";
+    EASIH::Pipeline::submit_job($cmd, $tmp_file);
+  }
+  
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (26 Jun 2012)
+sub bam_index {
+  my ($input) = @_;
+
+  my $cmd = "$samtools index $input";
+  EASIH::Pipeline::submit_job($cmd, $input);
+}
+
+# 
+# 
+# 
+# Kim Brugger (26 Jun 2012)
+sub bam_index2 {
+  my ($input) = @_;
+
+  my $cmd = "$samtools index $input";
+  EASIH::Pipeline::submit_job($cmd, $input);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (26 Jun 2012)
+sub bam_index3 {
+  my ($input) = @_;
+
+  my $cmd = "$samtools index $input";
+  EASIH::Pipeline::submit_job($cmd, $input);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (26 Jun 2012)
+sub bam_index4 {
+  my ($input) = @_;
+
+  my $cmd = "$samtools index $input";
+  EASIH::Pipeline::submit_job($cmd, $input);
 }
 
 
@@ -241,7 +354,40 @@ sub bam_sort {
 # 
 # Kim Brugger (25 Jun 2012)
 sub mark_dups {
-  
+  my ($input) = @_;
+
+  my $username = scalar getpwuid $<;
+  my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
+  my $metrix_file = EASIH::Pipeline::tmp_file(".mtx");
+  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
+  EASIH::Pipeline::submit_job($cmd, $tmp_file);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub realign_targets {
+  my ($input) = @_;
+
+  my @names = ();
+  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+    foreach my $field ( split("\t") ) {
+      push @names, $1 if ( $field =~ /SN:(.*)/);
+    }
+  }
+
+  print "$input @names\n";
+
+  foreach my $name ( @names ) {
+    my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
+    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
+    EASIH::Pipeline::submit_job($cmd, "$tmp_file $name $input");
+  }
 }
 
 
@@ -250,327 +396,212 @@ sub mark_dups {
 # 
 # Kim Brugger (25 Jun 2012)
 sub bam_realign {
-  
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub bam_recalibrate {
-  
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub gatk_vcf {
-  
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub samtools_vcf {
-  
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub vcf_merge {
-  
-}
-
-
-sub sortNcalmd { 
-  my ($input) = @_;
-
-  my $username = scalar getpwuid $<;
-  my $picard = EASIH::JMS::Misc::find_program('picard');
-
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
-  my $cmd = "$picard -T SortSam  I= $input O= /dev/stdout SO=coordinate VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ | samtools calmd -eb - $reference > $tmp_file";
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-
-
-sub calmd {
-  my ($input) = @_;
-  
-  my $tmp_file = EASIH::JMS::tmp_file(".calmd.bam");
-  my $cmd = "$samtools calmd -b $input $reference > $tmp_file";
-
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-sub calmd_mpi {
-  my ($input) = @_;
-
-  my $tmp_file = EASIH::JMS::tmp_file(".calmd.bam");
-  my $cmd = "$samtools calmd -b $input $reference > $tmp_file";
-
-
-  EASIH::JMS::submit_job($cmd, $tmp_file);
-}
-
-
-
-
-sub stats {
-  my ($input) = @_;
-  
-  my $commands_file = EASIH::JMS::tmp_file(".mpiexec");
-  open(my $cmds, ">$commands_file") || die "Could not write to '$commands_file': $!\n";
-
-  print  $cmds "$samtools flagstat $report.bam > $report.flagstat\n";
-  print  $cmds "md5sum $report.bam > $report.bam.md5 \n";
-  print  $cmds "md5sum $report.bam.bai > $report.bam.bai.md5 \n";
-  print  $cmds "md5sum $report.vcf > $report.vcf.md5 \n";
-  print  $cmds "md5sum $report.maris > $report.maris.md5\n";
-
-  close ($cmds );
-
-  my $cmd = "$mpi_q -c 4 $commands_file ";
-  EASIH::JMS::submit_job($cmd, "");
-}
-
-
-
-sub identify_indel {
-  my ( $input ) = @_;
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".intervals");
-    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
-    EASIH::JMS::submit_job($cmd, "$tmp_file $name $input");
-  }
-  
-}
-
-
-sub identify_indel_mpi {
-  my ( $input ) = @_;
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-
-  my @targets;
-  
-  my $commands_file = EASIH::JMS::tmp_file(".mpiexec");
-  open(my $cmds, ">$commands_file") || die "Could not write to '$commands_file': $!\n";
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".intervals");
-    push @targets, "$tmp_file  -L $name -I $input";
-    print $cmds "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input\n";
-  }
-  close ($cmds );
-
-  my $cmd = "$mpi_q -c 8 $commands_file ";
-  EASIH::JMS::submit_job($cmd, \@targets);
-  
-}
-
-
-sub realign_indel_mpi {
-  my ($inputs) = @_;
-
-  my @targets;
-  my $commands_file = EASIH::JMS::tmp_file(".mpiexec");
-  open(my $cmds, ">$commands_file") || die "Could not write to '$commands_file': $!\n";
-
-  foreach my $input ( @$inputs ) {
-
-    my $tmp_file = EASIH::JMS::tmp_file(".bam");
-
-
-  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
-    if ( 0 ) {# -z $interval_file ) {
-#      print $cmds "$samtools view -b $tmp_bam_file $region > $tmp_file";
-    }
-    else { #
-      print $cmds "$gatk -T IndelRealigner  -targetIntervals $input -o $tmp_file -R $reference -baq CALCULATE_AS_NECESSARY\n";
-      push @targets, $tmp_file;
-    }
-  }
-
-  close($cmds);
-
-  my $cmd = "$mpi_q -c 8 $commands_file ";
-  EASIH::JMS::submit_job($cmd, \@targets);
-}
-
-sub realign_indel {
   my ($input) = @_;
 
   my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
 
-  my $tmp_file = EASIH::JMS::tmp_file(".bam");
+  my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $cmd;
   # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
   if (  -z $interval_file ) {
     $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
   }
   else {
-    $cmd = "$gatk -T IndelRealigner -baq CALCULATE_AS_NECESSARY -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
+    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
   }
 
-  EASIH::JMS::submit_job($cmd, $tmp_file);
+  EASIH::Pipeline::submit_job($cmd, $tmp_file);
+}
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub count_covariates {
+  my ($input) = @_;
+  
+  my $tmp_file = EASIH::Pipeline::tmp_file("_recal.csv.");
+
+  my $cmd = "$gatk -T CountCovariates -R $reference -I $input -cov ReadGroupCovariate  -cov QualityScoreCovariate  -cov CycleCovariate  -cov DinucCovariate  -recalFile $tmp_file ";
+  $cmd .= " -knownSites $dbsnp " if ( $dbsnp);
+
+  EASIH::Pipeline::submit_job($cmd, "$input $tmp_file");
+}
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub table_recalibration {
+  my ($input) = @_;
+  my ($tmp_bam, $recal) = split(" ", $input);
+
+  my $cmd = "$gatk -T TableRecalibration  -R $reference -I $tmp_bam -recalFile $recal -baq RECALCULATE -o $bam_file"; 
+
+  EASIH::Pipeline::submit_job($cmd, $bam_file);
 }
 
 
 # 
 # 
 # 
-# Kim Brugger (21 Jul 2010)
-sub merge_indels {
-  my (@inputs) = @_;
+# Kim Brugger (25 Jun 2012)
+sub UnifiedGenotyper {
+  my ($input) = @_;
 
-  my $cmd = "cat  @inputs > $report";
-  EASIH::JMS::submit_system_job("cat  @inputs > $report.indels.vcf");
+  my $tmp_file = EASIH::Pipeline::tmp_file(".vcf");
+  my $cmd = "$gatk -T UnifiedGenotyper -nt $host_cpus -R $reference -I $input -glm BOTH -G Standard -A AlleleBalance -stand_call_conf 30.0 -stand_emit_conf 10.0 -dcov 1000 -baq CALCULATE_AS_NECESSARY -o $tmp_file";
+  $cmd .= " --dbsnp $dbsnp ";
+  
+
+  EASIH::Pipeline::submit_job($cmd, $tmp_file);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (26 Jun 2012)
+sub VariantAnnotator {
+  my ($input) = @_;
+
+
+  my $tmp_vcf = EASIH::Pipeline::tmp_file("_annot.vcf");
+  my $cmd = "$gatk -T VariantAnnotator -R $reference -I $bam_file -o $tmp_vcf -V $input -L $input --dbsnp $dbsnp";
+
+  EASIH::Pipeline::submit_job($cmd, $tmp_vcf);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub SelectSNPVariants {
+  my ($input) = @_;
+
+  my $tmp_snp_file = EASIH::Pipeline::tmp_file(".vcf");
+
+  EASIH::Pipeline::submit_job("$gatk -T SelectVariants -R $reference -V $input -selectType SNP -o $tmp_snp_file", $tmp_snp_file);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub SelectIndelVariants {
+  my ($input) = @_;
+
+  my $tmp_indel_file = EASIH::Pipeline::tmp_file(".vcf");
+
+  EASIH::Pipeline::submit_job("$gatk -T SelectVariants -R $reference -V $input -selectType INDEL -o $tmp_indel_file", $tmp_indel_file);
+  
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub VariantRecalibrator {
+  my ($input) = @_;
+
+  my $tmp_recal    = EASIH::Pipeline::tmp_file(".recal");
+  my $tmp_tranches = EASIH::Pipeline::tmp_file(".tranches");
+  my $tmp_r_script = EASIH::Pipeline::tmp_file(".plots.R");
+
+  my $cmd = "$gatk -T VariantRecalibrator -R $reference -input $input ";
+  $cmd .= "-resource:hapmap,known=false,training=true,truth=true,prior=15.0 $hapmap " if ( $hapmap );
+  $cmd .= "-resource:omni,known=false,training=true,truth=false,prior=12.0 $omni " if ( $omni );
+  $cmd .= "-resource:dbsnp,known=true,training=false,truth=false,prior=8.0 $dbsnp " if ( $dbsnp);
+  $cmd .= "-an QD -an HaplotypeScore -an MQRankSum -an ReadPosRankSum -an MQ ";
+  $cmd .= " -recalFile $tmp_recal -mG 2 ";
+  $cmd .= " -tranchesFile $tmp_tranches ";
+  $cmd .= " -rscriptFile $tmp_r_script ";
+#  $cmd .= "--percentBadVariants 0.05 ";
+  $cmd .= "--minNumBadVariants 100 ";
+
+
+  EASIH::Pipeline::submit_job($cmd, "$input $tmp_recal $tmp_tranches $tmp_r_script");
+
+}
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub ApplyRecalibration {
+  my ($input ) = @_;
+
+  my ($vcf, $tmp_recal, $tmp_tranches, $tmp_r_script) = split(" ", $input);
+
+  my $tmp_recal_vcf = EASIH::Pipeline::tmp_file("_recal.vcf");
+
+  my $cmd = "$gatk -T ApplyRecalibration -R $reference -input $vcf --ts_filter_level 99.0 -tranchesFile $tmp_tranches -recalFile $tmp_recal -o $tmp_recal_vcf";
+
+  EASIH::Pipeline::submit_job($cmd, $tmp_recal_vcf);
+}
+
+
+
+sub CombineVariants {
+  my ($inputs) = @_;
+
+  if ( @$inputs == 1 ) {
+    EASIH::Pipeline::submit_system_job("mv @$inputs $vcf_file", $vcf_file);
+  }
+  else {
+    my $cmd = "$gatk -T CombineVariants -R $reference -o $vcf_file ";
+    my $count = 1;
+    foreach my $input ( @$inputs ) {
+      $cmd .= " -V:variant $input ";
+      $count++;
+    }
+    EASIH::Pipeline::submit_job($cmd, $vcf_file);
+  }
+}
+
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (25 Jun 2012)
+sub VariantFiltration {
+  my ($input) = @_;
+
+  my $tmp_vcf = EASIH::Pipeline::tmp_file("_indel.vcf");
+  my $cmd = "$gatk -T VariantFiltration  -R $reference -V $input -filter 'QD < 2.0 || ReadPosRankSum < -20.0 || InbreedingCoeff < -0.8  || FS > 200.0' -filterName GATKStandard -o $tmp_vcf ";
+
+  EASIH::Pipeline::submit_job($cmd, $tmp_vcf);
+
+}
+
+
+
+sub run_stats {
+  my ($input) = @_;
+  
+  EASIH::Pipeline::submit_job("$samtools flagstat $report.bam > $report.flagstat");
+  EASIH::Pipeline::submit_job("md5sum $bam_file > $bam_file.md5 ");
+  EASIH::Pipeline::submit_job("md5sum $report.bam.bai > $report.bam.bai.md5 ");
+  EASIH::Pipeline::submit_job("md5sum $report.vcf > $report.vcf.md5 ");
+  EASIH::Pipeline::submit_job("md5sum $report.maris > $report.maris.md5");
 }
 
 
 sub rename {
   my ($input) = @_;
 
-  EASIH::JMS::submit_system_job("mv $input $bam_file", $bam_file);
-}
-
-
-sub identify_variation_mpi {
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-
-  my @targets;
-
-  my $commands_file = EASIH::JMS::tmp_file(".mpiexec");
-  open(my $cmds, ">$commands_file") || die "Could not write to '$commands_file': $!\n";
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::JMS::tmp_file(".vcf");
-    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $bam_file -G Standard -D $dbsnp -o $tmp_file -L $name -glm BOTH ";
-    print $cmds "$cmd\n";
-    push @targets, "$tmp_file";
-
-  }
-  close ($cmds );
-
-  my $cmd = "$mpi_q -c 12 $commands_file ";
-  EASIH::JMS::submit_job($cmd, \@targets);
-}
-
-
-sub merge_vcfs {
-  my ($inputs) = @_;
-
-#  my $merged_file = EASIH::JMS::tmp_file(".merged.vcf");
-  my $tmp_file = EASIH::JMS::tmp_file(".merged.vcf");
-  
-  if ( @$inputs == 1 ) {
-    EASIH::JMS::submit_system_job("mv @$inputs $tmp_file", $tmp_file);
-  }
-  else {
-    my $cmd = "$gatk -T CombineVariants -R $reference -o $tmp_file ";
-    my $count = 1;
-    foreach my $input ( @$inputs ) {
-      $cmd .= " -V:variant $input ";
-      $count++;
-    }
-    EASIH::JMS::submit_job($cmd, $tmp_file);
-  }
-}
-
-
-# 
-# Pulls out all the indels, so we can merge them back in later.
-# 
-# Kim Brugger (02 Dec 2011)
-sub get_indels {
-  my ($input) = @_;
-
-  my $tmp_indel_file = EASIH::JMS::tmp_file(".indels.vcf");
-  my $cmd = "$gatk -T SelectVariants  -indels -R $reference -V $input -o $tmp_indel_file";
-
-  
-
-}
-
-
-
-# 
-# This only works for human data...
-# 
-# Kim Brugger (02 Dec 2011)
-sub rescore_snps {
-  my ($input) = @_;
-
-
-  my $tmp_cmd_file   = EASIH::JMS::tmp_file(".sh");
-  open(my $cmds, "> $tmp_cmd_file") || die "Could not write to '$tmp_cmd_file': $!\n";
-
-  my $tmp_snp_file      = EASIH::JMS::tmp_file(".snps.vcf");
-  my $tmp_recalc_file   = EASIH::JMS::tmp_file(".recalc");
-  my $tmp_tranches_file = EASIH::JMS::tmp_file(".tranches");
-  my $tmp_recal_snps    = EASIH::JMS::tmp_file(".rc.snps.vcf");
-
-  # get all the snps from the VCF file...
-  print  $cmds "$gatk -T SelectVariants  -snps   -R $reference -V $input -o $tmp_snp_file\n";
-  #calculate the recalibration thingy
-
-
-#ref='/home/easih/refs/human_1kg/human_g1k_v37.fasta'
-#dbsnp='/home/easih/refs/GATK/dbsnp_132.b37.vcf'
-#indels='/home/easih/refs/GATK/1000G_indels_for_realignment.b37.vcf'
-#omni='/home/easih/refs/GATK/1000G_omni2.5.b37.sites.vcf'
-#hapmap='/home/easih/refs/GATK/hapmap_3.3.b37.sites.vcf'
-
-
-#  print  $cmds "$gatk -T VariantRecalibrator -nt 4  -R $reference -input $tmp_snp_file ";
-#  print  $cmds "-resource:hapmap,VCF,known=false,training=true,truth=true,prior=15.0 $hapmap ";
-#  print  $cmds "-resource:omni,VCF,known=false,training=true,truth=false,prior=12.0 $omni "; 
-#  print  $cmds "-resource:dbsnp,VCF,known=true,training=false,truth=false,prior=8.0 $dbsnp "; 
-#  print  $cmds "-an QD -an HaplotypeScore -an MQRankSum -an ReadPosRankSum -an FS -an MQ -mode SNP -mG 6 -recalFile $tmp_recalc_file -tranchesFile $tmp_tranches_file -rscriptFile ${name}_var_recal.plots.R\n";
-
- print $cmds "$gatk -T ApplyRecalibration -R $reference -B:input,VCF $tmp_snp_file -recalFile $tmp_recalc_file -tranchesFile $tmp_tranches_file -o $tmp_recal_snps\n";
-
-
-  
+  EASIH::Pipeline::submit_system_job("mv $input $bam_file", $bam_file);
 }
 
 
@@ -671,6 +702,31 @@ sub nr_of_cpus {
 }
 
 
+
+sub samtools_version {
+  open( my $pipe, "$samtools 2>&1 | head -n 3 |") || die "Could not open samtools pipe: $!\n";
+  <$pipe>;
+  <$pipe>;
+  my $version = <$pipe>;
+  chomp( $version);
+
+  return( $version);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (08 Nov 2010)
+sub picard_version {
+
+  my $version = `$picard -v`;
+  chomp($version);
+  return $version;
+}
+
+
 # 
 # 
 # 
@@ -699,7 +755,7 @@ sub usage {
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
-  print "easih-pipeline: " . &EASIH::JMS::version() . "\n";
+  print "easih-pipeline: " . &EASIH::Pipeline::version() . "\n";
 
   use EASIH::Toolbox;
   print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";

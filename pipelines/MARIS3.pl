@@ -132,7 +132,9 @@ EASIH::Pipeline::add_step('bam_merge2', 'bam_index2');
 EASIH::Pipeline::add_step('bam_index2', 'count_covariates');
 EASIH::Pipeline::add_step('count_covariates', 'table_recalibration');
 EASIH::Pipeline::add_step('table_recalibration', 'bam_index3');
-EASIH::Pipeline::add_step('bam_index3', 'UnifiedGenotyper');
+EASIH::Pipeline::add_step('bam_index3', 'UnifiedGenotyper_par');
+EASIH::Pipeline::add_merge_step('UnifiedGenotyper_par', 'CombineVariants1', 'CombineVariants');
+EASIH::Pipeline::add_step('CombineVariants1', 'VariantAnnotator');
 EASIH::Pipeline::add_step('UnifiedGenotyper', 'VariantAnnotator');
 EASIH::Pipeline::add_step('VariantAnnotator', 'SelectSNPVariants');
 EASIH::Pipeline::add_step('SelectSNPVariants', 'VariantRecalibrator');
@@ -456,6 +458,41 @@ sub UnifiedGenotyper {
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Jul 2012), 
+sub UnifiedGenotyper_par {
+  my ($input) = @_;
+
+
+
+
+  my @names = ();
+  open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
+  while(<$spipe>) {
+    next if ( ! /\@SQ/);
+    foreach my $field ( split("\t") ) {
+      push @names, $1 if ( $field =~ /SN:(.*)/);
+    }
+  }
+
+
+  foreach my $name ( @names ) {
+    my $tmp_file = EASIH::Pipeline::tmp_file(".vcf");
+
+    my $cmd = "$gatk -T UnifiedGenotyper -R $reference -I $input -glm BOTH -G Standard -A AlleleBalance -stand_call_conf 30.0 -stand_emit_conf 10.0 -dcov 1000 -baq CALCULATE_AS_NECESSARY -o $tmp_file -L $name ";
+    $cmd .= " --dbsnp $dbsnp ";
+
+
+    EASIH::Pipeline::submit_job($cmd, $tmp_file);
+
+  }
+}
+
+
 
 
 # 

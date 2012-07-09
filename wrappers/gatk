@@ -62,7 +62,7 @@ foreach my $argv ( @ARGV ) {
 
 #print "$java -jar $gatk $argv_list\n";
 #print  "$java -Xmx3000m -Djava.io.tmpdir=/home/$username/scratch/tmp -jar $gatk $argv_list\n";
-system "$java -Xmx3000m -Djava.io.tmpdir=$scratch_dir -jar $gatk $argv_list -et NO_ET\n";
+system "$java -Xmx3000m -Djava.io.tmpdir=$scratch_dir -jar $gatk $argv_list \n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

@@ -24,8 +24,8 @@ use Data::Dumper;
 
 use Getopt::Std;
 
-use lib '/home/kb468/projects/BRC_exomes/easih-toolbox/modules';
-use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
+use lib '/home/kb468//BRC/easih-toolbox/modules';
+use lib '/home/kb468//BRC/easih-pipeline/modules';
 
 use EASIH::Pipeline;
 use EASIH::Pipeline::Misc;
@@ -71,7 +71,7 @@ my $second         = $opts{'2'}     || usage();
 $second            = [split(",", $second)];
 my $email          = $opts{'e'}     || "$username\@cam.ac.uk";
 my $loose_mapping  = $opts{'l'}     || 0;
-my $log            = $opts{'L'};
+my $log            = $opts{'L'} || "$opts{o}.log" || undef;
 my $mark_dup       = $opts{'m'};
 our $report        = $opts{'o'}     || usage();
 my $platform       = 'ILLUMINA';
@@ -85,6 +85,8 @@ my ($omni)      = glob("$reference_dir/*omni*.sites.vcf");
 my $bam_file      = "$report.bam";
 my $vcf_file      = "$report.vcf";
 my $host_cpus      = nr_of_cpus();
+
+#$host_cpus = 1;
 
 my $freeze_file = "$opts{'o'}.maris";
 system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
@@ -104,18 +106,23 @@ my $align_param .= " -q 15 ";
 $align_param    .= " -e5 "     if ( $loose_mapping);
 
 my $bwa             = EASIH::Pipeline::Misc::find_program('bwa_0.6.1-tpx');
+#$bwa = "/home/easih/bin/bwa_0.6.2";
 my $samtools        = EASIH::Pipeline::Misc::find_program('samtools');
-my $gatk            = EASIH::Pipeline::Misc::find_program('gatk_1.6.5');
+my $gatk            = EASIH::Pipeline::Misc::find_program('gatk');
 my $picard          = EASIH::Pipeline::Misc::find_program('picard');
 
-my $mpi_q = "/home/kb468/easih-pipeline/tools/mpiexec_queue.pl";
+$gatk = "/home/kb468/bin/gatk";
+
 
 #validate_input();
+
+print "$bwa\n$samtools\n$gatk\n$picard\n";
 
 
 #EASIH::Pipeline::verbosity(10);
 #EASIH::Pipeline::backend('Darwin');
-EASIH::Pipeline::backend('Local');
+#EASIH::Pipeline::backend('Local');
+EASIH::Pipeline::backend('MPIexec');
 EASIH::Pipeline::max_jobs( $host_cpus );
 EASIH::Pipeline::max_retry(0);
 
@@ -146,7 +153,7 @@ EASIH::Pipeline::add_merge_step('VariantFiltration', 'CombineVariants');
 EASIH::Pipeline::add_step('CombineVariants', 'run_stats');
 EASIH::Pipeline::add_step('run_stats', 'finished');
 
-EASIH::Pipeline::print_flow();
+#EASIH::Pipeline::print_flow();
 
 #exit;
 &EASIH::Pipeline::run();
@@ -185,7 +192,7 @@ sub bwa_aln {
     my $tmp_sai2  = EASIH::Pipeline::tmp_file(".sai");
     
     my $cmd = "$bwa aln -t $host_cpus $align_param -f $tmp_sai1 $reference $first_file ; ";
-    $cmd   .= "$bwa aln -t $host_cpus $align_param -f $tmp_sai2 $reference $second_file";
+    $cmd   .= "$bwa aln -t $host_cpus $align_param -f $tmp_sai2 $reference $second_file;";
     
     my $output = { "first_fq"   => $first_file,
 		   "first_sai"  => $tmp_sai1,
@@ -201,10 +208,15 @@ sub bwa_aln {
 sub bwa_sampe {
   my ($input) = @_;
 
+  print STDERR " ----------------- Going sampe ----------------- \n";
+
+
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $cmd;
-  $cmd = "$bwa sampe -t $host_cpus -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} | samtools view  -T $reference -Sb - > $tmp_file";
+  $cmd = "$bwa sampe  -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} 2> tmp.err| $samtools view -Sb - -o $tmp_file";
+#  $cmd = "$bwa sampe  -t $host_cpus -P $reference $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
@@ -251,6 +263,7 @@ sub bam_merge {
   my $tmp_file = EASIH::Pipeline::tmp_file(".merged.bam");
 
   if (@inputs == 1 ) {
+    print "cd; mv @inputs $tmp_file, $tmp_file\n";
     EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
   }
   else {
@@ -284,6 +297,8 @@ sub bam_merge2 {
   my $tmp_file = EASIH::Pipeline::tmp_file(".merged.bam");
 
   if (@inputs == 1 ) {
+    
+    print "cd; mv @inputs $tmp_file, $tmp_file\n";
     EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
   }
   else {

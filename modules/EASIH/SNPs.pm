@@ -37,7 +37,7 @@ my $dbname;
 sub New {
   (undef, $dbname, $dbhost) = @_;
   $dbname ||= "dbsnp_135";
-  $dbhost ||= "mgpc17";
+  $dbhost ||= "mgpc17.medschl.cam.ac.uk";
 
   $dbi = DBI->connect("DBI:mysql:$dbname:$dbhost", 'easih_ro') || die "Could not connect to database: $DBI::errstr";
 

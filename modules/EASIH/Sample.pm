@@ -114,7 +114,8 @@ sub sample2outfilename {
     system "mkdir -p $root_dir" if ( ! -d "$root_dir" );
   }
   
-  my @files = `find $root_dir | grep $sample `;
+#  my @files = `find $root_dir | grep $sample `;
+  my @files = sort glob("$root_dir/$sample*");
   my $version = 0;
   if ( @files ) {
     while ( $_ = pop @files ) {
@@ -137,6 +138,45 @@ sub sample2outfilename {
   
 
   return ("$file$postfix", undef);
+}
+
+
+# 
+# 
+# 
+# Kim Brugger (25 May 2012)
+sub next_sample_name {
+  my ( $sample, $existing_files ) = @_;
+
+  return $sample if ( ! $existing_files );
+  
+  my @files;
+  foreach my $file ( @{$existing_files}) {
+    $file =~ s/.*\///;
+    $file =~ s/\..*//;
+    if ( $file !~ /$sample/ ) {
+      print "$file does not belong to $sample!\n";
+      next;
+    }
+    push @files, $file;
+  }
+  
+  return $sample if ( ! @files );
+
+#  print Dumper( \@files);
+
+  my $version = 0;
+
+  foreach my $file ( @files ) {
+    if (  $file =~ /^[A-Z]\d{6,7}\_(\d+)/ ) {
+      $version = $1 + 1 if ($version < $1 + 1 );
+    }
+    elsif ( $file =~ /^[A-Z]\d{6,7}\z/ && $version == 0) {
+      $version = 1;
+    }
+  }
+
+  return "$sample\_$version";
 }
 
 

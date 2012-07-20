@@ -8,13 +8,11 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-use Test::Simple tests => 14;
+use Test::Simple tests => 19;
 
 use lib '/home/kb468/easih-toolbox/modules/';
 
 use EASIH::Sample;
-
-my $dbhost = 'localhost';
 
 
 my $good_sample = EASIH::Sample::validate_sample("AA00001");
@@ -59,3 +57,17 @@ ok( $sample eq "A0100001a" && $version == 1 && $postfix eq ".1.fq.gz", 'Correctl
 ($sample, $version, $postfix) = EASIH::Sample::sample_n_version("A0100001a_1");
 ok( $sample eq "A0100001a" && $version == 1 && $postfix eq "", 'Correctly split A0100001a_1');
 
+my $next_sample_name = EASIH::Sample::next_sample_name('A010001');
+ok( $next_sample_name eq "A010001", 'Correctly named next sample for A010001, no prior filenames');
+
+$next_sample_name = EASIH::Sample::next_sample_name('A010001', ['A010001']);
+ok( $next_sample_name eq "A010001_1", 'Correctly named next sample for A010001, one prior filenames');
+
+$next_sample_name = EASIH::Sample::next_sample_name('A010001', ['A010001_4', 'A010001']);
+ok( $next_sample_name eq "A010001_5", 'Correctly named next sample for A010001, two prior filenames');
+
+$next_sample_name = EASIH::Sample::next_sample_name('A010001', ['A010002']);
+ok( $next_sample_name eq "A010001", 'Correctly named next sample for A010001, with one wrong prior filenames');
+
+my ($sample_file, $error) = EASIH::Sample::sample2outfilename( $next_sample_name );
+ok( $sample_file eq "/data/A01/raw/A010001", 'Correctly generated file path from sample name');

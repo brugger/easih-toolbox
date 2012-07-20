@@ -56,13 +56,13 @@ my @argv = @ARGV;
 
 my %opts;
 #getopts('cb:B:hi:l:o:O:Q:s:S:T', \%opts);
-getopts('cb:B:h:l:o:O:Q:v:S:T', \%opts);    #svvd 31-10-2011: si -> v (snps,indels -> variants)
+getopts('cb:B:h:i:l:o:O:Q:v:s:S:T', \%opts);    #svvd 31-10-2011: si -> v (snps,indels -> variants)
 #perldoc() if ( $opts{h});
 usage() if ( $opts{h});
 
 my $species     = $opts{S} || "human";
 my $buffer_size = 1;
-my $host        = 'mgpc17';
+my $host        = 'mgpc17.medschl.cam.ac.uk';
 my $user        = "easih_ro";
 
 #$host = "ensembldb.ensembl.org";

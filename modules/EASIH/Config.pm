@@ -1,4 +1,4 @@
-package EASIH::DONE;
+package EASIH::Config;
 # 
 # Global configuration stuff
 # 
@@ -6,14 +6,34 @@ package EASIH::DONE;
 # Kim Brugger (05 Jul 2011), contact: kim.brugger@easih.ac.uk
 
 
-
 use vars qw ( @illumina_dirs
-              %libraries);
+              %libraries
+              $test_db_host
+              $test_db_user
+              $test_db_passwd);
 
 
+
+
+$test_db_host    = "mgpc17.medschl.ac.uk";
+$test_db_user    = "easih_admin";
+$test_db_passwd  = "easih";
+
+
+
+# 
+# 
+# 
+# Kim Brugger (27 Feb 2012)
+sub db_config {
+  return ($test_db_host, $test_db_user, $test_db_passwd);
+}
 
 @illumina_dirs = ('/seqs/illumina2/',
-		  '/seqs/babraham/');
+		  '/seqs/babraham/',
+		  '/seqs/illumina3',  
+		  '/seqs/illumina4',  
+		  '/seqs/illumina5');
 
 %libraries = (
   Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",

@@ -285,6 +285,7 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
   my %sample_stats;
   foreach my $mplex (sort {$$a[2] <=> $$b[2] } @mplexs ) {
+#  foreach my $mplex (sort {$$a[1] cmp $$b[1] } @mplexs ) {
 #    next if ($$mplex[3]  != 1 );
 
 #    push @data, [$$mplex[2], $$mplex[4], $$mplex[5], $$mplex[7], $$mplex[6]];
@@ -298,7 +299,7 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
 
     
-  foreach my $sample (sort {$sample_stats{$a}{lane} <=> $sample_stats{$b}{lane}} keys %sample_stats ) {
+  foreach my $sample (sort {$sample_stats{$a}{lane} <=> $sample_stats{$b}{lane} || $a cmp $b} keys %sample_stats ) {
 
     $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
     

@@ -52,6 +52,9 @@ sub validate_file {
 
   $infile = $file if (! $infile );
 
+  # set the path to the position of the md5 file.
+  $infile = "$1$infile" if ($md5file =~ /(.*\/)/);
+
   if (validate_sum($md5sum, $infile)) {
     return 1;
     print "Good md5\n";

@@ -29,7 +29,6 @@
 #   $0 -h<help>
 #*************************************************************************
 
-
 use strict;
 #use warnings;
 use Getopt::Std;
@@ -103,9 +102,6 @@ foreach my $dir ( @dirs ) {
  
   while( $RunDir = shift @files) {
     
-    print "RID:: $RunDir --> $rid\n" if ( $verbose );
-
-
 #    next if ($RunDir !~ /111123/);
     
     my $runfolder   = ${dir}.$RunDir;
@@ -144,7 +140,8 @@ foreach my $dir ( @dirs ) {
         
     if( -e $eventfile || -e $RTAcomp || -e "$runfolder/RTAComplete.txt") {
 
-      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/RTAComplete.txt");
+      my $checkstring = 0;
+      $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/RTAComplete.txt");
       $checkstring = `grep -c "Copying logs to network run folder" $eventfile` 
 	  if (! $checkstring);
       chomp( $checkstring );
@@ -155,14 +152,15 @@ foreach my $dir ( @dirs ) {
 	if ( @files ) {
 	  $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
 	  my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
-	  print "$RunDir setting status to RUN_ABORTED\n" if ($verbose);
+#	  print "$RunDir setting status to RUN_ABORTED\n" if ($verbose);
 	  
-	  RunStatus("RUN_ABORTED") if (! $last_status);
+#	  RunStatus("RUN_ABORTED") if (! $last_status);
 	  next;
 	}
       }
 
       $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
+      print "RID:: $RunDir --> $rid\n" if ( $verbose );
       my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
       print "$RunDir last status: $last_status\n" if ($verbose && $last_status);
       
@@ -172,103 +170,101 @@ foreach my $dir ( @dirs ) {
 	my $fixed_failed_program = 0;
 
 	### Start post processing for new runs ###
-	if($checkstring)
-	{
+      if($checkstring) {
+
 	  ### Run Complete ###
-	  if ( ! $failed_status ) {
-	    RunStatus("RUN_COMPLETED");
-	    SendEmail("RUN_COMPLETED","",1);
-	  }
+	if ( ! $failed_status ) {
+	  RunStatus("RUN_COMPLETED");
+	  SendEmail("RUN_COMPLETED","",1);
+	}
 
             ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
-	    
-	    for my $program(sort keys %Execute)
-	    {
-		
-		next, if($program =~ /QC_/);
-
-		if ( $last_status && $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
-		    next if ($failed_status ne $Execute{$program}{'03-failstatus'});
-		    $fixed_failed_program++;
-		}
-
-		my @GARstring;
-		
-		for my $info(sort keys %{$Execute{$program}})
-		{
-		    push @GARstring, $Execute{$program}{$info};
-		}
 	
-		goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
-	    }         
-
-	  print "$failed_status $fixed_failed_program\n" if ($verbose );
-	    
-
-	  if (! $last_status || 
-	      $last_status ne "RETRY_OFFLOAD" ||
-	      ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
-	       $failed_status eq $Execute{'04-QC_Report'}{'03-failstatus'})) {
-
-
-
-	    ### QC_Report ###
-	    my @fqfiles = EASIH::DONE::fetch_files_from_rid( $rid );
-
-	    foreach my $fqfile(@fqfiles)
-	    {
-		
-		my @GARstring;
-		
-		push @GARstring, $Execute{'04-QC_Report'}{'01-command'} . "$fqfile";
-		push @GARstring, $Execute{'04-QC_Report'}{'02-prestatus'};
-		push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
-		push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
-		
-		next, if(!GrabAndRun(@GARstring));
-	    }
-
+	for my $program(sort keys %Execute) {
+	  
+	  next, if ($program =~ /QC_/);
+	  
+	  if ( $last_status && $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
+	    next if ($failed_status ne $Execute{$program}{'03-failstatus'});
+	    $fixed_failed_program++;
 	  }
 	  
-	  if (! $last_status || 
-	      $last_status ne "RETRY_OFFLOAD" ||
-	      ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
-	       $failed_status eq $Execute{'05-QC_DB'}{'03-failstatus'})) {
-
-
-	    ### QC_Report ###
-	    my %fqfiles = EASIH::DONE::fetch_files_from_rid_by_sample( $rid );
-	    use Data::Dumper;
-	    if (1) {
-	      foreach my $sample (keys %fqfiles)  {
-		
-		my $param = " -1 $fqfiles{ $sample }[0] ";
-		$param   .= " -2 $fqfiles{ $sample }[1] " if ($fqfiles{ $sample }[1]);
-		
-		my @GARstring;
-		
-		push @GARstring, $Execute{'05-QC_DB'}{'01-command'} . "$param";
-		push @GARstring, $Execute{'05-QC_DB'}{'02-prestatus'};
-		push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
-		push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
-		
-		next if( !GrabAndRun(@GARstring) );
-	      }
-	    }
+	  my @GARstring;
+	  
+	  for my $info(sort keys %{$Execute{$program}}) {
+	    push @GARstring, $Execute{$program}{$info};
 	  }
 	  
+	  goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
+	}       
+
+	print "$failed_status $fixed_failed_program\n" if ($verbose );
+	
+	
+	if (! $last_status || 
+	    $last_status ne "RETRY_OFFLOAD" ||
+	    ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
+	     $failed_status eq $Execute{'04-QC_Report'}{'03-failstatus'})) {
 	  
-	  ### QC done email ###
-	  $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
+	  
+	  
+	  ### QC_Report ###
+	  my @fqfiles = EASIH::DONE::fetch_files_from_rid( $rid );
+	  
+	  foreach my $fqfile(@fqfiles)
+	  {
+		
+	    my @GARstring;
 	    
-	  if($last_status eq "QC_DB_DONE") {
+	    push @GARstring, $Execute{'04-QC_Report'}{'01-command'} . "$fqfile";
+	    push @GARstring, $Execute{'04-QC_Report'}{'02-prestatus'};
+	    push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
+	    push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
 	    
-	    ### Processing done status and email ###
-	    my $end = "PROCESSING_DONE";
-	    RunStatus($end);
-	    SendEmail($end,$end,1);
+#	    next, if(!GrabAndRun(@GARstring));
+	  }
+	  
+	}
+	  
+	if (! $last_status || 
+	    $last_status ne "RETRY_OFFLOAD" ||
+	    ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
+	     $failed_status eq $Execute{'05-QC_DB'}{'03-failstatus'})) {
+	  
+	  
+	  ### QC_Report ###
+	  my %fqfiles = EASIH::DONE::fetch_files_from_rid_by_sample( $rid );
+	  use Data::Dumper;
+	  if (1) {
+	    foreach my $sample (keys %fqfiles)  {
+	      
+	      my $param = " -1 $fqfiles{ $sample }[0] ";
+	      $param   .= " -2 $fqfiles{ $sample }[1] " if ($fqfiles{ $sample }[1]);
+	      
+	      my @GARstring;
+	      
+	      push @GARstring, "echo $Execute{'05-QC_DB'}{'01-command'} $param | qsub -cwd";
+	      push @GARstring, $Execute{'05-QC_DB'}{'02-prestatus'};
+	      push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
+	      push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
+	      
+	      next if( !GrabAndRun(@GARstring) );
+	    }
 	  }
 	}
+	
+	
+	### QC done email ###
+	$last_status = EASIH::DONE::fetch_latest_offloading_status( $rid );
+	
+	if($last_status eq "QC_DB_DONE") {
+	  
+	  ### Processing done status and email ###
+	  my $end = "PROCESSING_DONE";
+	  RunStatus($end);
+	  SendEmail($end,$end,1);
+	}
+      }
     }
   NEXT_RUNFOLDER:
   }
@@ -316,6 +312,8 @@ sub GrabAndRun
     my ($command, $pre_status, $fail_status, $post_status) = @_;
 
     RunStatus($pre_status);
+
+    print "$command\n";
     
     if(system($command))
     {

@@ -32,10 +32,13 @@ while(my $header = <> ) {
       if ( $header !~ /^\@/ || $strand !~ /^[+-]/ );
   
 
-  die "Sequence length is shorter than requested length\n" if ( length($sequence) < $length);
-
-  $sequence = substr( $sequence, 0, $length);
-  $quality  = substr( $quality,  0, $length);
+  if ( length($sequence) < $length){ 
+    print STDERR  "$header sequence length is shorter than requested length, will not trim it.\n";
+  }
+  else {
+    $sequence = substr( $sequence, 0, $length);
+    $quality  = substr( $quality,  0, $length);
+  }
 
 
   print "$header$sequence\n$strand$quality\n";

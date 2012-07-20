@@ -150,16 +150,8 @@ foreach my $dir ( @dirs ) {
       chomp( $checkstring );
       
       ### Update the status for old and unfinished runs ###
-      if(!$checkstring) {
+      if(! $checkstring) {
 	print "$RunDir: Run not finished\n" if ($verbose);
-	if ( @files ) {
-	  $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
-	  my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
-	  print "$RunDir setting status to RUN_ABORTED\n" if ($verbose);
-	  
-	  RunStatus("RUN_ABORTED") if (! $last_status);
-	  next;
-	}
       }
 
       $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');

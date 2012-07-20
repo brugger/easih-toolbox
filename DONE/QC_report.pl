@@ -47,7 +47,7 @@ my $csfasta_file  = $opts{c};
 my $qual_file     = $opts{q};
 my $bam_file      = $opts{b};
 my $sample_size   = $opts{s} || 20;
-my $platform      = uc($opts{p}) || usage();
+my $platform      = uc($opts{p}) || "ILLUMINA" || usage();
 my $random_sample = $opts{r} || 0;
 #sample limit MB
 EASIH::QC::sample_size($sample_size);

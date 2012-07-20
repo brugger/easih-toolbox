@@ -57,6 +57,9 @@ sub readin {
     $_ =~ s/\r\n/\n/g; 
     $_ =~ s/\n\r/\n/g; 
     $_ =~ s/\r/\n/g; 
+    $_ =~ s/\"//g; 
+    $_ =~ s/\'//g; 
+
     push @lines, split("\n",$_);
   }
   close $in;

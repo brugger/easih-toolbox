@@ -40,7 +40,7 @@ use EASIH::Illumina::Sample_sheet;
 use EASIH::Sample;
 
 my $debug = 0;
-$debug = 1;
+#$debug = 1;
 
 my %opts;
 getopts("f:s:ho:", \%opts);
@@ -79,8 +79,8 @@ while(<$fqs>) {
   my $strand     = <$fqs>;
   my $quality    = <$fqs>;
 
-  my ($bcode) = ($sequence =~ /^(.{4})/);
-  next if ( ! $bcodes{$bcode});
+  my ($bcode) = ($sequence =~ /^(.{10})/);
+  next if (! $bcode || ! $bcodes{$bcode});
   my $fout = $fhs{$bcodes{$bcode}};
   print $fout "$header$sequence$strand$quality";
   

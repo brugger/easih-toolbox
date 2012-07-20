@@ -54,7 +54,7 @@ my %opts;
 getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmbd", \%opts);
 
 my $limited_lanes = $opts{'l'};
-my $mismatches    = $opts{'m'};
+my $mismatches    = $opts{'m'} || 0;
 
 # 
 # 
@@ -194,7 +194,6 @@ if ($datamonger) {
 
 
 }
-
 
 
 my (%fhs, %fids);
@@ -564,6 +563,13 @@ sub validate_lane_names {
 # Kim Brugger (06 Jan 2011)
 sub verify_bcode {
   my ($bc1, @bc2s) = @_;
+
+
+ if (length($bc1) != length( $bc2s[0] )) {
+   my $bcode_length = length( $bc2s[0] );
+   $bc1 =~ s/^(.{$bcode_length}).*/$1/;
+  }
+
 
   foreach my $bc2 ( @bc2s ) {
 

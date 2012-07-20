@@ -22,8 +22,9 @@ open (my $mani, "MANIFEST") || die "Could not open 'MANIFEST': $!\n";
 
 my %manifest_files;
 map {chomp;    
-     next if ($_ =~ /^\z/);
-     $manifest_files{$_}++ } <$mani>;
+     s/^\.\///;
+     print "$_\n";
+     $manifest_files{$_}++ if ($_ !~ /^\s*\z/);} <$mani>;
 close( $mani );
 
 my %local_files;
@@ -39,7 +40,7 @@ while (<$f>) {
 
   if ( ! $manifest_files{ $_ }  && -d $_ ) {
     print STDERR "The directory '$_' is present in the directory but don't appear in the MANIFEST\n";
-    exit -1;
+#    exit -1;
   }
   
   $local_files{$_}++;

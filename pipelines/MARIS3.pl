@@ -116,13 +116,13 @@ $gatk = "/home/kb468/bin/gatk";
 
 #validate_input();
 
-print "$bwa\n$samtools\n$gatk\n$picard\n";
+#print "$bwa\n$samtools\n$gatk\n$picard\n";
 
 
 #EASIH::Pipeline::verbosity(10);
 #EASIH::Pipeline::backend('Darwin');
-#EASIH::Pipeline::backend('Local');
-EASIH::Pipeline::backend('MPIexec');
+#EASIH::Pipeline::backend('MPIexec');
+EASIH::Pipeline::backend('Local');
 EASIH::Pipeline::max_jobs( $host_cpus );
 EASIH::Pipeline::max_retry(0);
 
@@ -208,14 +208,11 @@ sub bwa_aln {
 sub bwa_sampe {
   my ($input) = @_;
 
-  print STDERR " ----------------- Going sampe ----------------- \n";
-
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $cmd;
-  $cmd = "$bwa sampe  -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} 2> tmp.err| $samtools view -Sb - -o $tmp_file";
-#  $cmd = "$bwa sampe  -t $host_cpus -P $reference $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+  $cmd = "$bwa sampe -t $host_cpus -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} 2> tmp.err | $samtools view -Sb - -o $tmp_file";
 
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
@@ -242,7 +239,7 @@ sub bam_sort {
   $sample =~ s/\..*//;
   $sample =~ s/_\d*//;
 
-  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT ";
+  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT  TMP_DIR=/home/$username/scratch/tmp/";
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
@@ -263,7 +260,7 @@ sub bam_merge {
   my $tmp_file = EASIH::Pipeline::tmp_file(".merged.bam");
 
   if (@inputs == 1 ) {
-    print "cd; mv @inputs $tmp_file, $tmp_file\n";
+#    print "cd; mv @inputs $tmp_file, $tmp_file\n";
     EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
   }
   else {
@@ -298,7 +295,7 @@ sub bam_merge2 {
 
   if (@inputs == 1 ) {
     
-    print "cd; mv @inputs $tmp_file, $tmp_file\n";
+#    print "cd; mv @inputs $tmp_file, $tmp_file\n";
     EASIH::Pipeline::submit_system_job("mv @inputs $tmp_file", $tmp_file);
   }
   else {

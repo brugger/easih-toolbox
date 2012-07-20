@@ -313,13 +313,13 @@ sub mappings {
     
     my $btie;
     if ($file2) {
-      print  "bowtie -S  --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |\n";
-      open ($btie, "bowtie -S --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |") or die "Can't launch bowtie: $!";
+      print  "/software/bin/bowtie -S  --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |\n";
+      open ($btie, "/software/bin/bowtie -S --maxins 1000 --chunkmbs 512 $libraries{ $library } -1 $file1 -2 $file2 |") or die "Can't launch bowtie: $!";
     }
     else {
-      print " bowtie -S  --chunkmbs 512 $libraries{ $library } $file1 |\n";
+      print " /software/bin/bowtie -S  --chunkmbs 512 $libraries{ $library } $file1 |\n";
 
-      open ($btie, "bowtie -S  --chunkmbs 512 $libraries{ $library } $file1 |") or die "Can't launch bowtie: $!";
+      open ($btie, "/software/bin/bowtie -S  --chunkmbs 512 $libraries{ $library } $file1 |") or die "Can't launch bowtie: $!";
     }
     
     my %dup_counts;

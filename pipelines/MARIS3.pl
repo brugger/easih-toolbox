@@ -24,14 +24,14 @@ use Data::Dumper;
 
 use Getopt::Std;
 
-use lib '/home/kb468//BRC/easih-toolbox/modules';
-use lib '/home/kb468//BRC/easih-pipeline/modules';
+use lib '/scratch/kb468//BRC/easih-toolbox/modules';
+use lib '/scratch/kb468//BRC/easih-pipeline/modules';
 
 use EASIH::Pipeline;
 use EASIH::Pipeline::Misc;
 
 
-my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:vV';
+my $opts = '1:2:d:De:f:hH:I:lL:M:n:No:p:Q:Pr:R:sS:vV';
 my %opts;
 getopts($opts, \%opts);
 
@@ -55,13 +55,16 @@ my $username = scalar getpwuid $<;
 # if using standard naming, this is a lot easier.
 if ( $opts{Q} ) {
 
+  $opts{Q} =~ s/\..*//;
+
   $opts{'1'} = join(",", sort(glob("$opts{Q}*.1.fq"), glob("$opts{Q}*.1.fq.gz")));
   $opts{'2'} = join(",", sort(glob("$opts{Q}*.2.fq"), glob("$opts{Q}*.2.fq.gz")));
 
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
   $opts{'l'} = 1;
-  $opts{'m'} = 1;
+  
+  $opts{'r'} ||= '/scratch/easih/GATK_bundle/b37/';
 
 }  
 
@@ -72,19 +75,19 @@ $second            = [split(",", $second)];
 my $email          = $opts{'e'}     || "$username\@cam.ac.uk";
 my $loose_mapping  = $opts{'l'}     || 0;
 my $log            = $opts{'L'} || "$opts{o}.log" || undef;
-my $mark_dup       = $opts{'m'};
 our $report        = $opts{'o'}     || usage();
 my $platform       = 'ILLUMINA';
 my $reference_dir = $opts{'r'}     || usage();
+my $small_capture = $opts{'s'} || 0;
 
-my $reference = glob("$reference_dir/*.fasta");
+my $reference   = glob("$reference_dir/*.fasta");
 my ($dbsnp)     = grep(!/excluding/, glob("$reference_dir/dbsnp_*.vcf"));
 my ($hapmap)    = glob("$reference_dir/hapmap_*.sites.vcf");
 my ($omni)      = glob("$reference_dir/*omni*.sites.vcf");
 
 my $bam_file      = "$report.bam";
 my $vcf_file      = "$report.vcf";
-my $host_cpus      = nr_of_cpus();
+my $host_cpus     = nr_of_cpus();
 
 #$host_cpus = 1;
 
@@ -94,7 +97,6 @@ system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
 EASIH::Pipeline::freeze_file($freeze_file);
 
 
-my $run_id = "MGILLUMINA4_75";
 
 #EASIH::Pipeline::verbosity(100) if ( $opts{v});
 
@@ -131,8 +133,7 @@ EASIH::Pipeline::add_step('bwa_aln', 'bwa_sampe', );
 EASIH::Pipeline::add_step('bwa_sampe', 'bam_sort');
 EASIH::Pipeline::add_merge_step('bam_sort', 'bam_merge');
 EASIH::Pipeline::add_step('bam_merge', 'mark_dups');
-EASIH::Pipeline::add_step('mark_dups', 'bam_index');
-EASIH::Pipeline::add_step('bam_index', 'realign_targets');
+EASIH::Pipeline::add_step('mark_dups', 'realign_targets');
 EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
 EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge2' );
 EASIH::Pipeline::add_step('bam_merge2', 'bam_index2');
@@ -154,6 +155,8 @@ EASIH::Pipeline::add_step('CombineVariants', 'run_stats');
 EASIH::Pipeline::add_step('run_stats', 'finished');
 
 #EASIH::Pipeline::print_flow();
+
+my $run_id = get_run_id();
 
 #exit;
 &EASIH::Pipeline::run();
@@ -239,9 +242,28 @@ sub bam_sort {
   $sample =~ s/\..*//;
   $sample =~ s/_\d*//;
 
-  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT  TMP_DIR=/home/$username/scratch/tmp/";
+  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH ID=$readgroup PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT  TMP_DIR=/home/$username/scratch/tmp/";
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (22 Jul 2012)
+sub get_run_id {
+  my ($input) = @_;
+  $input ||= $$first[0];
+
+  my $line1 = ` zcat -f $input  | head -n 1 `;
+  chomp $line1;
+  my ($id, $rest) = split(/:/, $line1,2);
+  $id =~ s/^\@//;
+  
+  return $id;
+  
 }
 
 
@@ -373,7 +395,7 @@ sub mark_dups {
   my $username = scalar getpwuid $<;
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $metrix_file = EASIH::Pipeline::tmp_file(".mtx");
-  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
+  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ CREATE_INDEX=true";
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
@@ -479,9 +501,6 @@ sub UnifiedGenotyper {
 sub UnifiedGenotyper_par {
   my ($input) = @_;
 
-
-
-
   my @names = ();
   open(my $spipe, "$samtools view -H $bam_file | ") || die "Could not open '$bam_file': $!\n";
   while(<$spipe>) {
@@ -567,12 +586,14 @@ sub VariantRecalibrator {
   $cmd .= "-resource:omni,known=false,training=true,truth=false,prior=12.0 $omni " if ( $omni );
   $cmd .= "-resource:dbsnp,known=true,training=false,truth=false,prior=8.0 $dbsnp " if ( $dbsnp);
   $cmd .= "-an QD -an HaplotypeScore -an MQRankSum -an ReadPosRankSum -an MQ ";
-  $cmd .= " -recalFile $tmp_recal -mG 2 ";
+  $cmd .= " -recalFile $tmp_recal ";
   $cmd .= " -tranchesFile $tmp_tranches ";
   $cmd .= " -rscriptFile $tmp_r_script ";
-#  $cmd .= "--percentBadVariants 0.05 ";
-  $cmd .= "--minNumBadVariants 100 ";
 
+  if ( $small_capture ) {
+    $cmd .= "--minNumBadVariants 100 ";
+    $cmd .= "  -mG 2 ";
+  }
 
   EASIH::Pipeline::submit_job($cmd, "$input $tmp_recal $tmp_tranches $tmp_r_script");
 

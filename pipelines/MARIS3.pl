@@ -29,6 +29,7 @@ use lib '/scratch/kb468//BRC/easih-pipeline/modules';
 
 use EASIH::Pipeline;
 use EASIH::Pipeline::Misc;
+use EASIH::Git;
 
 
 my $opts = '1:2:d:De:f:hH:I:lL:M:n:No:p:Q:Pr:R:sS:vV';
@@ -825,10 +826,10 @@ sub usage {
   print "extra flags: -S[oft reset/restart of a crashed/failed run, needs a freeze file]\n";
   print "\n";
 
-  print "easih-pipeline: " . &EASIH::Pipeline::version() . "\n";
 
-  use EASIH::Toolbox;
-  print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";
+  print "easih-pipeline: " . &EASIH::Git::version('EASIH::Pipeline') . "\n";
+  print "easih-toolbox: " .  &EASIH::Git::version('EASIH::Git') . "\n";
+
 
   exit;
 

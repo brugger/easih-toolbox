@@ -10,7 +10,7 @@ use warnings;
 use Data::Dumper;
 
 
-use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
+use lib '/home/kb468/scratch/BRC/easih-pipeline/modules';
 use EASIH::Pipeline;
 
 my $freeze_file = shift || usage();

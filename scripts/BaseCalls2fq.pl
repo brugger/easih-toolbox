@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 my $debug = 0;
-$debug = 1;
+#$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -54,7 +54,7 @@ my %opts;
 getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmbd", \%opts);
 
 my $limited_lanes = $opts{'l'};
-my $mismatches    = $opts{'m'};
+my $mismatches    = $opts{'m'} || 0;
 
 # 
 # 

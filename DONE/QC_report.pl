@@ -40,6 +40,7 @@ use EASIH::Misc;
 use EASIH::Sample;
 
 my $debug = 0;
+#$debug = 1;
 
 my %opts;
 getopts('b:c:q:hs:p:r1:2:', \%opts);
@@ -93,8 +94,7 @@ if ( $fastq_file ) {
   chomp $sname;
   $sname =~ s/\@(.*?_)(\d+).*/$1.sprintf("%05d", $2)/e;
   
-  my $runfolder = (grep(/$sname/,  @orf))[0];
-  $runfolder ||= $sname;
+  my $runfolder ||= $sname;
   
   my ($sample, $project) = EASIH::Sample::filename2sampleNproject($fastq_file);
   my $fid1 = EASIH::DONE::add_file($fastq_file,  $sample, $project, $runfolder, $platform);
@@ -137,7 +137,7 @@ if ( $fastq_file ) {
   my ( $QC1, $QC2 ) = EASIH::QC::fastQC( $fastq_file, $fastq_file2 );
   
   
-  print Dumper( $QC1);
+#  print Dumper( $QC1);
   
   
   if ( $fid2 ) { 

@@ -282,28 +282,28 @@ sub mappings {
 
   my %res;
   my %libraries = (
-#    Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
+    Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
 #    NCBI_ref       => "/data/refs/archive/human_genomic_transcript/ref_contig",
 #    NCBI_alt       => "/data/refs/archive/human_genomic_transcript/alt_contig_HuRef",
 #    NCBI_rna       => "/data/refs/archive/human_genomic_transcript/rna",
 
-#    Mouse          => "/data/refs/mm9/bowtie/mm9",
-#    Rat            => "/data/refs/archive/rn4/bowtie/rn4",
-#    Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
+    Mouse          => "/data/refs/mm9/bowtie/mm9",
+    Rat            => "/data/refs/archive/rn4/bowtie/rn4",
+    Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
 #    MyRDB_bact     => "/data/refs/archive/bacteria/myRDP-bacteria",
-#    GreenGenes     => "/data/refs/archive/greengenes/greengenes_unaligned",
-#    Yeast          => "/data/refs/archive/Scerevisiae/yeast",
-#    Pombe          => "/data/refs/archive/pombe/pombe",
+    GreenGenes     => "/data/refs/archive/greengenes/greengenes_unaligned",
+    Yeast          => "/data/refs/archive/Scerevisiae/yeast",
+    Pombe          => "/data/refs/archive/pombe/pombe",
 
     Viruses        => "/data/refs/archive/viruses/gb_virus_seq",
     PhiX           => "/data/refs/archive/PhiX/PhiX",
     Adapters       => "/data/refs/archive/fastqc_contaminants/Contaminants",
     Vectors        => "/data/refs/archive/UniVec/UniVec",
 
-#    Pichia         => "/data/refs/archive/pichia/SO/bowtie/pichia",
-#    Trypanosoma    => "/data/refs/archive/trypanosoma/Tb927_genome_230210",
+    Pichia         => "/data/refs/archive/pichia/SO/bowtie/pichia",
+    Trypanosoma    => "/data/refs/archive/trypanosoma/Tb927_genome_230210",
 #    Tryp_gamb      => "/data/refs/archive/trypanosoma/Tbgamb_02_v2",
-#    Leishmania     => "/data/refs/archive/leishmania/leishmania",
+    Leishmania     => "/data/refs/archive/leishmania/leishmania",
 
 #    Ribo_ARB_SSU   => "/data/refs/archive/ribo/hs_ssu_r106_embl",
 #    Ribo_ARB_LSU   => "/data/refs/archive/ribo/hs_lsu_r106_embl",

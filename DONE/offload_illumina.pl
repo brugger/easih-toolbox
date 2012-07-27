@@ -63,7 +63,8 @@ use EASIH::Mail;
 use EASIH::DONE;
 
 my $debug = 0;
-$debug = 1;
+#$debug = 1;
+
 EASIH::DONE::Connect('done_dev') if ($debug); 
 
 my %opts;

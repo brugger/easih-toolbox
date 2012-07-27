@@ -985,7 +985,13 @@ sub fetch_samples {
 sub add_run {
   my ( $run, $platform ) = @_;
   check_connection();
+
+  print "RUN :: $run \n";
+  $run =~ s/\/\Z//;
+  $run =~ s/.*\///;
   
+  print "RUN :: $run \n";
+
   # check to see if it already exists.
   my $run_id = fetch_run_id( $run );
   return $run_id if ( $run_id );

@@ -16,8 +16,8 @@ use IO::Seekable;
 use EASIH::DONE;
 use EASIH::Config;
 
-my $sample_size   = 0;
-my $max_counts    = 0;
+my $sample_size   = 21;
+my $max_counts    = 500;
 my $random_sample = 0;
 my $fid           = -1;
 my $do_mappings   = 0;
@@ -139,7 +139,7 @@ sub sample_fastq_files {
     $read += length( $seq1 );
     push @res1, [$name1, $seq1, $strand1, $qual1];
 
-    last if ( $sample_size > 0 && $read > $sample_size );
+#    last if ( $sample_size > 0 && $read > $sample_size );
     last if ( $max_counts && $counts++ > $max_counts);
     
     if ( $infile2 ) {
@@ -213,13 +213,16 @@ sub analysis {
 
   my $tmp_file1 = EASIH::Misc::tmp_file();
   my $tmp_file2 = EASIH::Misc::tmp_file();
+
   open( my $t1, "> $tmp_file1") || die "Could not open '$tmp_file1': $!\n";
 
   $$res1{read_length} = $$data[ 0 ][ 1 ];
 
   foreach my $entry ( @$data ) {
-    
-    $duplicates1{ $$entry[1] }++;
+
+    next if ( !$$entry[1] );
+
+    $duplicates1{ $$entry[1] }++ ;
     $res1 = analyse( $$entry[1], $$entry[3], $res1);
     $$entry[1] = substr($$entry[1], 0, 36)."\n" if (length($$entry[1]) > 36);
     $$entry[3] = substr($$entry[3], 0, 36)."\n" if (length($$entry[1]) > 36);
@@ -279,27 +282,33 @@ sub mappings {
 
   my %res;
   my %libraries = (
-    Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
-    NCBI_ref       => "/data/refs/archive/human_genomic_transcript/ref_contig",
-    Mouse          => "/data/refs/mm9/bowtie/mm9",
-    Rat            => "/data/refs/archive/rn4/bowtie/rn4",
-    Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
-    MyRDB_bact     => "/data/refs/archive/bacteria/myRDP-bacteria",
-    GreenGenes     => "/data/refs/archive/greengenes/greengenes_unaligned",
-    Yeast          => "/data/refs/archive/Scerevisiae/yeast",
-    Pombe          => "/data/refs/archive/pombe/pombe",
+#    Human          => "/data/refs/human_1kg/bowtie/human_g1k_v37",
+#    NCBI_ref       => "/data/refs/archive/human_genomic_transcript/ref_contig",
+#    NCBI_alt       => "/data/refs/archive/human_genomic_transcript/alt_contig_HuRef",
+#    NCBI_rna       => "/data/refs/archive/human_genomic_transcript/rna",
+
+#    Mouse          => "/data/refs/mm9/bowtie/mm9",
+#    Rat            => "/data/refs/archive/rn4/bowtie/rn4",
+#    Ecoli          => "/data/refs/archive/Ecoli/U00096_2",
+#    MyRDB_bact     => "/data/refs/archive/bacteria/myRDP-bacteria",
+#    GreenGenes     => "/data/refs/archive/greengenes/greengenes_unaligned",
+#    Yeast          => "/data/refs/archive/Scerevisiae/yeast",
+#    Pombe          => "/data/refs/archive/pombe/pombe",
+
     Viruses        => "/data/refs/archive/viruses/gb_virus_seq",
     PhiX           => "/data/refs/archive/PhiX/PhiX",
     Adapters       => "/data/refs/archive/fastqc_contaminants/Contaminants",
     Vectors        => "/data/refs/archive/UniVec/UniVec",
-    Pichia         => "/data/refs/archive/pichia/SO/bowtie/pichia",
-    Trypanosoma    => "/data/refs/archive/trypanosoma/Tb927_genome_230210",
-    Tryp_gamb      => "/data/refs/archive/trypanosoma/Tbgamb_02_v2",
-    Leishmania     => "/data/refs/archive/leishmania/leishmania",
-    Ribo_ARB_SSU   => "/data/refs/archive/ribo/hs_ssu_r106_embl",
-    Ribo_ARB_LSU   => "/data/refs/archive/ribo/hs_lsu_r106_embl",
-    Ribo_UNI       => "/data/refs/archive/ribo/mart_uniprot_ribosomal",
-    Ribo_ENS       => "/data/refs/archive/ribo/ens_all_ribo",
+
+#    Pichia         => "/data/refs/archive/pichia/SO/bowtie/pichia",
+#    Trypanosoma    => "/data/refs/archive/trypanosoma/Tb927_genome_230210",
+#    Tryp_gamb      => "/data/refs/archive/trypanosoma/Tbgamb_02_v2",
+#    Leishmania     => "/data/refs/archive/leishmania/leishmania",
+
+#    Ribo_ARB_SSU   => "/data/refs/archive/ribo/hs_ssu_r106_embl",
+#    Ribo_ARB_LSU   => "/data/refs/archive/ribo/hs_lsu_r106_embl",
+#    Ribo_UNI       => "/data/refs/archive/ribo/mart_uniprot_ribosomal",
+#    Ribo_ENS       => "/data/refs/archive/ribo/ens_all_ribo",
 #    Ribo_GO        => "/data/refs/archive/ribo/amigo_ens_anno_mf",
 #    MART_RNA_GENES => "/data/refs/archive/ribo/mart_rna_genes",
 #    MART_RRNA_ONLY => "/data/refs/archive/ribo/mart_rrna_only",
@@ -663,6 +672,9 @@ sub base_dist2db {
 # Kim Brugger (26 Jan 2011)
 sub base_qual2db {
   my ($QC_data) = @_;
+
+  return if ( !$$QC_data{'base_qual'});
+
 
   my @res;
   for(my $x = 0; $x < @{$$QC_data{'base_qual'}}; $x++ ) {
@@ -1076,12 +1088,14 @@ sub random_sample_fastq_gz_files {
 
   my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat($infile1);
 
-  my $random_pos = int(rand(1048576)+$size*0.2);
+  my $random_pos = int(rand(10480));
   
   my (@res1, @res2);
 
-#  while( $sample_size > $read || $max_counts > $counts++ ) {
-  while( $sample_size > $read || $max_counts > $counts++ ) {
+
+#  while( $sample_size > $read && $max_counts > $counts++ ) {
+  while( $max_counts > $counts++ ) {
+
     
     $random_pos = $z1->tell() + int(rand(5120));
     if ( ! $z1->seek($random_pos, SEEK_SET) ) {
@@ -1112,7 +1126,7 @@ sub random_sample_fastq_gz_files {
       my $qual1 = $z1->getline();
 
       if ( $seq1 !~ /^[acgtn01234]+\Z/i) {
-#	print "$seq1";
+	print "$seq1";
 	goto RE_SEARCH;
       }
 
@@ -1138,48 +1152,6 @@ sub random_sample_fastq_gz_files {
 }
 
 
-sub random_sample_fastq_gz {
-  my ($infile, $res ) = @_;
-
-  my $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-
-  my $read = 0;
-  my $random_pos = int(rand(1048576));
-  
-  while( $sample_size > $read ) {
-
-    
-    $random_pos = $z->tell() + int(rand(5120));
-    if ( ! $z->seek($random_pos, SEEK_SET) ) {
-      close($z);
-      $z = new IO::Uncompress::Gunzip($infile) or die "gunzip failed: $GunzipError\n";
-      $random_pos = int(rand(1048576));
-      next;
-    }
-
-    while ( $_ =  $z->getline() ) {
-      last if ( $_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
-    }
-
-    next if (! $_);
-
-    if ($_ && 
-        ($_ =~ /^\@[A-Za-z0-9-_]*:\d+:/ ||  
-         $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/)) {
-      my $name = $_;
-      my $seq  = $z->getline();
-      my $str  = $z->getline();
-      my $qual = $z->getline();
-
-      $res = analyse( $seq, $qual, $res);
-      
-      $read += length($seq);
-    }
-  }
-
-
-  return $res;
-}
 
 
 

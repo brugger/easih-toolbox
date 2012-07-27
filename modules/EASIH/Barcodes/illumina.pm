@@ -25,7 +25,6 @@ sub bc_length {
   return $bc_length;
 }
 
-
 %barcodes = (
   "ATCACG"  =>   1,
   "CGATGT"  =>   2, 
@@ -74,7 +73,20 @@ sub bc_length {
   "TCATTC"  =>  45,
   "TCCCGA"  =>  46,
   "TCGAAG"  =>  47,
-  "TCGGCA"  =>  48);
+  "TCGGCA"  =>  48,
+  # NEB barcodes::
+  "CGTGAT"  => "NEBNext1",
+  "ACATCG"  => "NEBNext2",
+  "GCCTAA"  => "NEBNext3",
+  "TGGTCA"  => "NEBNext4",
+  "CACTGT"  => "NEBNext5",
+  "ATTGGC"  => "NEBNext6",
+  "GATCTG"  => "NEBNext7",
+  "TCAAGT"  => "NEBNext8",
+  "CTGATC"  => "NEBNext9",
+  "AAGCTA"  => "NEBNext10",
+  "GTAGCC"  => "NEBNext11",
+  "TACAAG"  => "NEBNext12");
 
 # 
 # 

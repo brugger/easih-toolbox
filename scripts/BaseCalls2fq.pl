@@ -149,8 +149,9 @@ if ($opts{A}) {
   $$sample_names{8} = "$opts{A}_".$counter++ if ( !$opts{'8'} );
 }
 
-$runfolder = "ILL_TEST5" if ( $debug );
+#$runfolder = "ILL_TEST_10" if ( $debug );
 my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA') if ($datamonger);
+print "RID :: $rid \n";
 my %reads_pr_sample;
 
 my %filenames;

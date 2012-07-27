@@ -29,6 +29,7 @@
 #   $0 -h<help>
 #*************************************************************************
 
+
 use strict;
 #use warnings;
 use Getopt::Std;
@@ -64,15 +65,17 @@ use EASIH::DONE;
 my $debug = 0;
 #$debug = 1;
 
+EASIH::DONE::Connect('done_dev') if ($debug); 
+
 my %opts;
-getopts('hvd:', \%opts);
+getopts('hvd:s:', \%opts);
 
 if($opts{h})
 {
     $0 =~ s/.*\///;
     print STDERR "\n\nDescription: Checks run complete (not the file Run.completed) status for illumina runs.\n";
     print STDERR "\nDetails: script for picking recent file in the relevant directory - looking for \"Copying logs to network run folder\" in Events.log file - alert people about run complete status.\n";
-    print STDERR "\nUsage: $0 -h<help>\n\n\n";
+    print STDERR "\nUsage: $0 -h<help> -s<equencer directory> -D<irectory> -v<erbose>\n\n\n";
     exit;
 }
 
@@ -80,6 +83,8 @@ my $verbose = $opts{v} || 0;
 
 my $to = 'bics@easih.ac.uk,lab@easih.ac.uk'; #global
 $to = 'sri.deevi@easih.ac.uk,kim.brugger@easih.ac.uk'; #global
+$to = 'kim.brugger@easih.ac.uk' if ( $debug );
+
 #$to = 'kim.brugger@easih.ac.uk'; #global
 #my $dir = "/seqs/illumina3/";
 #my $dir = "/seqs/babraham/";
@@ -91,20 +96,25 @@ my @dirs  = ('/seqs/illumina2/',
 	     '/seqs/illumina4/',
     );
 
-@dirs = split(/,/, $opts{ 'd' }) if ( $opts{ 'd' } );
+@dirs = split(/,/, $opts{ 's' }) if ( $opts{ 's' } );
 my $easih_toolbox = '/software/installed/easih-toolbox/';
 $easih_toolbox = '/home/kb468/easih-toolbox/' if ( $debug );
 
 foreach my $dir ( @dirs ) {
   opendir(DIR, "$dir");
-  my @files = grep(!/^\.|\.log$/, sort readdir(DIR));
+  my @files = map {"$dir/$_"} grep(!/^\.|\.log$/, sort readdir(DIR));
   closedir(DIR);
+
+  @files = split(/,/, $opts{ 'd' }) if ( $opts{ 'd' } );
  
   while( $RunDir = shift @files) {
     
+    print "RID:: $RunDir\n" if ( $verbose );
+
+
 #    next if ($RunDir !~ /111123/);
     
-    my $runfolder   = ${dir}.$RunDir;
+    my $runfolder   = $RunDir;
     my $eventfile   = "$runfolder/Events.log"; 
     my $RTAcomp     = "$runfolder/RTAComplete.txt";
     my $Intensities = "$runfolder/Data/Intensities"; 
@@ -115,10 +125,10 @@ foreach my $dir ( @dirs ) {
 				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
 				  '04-poststatus' => "BCL2QSEQ_DONE"},
 	       
-	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 4;", 
-				  '02-prestatus'  => "MAKE_STARTED", 
-				  '03-failstatus' => "MAKE_FAILED", 
-				  '04-poststatus' => "MAKE_DONE"},
+#	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
+#				  '02-prestatus'  => "MAKE_STARTED", 
+	#			  '03-failstatus' => "MAKE_FAILED", 
+	#			  '04-poststatus' => "MAKE_DONE"},
 	       
 	       '03-BCL2FQ'    => {'01-command'    => "$easih_toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
 				  '02-prestatus'  => "BCL2FQ_STARTED", 
@@ -140,42 +150,41 @@ foreach my $dir ( @dirs ) {
         
     if( -e $eventfile || -e $RTAcomp || -e "$runfolder/RTAComplete.txt") {
 
-      my $checkstring = 0;
-      $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/RTAComplete.txt");
+      my $checkstring = 1 if (-e $RTAcomp || -e "$runfolder/RTAComplete.txt");
       $checkstring = `grep -c "Copying logs to network run folder" $eventfile` 
 	  if (! $checkstring);
       chomp( $checkstring );
+
+      print "Done :: $checkstring\n";
       
       ### Update the status for old and unfinished runs ###
       if(! $checkstring) {
 	print "$RunDir: Run not finished\n" if ($verbose);
-	next;
+	  next;
       }
 
       $rid = EASIH::DONE::add_run($RunDir, 'ILLUMINA');
-      print "RID:: $RunDir --> $rid\n" if ( $verbose );
       my $last_status = EASIH::DONE::fetch_latest_offloading_status($rid); 
       print "$RunDir last status: $last_status\n" if ($verbose && $last_status);
       
       next if ($last_status && $last_status ne "RETRY_OFFLOAD");
 
-	my $failed_status = EASIH::DONE::fetch_offloading_failure( $rid ) if ( $last_status );
-	my $fixed_failed_program = 0;
-
-	### Start post processing for new runs ###
+      my $failed_status = EASIH::DONE::fetch_offloading_failure( $rid ) if ( $last_status );
+      my $fixed_failed_program = 0;
+      
+      ### Start post processing for new runs ###
       if($checkstring) {
-
-	  ### Run Complete ###
+	### Run Complete ###
 	if ( ! $failed_status ) {
 	  RunStatus("RUN_COMPLETED");
 	  SendEmail("RUN_COMPLETED","",1);
 	}
 
-            ### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
+	### Run Programs: BCL2QSEQ, MAKE and BCL2FQ ###
 	
 	for my $program(sort keys %Execute) {
 	  
-	  next, if ($program =~ /QC_/);
+	  next, if($program =~ /QC_/);
 	  
 	  if ( $last_status && $last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program ) {
 	    next if ($failed_status ne $Execute{$program}{'03-failstatus'});
@@ -189,61 +198,46 @@ foreach my $dir ( @dirs ) {
 	  }
 	  
 	  goto NEXT_RUNFOLDER , if(!GrabAndRun(@GARstring));
-	}       
+	}         
+	  
+	print "$rid $failed_status $fixed_failed_program\n";
+	    
+	
+	### QC_Report ###
+	my @fqfiles = EASIH::DONE::fetch_files_from_rid( $rid );
 
-	print "$failed_status $fixed_failed_program\n" if ($verbose );
+	print Dumper( \@fqfiles );
 	
-	
-	if (! $last_status || 
-	    $last_status ne "RETRY_OFFLOAD" ||
-	    ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
-	     $failed_status eq $Execute{'04-QC_Report'}{'03-failstatus'})) {
+	foreach my $fqfile(@fqfiles) {
 	  
+	  my @GARstring;
 	  
+	  push @GARstring, $Execute{'04-QC_Report'}{'01-command'} . "$fqfile";
+	  push @GARstring, $Execute{'04-QC_Report'}{'02-prestatus'};
+	  push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
+	  push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
 	  
-	  ### QC_Report ###
-	  my @fqfiles = EASIH::DONE::fetch_files_from_rid( $rid );
-	  
-	  foreach my $fqfile(@fqfiles)
-	  {
-		
-	    my @GARstring;
-	    
-	    push @GARstring, $Execute{'04-QC_Report'}{'01-command'} . "$fqfile";
-	    push @GARstring, $Execute{'04-QC_Report'}{'02-prestatus'};
-	    push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
-	    push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
-	    
-#	    next, if(!GrabAndRun(@GARstring));
-	  }
-	  
+#	  last if(!GrabAndRun(@GARstring));
 	}
+	
 	  
-	if (! $last_status || 
-	    $last_status ne "RETRY_OFFLOAD" ||
-	    ($last_status eq "RETRY_OFFLOAD" && ! $fixed_failed_program && 
-	     $failed_status eq $Execute{'05-QC_DB'}{'03-failstatus'})) {
+	### QC_Report ###
+	my %fqfiles = EASIH::DONE::fetch_files_from_rid_by_sample( $rid );
+	use Data::Dumper;
+	print Dumper( \%fqfiles );
+	foreach my $sample (keys %fqfiles)  {
 	  
+	  my $param = " -1 $fqfiles{ $sample }[0] ";
+	  $param   .= " -2 $fqfiles{ $sample }[1] " if ($fqfiles{ $sample }[1]);
 	  
-	  ### QC_Report ###
-	  my %fqfiles = EASIH::DONE::fetch_files_from_rid_by_sample( $rid );
-	  use Data::Dumper;
-	  if (1) {
-	    foreach my $sample (keys %fqfiles)  {
-	      
-	      my $param = " -1 $fqfiles{ $sample }[0] ";
-	      $param   .= " -2 $fqfiles{ $sample }[1] " if ($fqfiles{ $sample }[1]);
-	      
-	      my @GARstring;
-	      
-	      push @GARstring, "echo $Execute{'05-QC_DB'}{'01-command'} $param | qsub -cwd";
-	      push @GARstring, $Execute{'05-QC_DB'}{'02-prestatus'};
-	      push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
-	      push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
-	      
-	      next if( !GrabAndRun(@GARstring) );
-	    }
-	  }
+	  my @GARstring;
+	  
+	  push @GARstring, $Execute{'05-QC_DB'}{'01-command'} . "$param";
+	  push @GARstring, $Execute{'05-QC_DB'}{'02-prestatus'};
+	  push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
+	  push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
+	  
+	  last if( !GrabAndRun(@GARstring) );
 	}
 	
 	
@@ -259,8 +253,10 @@ foreach my $dir ( @dirs ) {
 	}
       }
     }
-  NEXT_RUNFOLDER:
+    last if ( $opts{ 'd' } );
+  NEXT_RUNFOLDER: 
   }
+  last if ( $opts{ 'd' } );
 }
 
 ###########################################################
@@ -274,8 +270,8 @@ sub RunStatus
 
 
 ###########################################################
-sub SendEmail
-{
+sub SendEmail {
+
     my($subject, $message,$success) = @_;
  
     $subject = "ERROR:  $subject" if ( ! $success );

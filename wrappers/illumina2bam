@@ -1,0 +1,107 @@
+#!/usr/bin/perl 
+# 
+# simpel wrapper for the Illumina2bam jars
+# 
+# 
+# Kim Brugger (16 Apr 2010), contact: kim.brugger@easih.ac.uk
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Std;
+
+
+my @java_paths = ("/usr/local/Cluster-Apps/java/",
+		  "/software/installed/java/",
+		  "/usr/local/java/",
+		  "/usr/bin/");
+
+
+my @ill2bam_paths = ("/usr/local/installed/",
+		     "/home/easih/installed/",
+		     "/software/installed/",
+		     "/home/kb468/bin/");
+
+
+my ( $java, $ill2bam_dir);
+
+set_paths();
+
+
+
+my @jars = glob("$ill2bam_dir/*jar");
+map{ $_ =~ s/.*\/// } @jars;
+
+my %opts;
+getopts('hJ:T:v', \%opts);
+
+if ( $opts{'v'} ) {
+  my $ill2bam = (grep (/Illumina2bam-\d\.\d+.jar/, @jars))[0];
+  $ill2bam =~ s/.jar//;
+  print "$ill2bam\n";
+  exit;
+}
+elsif ( $opts{ h } || (! $opts{J} && ! $opts{T})) {
+
+  $0 =~ /.*\//;
+  print STDERR "USAGE $0 -h[elp] -J[ar file] <jar opts> -v<ersion>\n";
+  print STDERR "Jars: " . join("\n      ", @jars) . "\n";
+  exit 1;
+}
+
+my $module = $opts{J} || $opts{T};
+
+$module .= ".jar" if ( $module !~ /.jar/);
+
+
+system  "$java -jar $ill2bam_dir/$module @ARGV\n";
+my $exit_value = $?>>8;
+exit $exit_value;
+
+
+
+
+# 
+# 
+# 
+# Kim Brugger (06 Oct 2010)
+sub set_paths {
+  
+  my ($java_date, $ill2bam_date) = (0, 0);
+  
+  foreach my $java_path ( @java_paths ) {
+    
+    if (-e $java_path ) {
+      foreach my $installation ( glob("$java_path/*")) {
+	if ( -e "$installation/bin/java" && -x "$installation/bin/java"  ) {
+	  
+	  my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat("$installation/bin/java");
+	  if ( $java_date < $mtime ) {
+	    $java = "$installation/bin/java";
+	    $java_date = $mtime;
+	  }
+	}
+      }
+    }
+  }
+  
+
+
+  foreach my $ill2bam_path ( @ill2bam_paths ) {
+    if (-e $ill2bam_path ) {
+      foreach my $installation ( glob("$ill2bam_path/Illumina2bam*")) {
+	foreach my $pfile ( glob("$installation/Illumina2bam*.jar")) {
+	  if ( -e $pfile && $pfile =~ /Illumina2bam-\d.\d+.jar/) {
+	    my ($dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks) = stat("$pfile");
+	    if ( $ill2bam_date < $mtime ) {
+	      $ill2bam_dir = $installation;
+	      $ill2bam_date = $mtime;
+	      last;
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+}

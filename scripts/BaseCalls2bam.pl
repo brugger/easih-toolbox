@@ -49,7 +49,7 @@ EASIH::DONE::Connect('done_dev') if ($debug);
 
 my %opts;
 #getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmb:L:", \%opts);
-getopts("hB:L:bf", \%opts);
+getopts("hB:L:bfS", \%opts);
 
 
 # 
@@ -76,22 +76,24 @@ sub usage {
 }
 
 
-my $basecall_dir       = $opts{'B'} || "./";
+my $basecall_folder   = $opts{'B'} || "./";
 # I need to find the run_folder name, for the data mongering things.
-my $runfolder   = id_run_folder();
+my $run_folder   = id_run_folder();
+my $intensities_folder = "$basecall_folder/../";
 # The config file is checked to see if this was an indexed run anyway
-my $run_config = EASIH::Illumina::Config::readin( $basecall_dir );
+my $run_config = EASIH::Illumina::Config::readin( $basecall_folder );
 my $indexed_run = 0;
 $indexed_run = 1 if ( $$run_config{ is_indexed });
+my $reads = @{$$run_config{ reads}};
 my $PE = 0;
-$PE = 1 if ( ( $indexed_run && @{$$run_config{ reads}} == 3) ||
-	     (!$indexed_run && @{$$run_config{ reads}} == 2));
+$PE = 1 if ( ( $indexed_run && $reads >= 3) ||
+	     (!$indexed_run && $reads == 2));
 
 my @lanes = @{$$run_config{ 'lanes'}};
 @lanes = verify_lane_names( \@lanes, split(',', $opts{'L'})) if ( $opts{'L'} ) ;
 
-print "Indexed: $indexed_run || PE: $PE || Lanes: @lanes\n";
-my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_dir );
+print "Indexed: $indexed_run || PE: $PE || Lanes: @lanes || Reads: $reads\n";
+my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_folder );
 
 
 my $mismatches    = $opts{'m'} || 0;
@@ -103,7 +105,7 @@ $parallel = 0 if ($opts{S});
 
 my $paired_data = 0;
 
-my $fq_out  = $opts{ 'f' } || 1;
+my $fq_out  = $opts{ 'f' } || 0;
 my $bam_out = $opts{ 'b' } || 0;
 
 
@@ -114,10 +116,10 @@ my %filenames;
 my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
 
 
-exit;
+#exit;
 
 #$runfolder = "ILL_TEST_10" if ( $debug );
-my $rid = EASIH::DONE::add_run($runfolder, 'ILLUMINA');
+my $rid = EASIH::DONE::add_run($run_folder, 'ILLUMINA');
 print "RID :: $rid \n";
 fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
 
@@ -127,13 +129,10 @@ my (%fhs, %fids);
 
 for(my $lane = 1; $lane<=8; $lane++) {
 #for(my $lane = 4; $lane<=8; $lane++) {
-
   next if (!$$sample_names{ $lane });
 
   EASIH::Parallel::job_push(\&analyse_lane, $lane);
-#  analyse_lane($lane)
 }
-
 
 if ( $parallel ) {
   print EASIH::Parallel::run_parallel( );
@@ -149,7 +148,7 @@ foreach my $lane_nr  (keys %filenames) {
   }
   # queue up the calculation of md5 sums
   foreach my $filename (keys %{$filenames{ $lane_nr }}) {
-    EASIH::Parallel::job_push(\&EASIH::MD5::create_file, "$filenames{ $lane_nr }{$filename}.fq.gz");
+#    EASIH::Parallel::job_push(\&EASIH::MD5::create_file, "$filenames{ $lane_nr }{$filename}.fq.gz");
   }
 }
 
@@ -165,7 +164,7 @@ else {
 
 if ( $datamonger ) {
 
-  my $res = EASIH::Illumina::Summary::readin_summaries($basecall_dir);
+  my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
   EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
 
   EASIH::DONE::add_offloading_status($rid, 
@@ -178,34 +177,37 @@ if ( $datamonger ) {
 # 
 # Kim Brugger (17 Jun 2011)
 sub outfile {
-  my ( $sample_filename, $lane_nr ) = @_;
+  my ( $barcode, $lane_nr ) = @_;
 
-  print "$sample_filename, $lane_nr \n";
+#  print "$barcode, $lane_nr \n";
 
-  return $fhs{ $lane_nr }{ $sample_filename } if ( $fhs{ $lane_nr }{ $sample_filename } );
+  return $fhs{ $lane_nr }{ $barcode } if ( $fhs{ $lane_nr }{ $barcode } );
 
 #  my ($basename, $read_nr) = $sample_name =~ /^(.*?)\.[12]/;
+
+  my $sample_filename = $filenames{ $lane_nr }{$barcode};
+
+  print "$lane_nr $barcode $sample_filename\n";
   
   if ( $sample_filename =~ /\.1\.fq\.gz/ ||  $sample_filename =~ /\.2\.fq\.gz/ ) {
-    my $base_filename = $filenames{ $lane_nr }{ $sample_filename } || die "No filename for '$sample_filename' in lane '$lane_nr'\n";
+    my $base_filename = $filenames{ $lane_nr }{ $barcode } || die "No filename for '$sample_filename' in lane '$lane_nr'\n";
     
     my $fh;
     open ($fh, "| gzip -c > $sample_filename") || fail( "Could not open '$base_filename': $!\n", "BASECALL2FQ_PATH_ERROR");
-    $fhs{ $lane_nr }{ $sample_filename }  = $fh;
+    $fhs{ $lane_nr }{ $barcode }  = $fh;
   }
   elsif ( $sample_filename =~ /\.bam/ ) {
-    my $base_filename = $filenames{ $lane_nr }{ $sample_filename } || die "No filename for '$sample_filename' in lane '$lane_nr'\n";
+    my $base_filename = $filenames{ $lane_nr }{ $barcode } || die "No entry in filenames for '$sample_filename' in lane '$lane_nr'\n";
     
     my $fh;
     open ($fh, "| samtools view -Sb - > $sample_filename") || fail( "Could not open '$base_filename': $!\n", "BASECALL2FQ_PATH_ERROR");
-    $fhs{ $lane_nr }{ $sample_filename }  = $fh;
+    $fhs{ $lane_nr }{ $barcode }  = $fh;
   }
-  
   
   if ( $datamonger ) {
     
 #    my ($sample, $project) = EASIH::Sample::filename2sampleNproject($base_filename);
-#    my $fid = EASIH::DONE::add_file($base_filename, $sample, $project, $runfolder, 'ILLUMINA');
+#    my $fid = EASIH::DONE::add_file($base_filename, $sample, $project, $run_folder, 'ILLUMINA');
 #    $fids{ $lane_nr }{ $sample_filename }  = $fid;
   }
   
@@ -219,16 +221,25 @@ sub outfile {
 sub validate_names_and_open_outfiles {
   my ( $sample_sheet, @lanes ) = @_;
   
+
+  if ( $outdir ) {
+    if ( -e "$outdir" && ! -d "$outdir") {
+      fail("$outdir is not a directory\n", "BASECALL2FQ_PATH_ERROR");
+    }
+    elsif ( -e "$outdir" && ! -w "$outdir") {
+      fail("$outdir is not writeable\n", "BASECALL2FQ_PATH_ERROR");
+    }
+    if ( $outdir && ! -d $outdir ) {
+      system "mkdir -p $outdir" || die "Could not create directory '$outdir': $!\n";
+    }
+  }
+
   my ($sample_names, $errors, $warnings, $project_name ) = EASIH::Illumina::Sample_sheet::readin( $sample_sheet );
   
-
   fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
   $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, @lanes ) ;
   fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
-
-
-  print Dumper( $sample_names );
 
   # assign filenames to each sample in each lane, as this script can/will
   # run in parallel this has to be done before we loose control.
@@ -248,40 +259,26 @@ sub validate_names_and_open_outfiles {
       else {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);
       }
-      
-      $filenames{ $lane_nr }{ "$sample_name.1" }   = "$base_filename.1.fq.gz";
-      $filenames{ $lane_nr }{ "$sample_name.2" }   = "$base_filename.1.fq.gz";
-      $filenames{ $lane_nr }{ "$sample_name.bam" } = "$base_filename.bam";
 
-      outfile("$sample_name.1", $lane_nr) if ( $fq_out );
-      outfile("$sample_name.2", $lane_nr) if ( $PE && $fq_out);
-
-      outfile("$sample_name.bam", $lane_nr) if ( $bam_out );
-
+      if ( $fq_out ) { 
       
+	$filenames{ $lane_nr }{ "$bcode.1" } = "$base_filename.1.fq.gz";
+	outfile("$bcode.1", $lane_nr);
+	if ( $PE ) {
+	  $filenames{ $lane_nr }{ "$bcode.2" }   = "$base_filename.1.fq.gz";
+	  outfile("$bcode.2", $lane_nr) if ( $PE && $fq_out);
+	}
+      }
       
+      if ( $bam_out ) {
+	$filenames{ $lane_nr }{ "$bcode.bam" } = "$base_filename.bam";
+#	print Dumper( %filenames );
+	outfile("$bcode.bam", $lane_nr);
+      }
     }
   }
 
   print Dumper ( \%filenames );
-
-  print "Done directory and outfile\n";
-
-  exit;
-  
-  
-  if ( $outdir ) {
-    if ( -e "$outdir" && ! -d "$outdir") {
-      fail("$outdir is not a directory\n", "BASECALL2FQ_PATH_ERROR");
-    }
-    elsif ( -e "$outdir" && ! -w "$outdir") {
-      fail("$outdir is not writeable\n", "BASECALL2FQ_PATH_ERROR");
-    }
-    if ( $outdir && ! -d $outdir ) {
-      system "mkdir -p $outdir" || die "Could not create directory '$outdir': $!\n";
-    }
-  }
-  
   
   return $sample_names;
 }
@@ -294,6 +291,8 @@ sub validate_names_and_open_outfiles {
 # Kim Brugger (06 Jan 2011)
 sub verify_bcode {
   my ($bc1, @bc2s) = @_;
+
+  return $bc1 if ( $bc1 eq 'default');
 
   foreach my $bc2 ( @bc2s ) {
 
@@ -323,7 +322,7 @@ sub verify_bcode {
 
 
 # 
-# Need the runfolder for the datamongering. As the script can be
+# Need the run_folder for the datamongering. As the script can be
 # called in every possible way this is a tad complicated
 # 
 # Kim Brugger (17 Jun 2011)
@@ -336,11 +335,11 @@ sub id_run_folder {
 
 
   # An absolute path was given to the BaseCalls dir
-  if ( $basecall_dir && $basecall_dir =~ /^\// ) {
-    $dir = $basecall_dir;
+  if ( $basecall_folder && $basecall_folder =~ /^\// ) {
+    $dir = $basecall_folder;
   }
-  elsif( $basecall_dir ) {
-    $dir = "$cwd//$basecall_dir";
+  elsif( $basecall_folder ) {
+    $dir = "$cwd//$basecall_folder";
   }
   else { 
     $dir = $cwd;
@@ -353,7 +352,7 @@ sub id_run_folder {
     fail("Cannot handle input paths containing: ../\n", "BASECALL2FQ_INPATH_ERROR");
   }
 
-  $basecall_dir = $dir;
+  $basecall_folder = $dir;
 
   my @dirs = split( "/", $dir);
   return $dirs[3];
@@ -436,11 +435,98 @@ sub find_sample_sheet {
 
 
 
+
+# 
+# 
+# 
+# Kim Brugger (30 Oct 2012)
+sub analyse_lane {
+  my ( $lane_nr ) = @_;
+
+  my @bar_codes = sort keys %{$$sample_names{ $lane_nr }} if (ref $$sample_names{ $lane_nr } eq "HASH");
+#  print "@bar_codes\n";
+
+  my %stats;
+  
+  my $cmd = "illumina2bam -T Illumina2bam.jar I=$intensities_folder R=$basecall_folder/../../../ B=$basecall_folder L=$lane_nr O=/dev/stdout SC=EASIH | samtools view -h - | ";
+
+#  print "$cmd\n";
+
+  my $prev_read_barcode = undef;
+  my $strand = 1;
+
+#  print STDERR Dumper (%filenames);
+#  print Dumper (%filenames);
+  
+  open ( my $i2b_pipe,  "$cmd") || die "Could not open illumina2bam pipe: $!\n";
+  while (my $line = <$i2b_pipe>) {
+    
+    if ($line =~ /^\@/ && $bam_out) {
+      foreach my $bcode ( keys %{$fhs{ $lane_nr }} ) {
+	if ($bcode =~ /\.bam/) {
+	  my $fh = outfile($bcode, $lane_nr);
+	  print $fh $line;
+	}
+      }
+      next;
+    }
+
+    $stats{lane_total}++;
+      
+    my ($id, $flag, undef, undef, undef, undef, undef, undef, undef, $seq, $qual, $read_barcode) = split("\t", $line, 12);
+
+#    print "$read_barcode $strand\n";
+
+    if ($flag & 0x0040 ) {
+      $strand = 1;
+    }
+    if ($flag & 0x0080 ) {
+      $strand = 2;
+    }
+ 
+    if ($PE && $indexed_run && $read_barcode =~ /.*?BC:Z:(.*?)\t.*/) {
+      $read_barcode =~ s/.*?BC:Z:(.*?)\t.*/$1/;
+      chomp( $read_barcode );
+      $prev_read_barcode = $read_barcode;
+    }
+    else {
+      $read_barcode = $prev_read_barcode;
+    }
+
+    if ( $indexed_run ) {
+    
+      print "$read_barcode\n";
+      $read_barcode = verify_bcode($read_barcode, @bar_codes) if ( $indexed_run );
+
+      next if (! $read_barcode );
+    }
+      
+    $read_barcode ||= 'default';
+
+    my $sample_name = $$sample_names{ $lane_nr }{ $read_barcode } if ($$sample_names{ $lane_nr }{ $read_barcode });
+    
+    if ( $fq_out ) {
+      my $bfout = outfile("$read_barcode.$strand", $lane_nr);
+      print $bfout "\@$id\n$seq\n+\n$qual\n";
+    }
+
+    if ( $bam_out ) {
+      my $bfout = outfile("$read_barcode.bam", $lane_nr );
+      print $bfout $line
+    }
+  }
+  
+}
+
+
+
+
+
 # 
 # 
 # 
 # Kim Brugger (04 Jan 2011)
-sub analyse_lane {
+sub analyse_lane_old {
   my ( $lane_nr ) = @_;
 
   # There is a need to go from sample name to barcode later on.
@@ -452,7 +538,7 @@ sub analyse_lane {
   }
   
   # Get all the files for the lane.
-  my @files = glob("$basecall_dir/s_$lane_nr\_1_*_qseq.txt");
+  my @files = glob("$basecall_folder/s_$lane_nr\_1_*_qseq.txt");
 
   my ($lane_total, $lane_pass, $lane_QV30, $lane_bases) = (0, 0, 0, 0);
   my $read_length = 0;

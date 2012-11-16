@@ -149,7 +149,7 @@ if ( $bam && $baits ) {
     print STDERR "**************************************\n";
   }
 
-  die "\n\n ERROR!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
+#  die "\n\n ERROR!!!! Wrong bed file used: $baits !~ $ANstring \n\n", if($baits !~ m/$ANstring/);
   
   $ANstring = "# Aligned2Reference: $ANstring";
   

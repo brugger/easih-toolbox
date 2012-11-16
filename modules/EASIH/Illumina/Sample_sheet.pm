@@ -64,8 +64,10 @@ sub readin {
   }
   close $in;
 
+
   while($_ = shift @lines ) {
     chomp;
+    $_ =~ s/\"//g; 
     
     # As I dont trust they can export the csv file in the same format each time
     # we will use the first line to identify field and text delimiters.

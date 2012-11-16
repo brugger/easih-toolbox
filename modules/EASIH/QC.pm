@@ -403,7 +403,6 @@ sub analyse {
 
     if ( $qual && $qual[$i]) {
       my $base_qual = ord($qual[$i]) - 33;
-      $base_qual = int($base_qual/2) if ( $base_qual > 40);
       
       $$res{base_qual}[$i]{$base_qual}++;
       $$res{base_qual_dist}{$base_qual}++;
@@ -1111,11 +1110,13 @@ sub random_sample_fastq_gz_files {
   RE_SEARCH:
 
     while ( $_ =  $z1->getline() ) {
+
       last if ( $_ !~ /\+\;\=\>\<\#\?.+\@/ && $_ =~ /^\@[A-Za-z0-9-_]+:\d+:\d+/ ||  $_ =~ /^\@[A-Za-z0-9-_]*:\d+_\d+_\d+/);
       $z2->getline() if ( $infile2);
     }
 
     next if (! $_);
+
 
     if ($_ && 
 	($_ =~ /^\@[A-Za-z0-9-_]+:\d+:\d+/ ||  

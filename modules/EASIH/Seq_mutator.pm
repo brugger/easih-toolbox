@@ -4,9 +4,9 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-my $mutation_rate  = 0.01; # 1%
-my $deletion_rate  = 0.05; # 1%
-my $insertion_rate = 0.05; # 1%
+my $mutation_rate  = 0.001; # 1%
+my $deletion_rate  = 0.0005; # 1%
+my $insertion_rate = 0.0005; # 1%
 
 
 # 

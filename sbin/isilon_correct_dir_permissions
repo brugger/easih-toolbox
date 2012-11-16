@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# Checks for group writeable permissions in the /data directories. If wrong permissions they are fixed
+# 
+# 
+# Kim Brugger (15 Jun 2011), contact: kim.brugger@easih.ac.uk
+
+for basedir in `ls /ifs/data/`
+do
+
+ if [[ "$basedir" =~ [A-Z][0-9] ]]; then
+#    echo "Looking in: /ifs/data/$basedir/";
+    for dir in `find "/ifs/data/$basedir/"  -type d -not -perm -g+w `
+    do
+#      echo "Need to change permissions on $dir"
+      chmod 4775 $dir;
+  done
+ fi
+done
+
+

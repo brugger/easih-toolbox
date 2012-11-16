@@ -25,7 +25,6 @@ sub bc_length {
   return $bc_length;
 }
 
-
 %barcodes = (
   "ATCACG"  =>   1,
   "CGATGT"  =>   2, 
@@ -87,10 +86,7 @@ sub bc_length {
   "CTGATC"  => "NEBNext9",
   "AAGCTA"  => "NEBNext10",
   "GTAGCC"  => "NEBNext11",
-  "TACAAG"  => "NEBNext12",
-
-
-);
+  "TACAAG"  => "NEBNext12");
 
 # 
 # 

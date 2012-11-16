@@ -197,7 +197,6 @@ if ($datamonger) {
 }
 
 
-
 my (%fhs, %fids);
 
 for(my $lane = 1; $lane<=8; $lane++) {
@@ -565,6 +564,13 @@ sub validate_lane_names {
 # Kim Brugger (06 Jan 2011)
 sub verify_bcode {
   my ($bc1, @bc2s) = @_;
+
+
+ if (length($bc1) != length( $bc2s[0] )) {
+   my $bcode_length = length( $bc2s[0] );
+   $bc1 =~ s/^(.{$bcode_length}).*/$1/;
+  }
+
 
   foreach my $bc2 ( @bc2s ) {
 

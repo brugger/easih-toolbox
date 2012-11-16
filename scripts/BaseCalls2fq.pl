@@ -17,7 +17,7 @@ my $debug = 0;
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
 BEGIN {
-  my $DYNAMIC_LIB_PATHS = 0;
+  my $DYNAMIC_LIB_PATHS = 1;
   if ( $DYNAMIC_LIB_PATHS ) {
     my $path = $0;
     if ($path =~ /.*\//) {
@@ -239,7 +239,7 @@ else {
 
 if ( $datamonger ) {
 
-  my $res = EASIH::Illumina::Summary::readin_summaries($indir);
+  my $res = EASIH::Illumina::Summary::readin_summaries( $indir );
   EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
 
   EASIH::DONE::add_offloading_status($rid, 
@@ -495,7 +495,7 @@ sub validate_lane_names {
 
   if ($sample_sheet ) {
     my $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, $limited_lanes ) ;
-    fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
+#    fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
   }
 
   # assign filenames to each sample in each lane, as this script can/will
@@ -512,8 +512,6 @@ sub validate_lane_names {
 
 	$filenames{ $lane }{ "$sample_name.1" } = "$base_filename";
 	outfile("$sample_name.1", $lane);
-
-
 	if (( $indexed_run  && (-e "$indir/s_1_3_0001_qseq.txt" || -e "$indir/s_1_3_1101_qseq.txt")) ||
 	    ( !$indexed_run && (-e "$indir/s_1_2_0001_qseq.txt" || -e "$indir/s_1_2_1101_qseq.txt"))) {
 	  my ($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name.2", $outdir);
@@ -565,6 +563,7 @@ sub validate_lane_names {
 sub verify_bcode {
   my ($bc1, @bc2s) = @_;
 
+#  print "$bc1, @bc2s\n";
 
  if (length($bc1) != length( $bc2s[0] )) {
    my $bcode_length = length( $bc2s[0] );

@@ -18,7 +18,7 @@ BEGIN {
   else {
     $path = "./";
   }
-  push @INC, $path;
+#  push @INC, $path;
 }
 
 use Getopt::Std;
@@ -30,12 +30,62 @@ use lib '/home/kb468/projects/BRC_exomes/easih-toolbox/modules';
 use EASIH::Misc;
 use EASIH::Pipeline;
 
-my $opts = '1:2:R:r:p:B:o:d:';
+my $opts = '1:2:R:r:p:B:o:d:Q:';
 my %opts;
 getopts($opts, \%opts);
 
 #usage() if ( $opts{h});
 
+
+# if using standard naming, this is a lot easier.
+if ( $opts{Q} ) {
+
+  $opts{Q} =~ s/\..*//;
+
+  $opts{'1'} = join(",", sort(glob("$opts{Q}.1.fq.gz")));
+  $opts{'2'} = join(",", sort(glob("$opts{Q}.2.fq.gz")));
+
+  if ($opts{'1'} =~ /^C01/ ) {
+    $opts{ 'B' } = '/data/refs/BRCA/BRCA12_exons.bed';
+    $opts{ 'r' } = '/data/refs/BRCA/BRCA12.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C02/ ) {
+    $opts{ 'B' } = '/data/refs/STICKLERS/STICKERS.bed';
+    $opts{ 'r' } = '/data/refs/STICKLERS/STICKERS.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C03/ ) {
+    $opts{ 'B' } = '/data/refs/TS/TS_exons.bed';
+    $opts{ 'r' } = '/data/refs/TS/TS.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C04/ ) {
+    $opts{ 'B' } = '/data/refs/STICKLERS/STICKERS.bed';
+    $opts{ 'r' } = '/data/refs/STICKLERS/STICKERS.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C05/ ) {
+    $opts{ 'B' } = '/data/refs/PKD/PKD.bed';
+    $opts{ 'r' } = '/data/refs/PKD/PKD.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C07/ ) {
+    $opts{ 'B' } = '/data/refs/NEMO/NEMO.bed';
+    $opts{ 'r' } = '/data/refs/NEMO/NEMO.fasta';
+  }
+  elsif ($opts{'1'} =~ /^C08/ ) {
+    $opts{ 'B' } = '/data/refs/HNPCC/HNPCC.bed';
+    $opts{ 'r' } = '/data/refs/HNPCC/HNPCC.fasta';
+  }
+
+
+
+  $opts{'L'} = "$opts{Q}.log";
+  $opts{'o'} = "$opts{Q}";
+  
+  $opts{'R'} = '/data/refs/human_1kg/human_g1k_v37.fasta';
+  $opts{'d'} = '/scratch/kb468/GATK_bundle/b37/dbsnp_132.b37.vcf';
+
+
+}  
+
+#print Dumper(\%opts);
 
 my $first         = $opts{'1'}     || usage();
 my $second         = $opts{'2'}     || usage();
@@ -46,20 +96,14 @@ my $leeway           = $opts{'l'}     || 50;
 my $dbsnp            = $opts{d} || usage();
 my $baits            = $opts{B}  || usage();
 
-
 my $samtools    = EASIH::Misc::find_program('samtools');
-my $smalt       = EASIH::Misc::find_program('smalt');
 my $picard      = EASIH::Misc::find_program('picard');
 my $gatk        = EASIH::Misc::find_program('gatk_1.3-14');
 
 # set platform specific bwa aln parameters
-my $align_param .= " -q 15 -e 5";
+my $align_param .= " -q 15 -e 50";
 
 my $bwa             = EASIH::Misc::find_program('bwa_0.6.1-tpx');
-
-
-my $smalt_ref = $reference;
-$smalt_ref =~ s/^(.*)\..*/$1/;
 
 my $out = $opts{o} || $first;
 
@@ -86,6 +130,7 @@ EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
 EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge2' );
 EASIH::Pipeline::add_step('bam_merge2', 'bam_index2');
 EASIH::Pipeline::add_step('bam_index2', 'count_covariates');
+EASIH::Pipeline::add_step('bam_index2', 'flagstats');
 EASIH::Pipeline::add_step('count_covariates', 'table_recalibration');
 EASIH::Pipeline::add_step('table_recalibration', 'bam_index3');
 
@@ -98,7 +143,7 @@ EASIH::Pipeline::backend('Local');
 EASIH::Pipeline::max_jobs( $host_cpus );
 EASIH::Pipeline::max_retry(0);
 
-EASIH::Pipeline::print_flow();
+#EASIH::Pipeline::print_flow();
 EASIH::Pipeline::run();
 
 my %file2bam;
@@ -110,8 +155,8 @@ sub bwa_aln {
   my $tmp_sai1  = EASIH::Pipeline::tmp_file(".sai");
   my $tmp_sai2  = EASIH::Pipeline::tmp_file(".sai");
     
-  my $cmd = "$bwa aln -t $host_cpus $align_param -f $tmp_sai1 $small_reference $first ; ";
-  $cmd   .= "$bwa aln -t $host_cpus $align_param -f $tmp_sai2 $small_reference $second";
+  my $cmd = "$bwa aln  $align_param -f $tmp_sai1 $small_reference $first ; ";
+  $cmd   .= "$bwa aln  $align_param -f $tmp_sai2 $small_reference $second";
   
   my $output = { "first_fq"   => $first,
 		 "first_sai"  => $tmp_sai1,
@@ -129,7 +174,7 @@ sub bwa_sampe {
   my $tmp_file = EASIH::Pipeline::tmp_file(".sam");
 
   my $cmd;
-  $cmd = "$bwa sampe -t $host_cpus -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+  $cmd = "$bwa sampe -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
@@ -143,12 +188,16 @@ sub bwa_sampe {
 sub bam_sort {
   my ($input) = @_;
 
+
   my $fixed_bam = EASIH::Pipeline::tmp_file(".bam");
+#  print "$input | $samtools view -t $reference.fai -Sb - -o $fixed_bam\n";
+
   open( my $sam_in,  $input ) || die "Could not open file '$input': $!\n";
-  open( my $sam_out, "| $samtools view -t $reference.fai -Sb - -o $fixed_bam" ) || die "Could not open file '$fixed_bam': $!\n";
+  open( my $sam_out, "| $samtools view -t $reference.fai -o $fixed_bam -Sb - " ) || die "Could not open file '$fixed_bam': $!\n";
   while(<$sam_in>) {
     if (/^\@/ && !/^\@SQ/) {
       print $sam_out $_;
+#      print  $_;
     }
     else {
       my @F = split("\t");
@@ -158,6 +207,7 @@ sub bam_sort {
 	$F[3] += $start - 1;
 	$F[2] = $chr;
 	print $sam_out join("\t", @F);
+#	print  join("\t", @F);
       }
     }
   }
@@ -199,7 +249,7 @@ sub mark_dups {
   my $username = scalar getpwuid $<;
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $metrix_file = EASIH::Pipeline::tmp_file(".mtx");
-  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
+  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT ";
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
@@ -241,8 +291,8 @@ sub UnifiedGenotyper {
   my ($input) = @_;
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".vcf");
-  my $cmd = "$gatk -T UnifiedGenotyper -nt $host_cpus -R $reference -I $input -glm BOTH -G Standard -A AlleleBalance -stand_call_conf 30.0 -stand_emit_conf 10.0 -dcov 1000 -baq CALCULATE_AS_NECESSARY -o $vcf_file";
-  $cmd .= " -L $out.intervals";
+  my $cmd = "$gatk -T UnifiedGenotyper  -R $reference -I $input -glm BOTH -G Standard -A AlleleBalance -stand_call_conf 30.0 -stand_emit_conf 10.0 -dcov 1000 -minIndelFrac 0.1 -baq CALCULATE_AS_NECESSARY -o $vcf_file";
+  $cmd .= " -L $out.intervals --max_alternate_alleles 4";
   
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
@@ -256,7 +306,7 @@ sub UnifiedGenotyper {
 sub annotate_VCF {
 
 
-  my $cmd = "~/projects/perl_xls/clinical_report.pl -v $vcf_file -O $out.var.csv -o $out.var_full.csv -b $bam_file -B $baits\n";
+  my $cmd = "/software/installed/easih-toolbox/pipelines/clinical_report.pl -v $vcf_file -O $out.var.csv -o $out.var_full.csv -b $bam_file -B $baits \n";
   EASIH::Pipeline::submit_job($cmd);
 
 }
@@ -268,7 +318,7 @@ sub annotate_VCF {
 # 
 # Kim Brugger (05 Jul 2012)
 sub vcf2xls {
-  my $cmd = "~/projects/perl_xls/v2.2/clinical_report_builder_2.21.pl $out.var_full.csv \n";
+  my $cmd = "/software/installed/easih-toolbox/pipelines/clinical_report_builder.pl $out.var_full.csv \n";
   EASIH::Pipeline::submit_job($cmd);
   
 }
@@ -332,6 +382,19 @@ sub realign_targets {
   my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
   my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -L $out.intervals -I $input";
   EASIH::Pipeline::submit_job($cmd, "$tmp_file $input");
+}
+
+
+
+# 
+# 
+# 
+# Kim Brugger (09 Nov 2012)
+sub flagstats {
+  
+  my $cmd = "$samtools flagstat $bam_file > $bam_file.flagstat";
+  EASIH::Pipeline::submit_job($cmd, "$bam_file.flagstat");
+  
 }
 
 

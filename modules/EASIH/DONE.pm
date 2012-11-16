@@ -1167,7 +1167,43 @@ sub fetch_files_from_sample {
 
 
 
+# 
+# 
+# 
+# Kim Brugger (24 Apr 2012), contact: kim.brugger@easih.ac.uk
+sub fetch_sample_sheet_hash {
+  my ( $rid ) = @_;
+
+  use EASIH::DB;
+
+  my $q    = "select f.fid, lane, read_nr, sample, bcode, name from illumina_sample_stats iss, file f where f.fid=iss.fid and f.rid = ?";
+  my $sth  = EASIH::DB::prepare($dbi, $q);
+
+  my $fetch_res = EASIH::DB::fetch_array_hash( $dbi, $sth, $rid );
+  
+  my %res;
+
+  foreach my $entry ( @$fetch_res ) {
+    my $lane_nr = $$entry{ 'lane' };
+    my $read_nr = $$entry{ 'read_nr' };
+    my $barcode = $$entry{ 'bcode' };
+    $barcode = "default" if ( $barcode eq "");
+    my $sample  = $$entry{ 'sample' };
+    my $file    = $$entry{ 'name' };
+    
+
+
+    $res{ $lane_nr }{ "$barcode.$read_nr" } = $file;
+  }
+
+
+  return %res;
+}
+
+
+
 1;
+
 
 
 

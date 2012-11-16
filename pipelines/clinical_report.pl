@@ -69,7 +69,7 @@ my $user        = "easih_ro";
 
 # For Sticklers: CJP added 'NM_033150', 'NM_080630', 'NM_080679'; HM suggested to add: 'NM_001844', 'NM_001854'
 # For TS: CJP added 'NM_001162427', 'NM_001114382'
-my @ref_seqs = ('NM_000059', 'NM_007294', 'NM_080679', 'NM_001844', 'NM_001854', 'NM_001162427', 'NM_001114382');
+my @ref_seqs = ();
 
 # Howard wanted to change the low depth value to 30:
 my $depth_cutoff = 30;
@@ -214,6 +214,9 @@ my %grch37_remapping = ();
 
 my ($gatk_only, $pileup_only, $both_agree, $both_disagree) = (0, 0, 0, 0);
 my $counter = 10;
+
+print_var_header();
+
 foreach my $chr ( sort {$a cmp $b}  keys %SNPs ) {
 
   
@@ -312,66 +315,75 @@ sub text_table {
 }
 
 
-my $printed_header = 0;
 
 # 
 # 
 # 
 # Kim Brugger (08 Jul 2010)
+sub print_var_header {
+
+  my @res;
+
+  $0 =~ s/.*\///;
+  my @header;
+  push @header, [ "#EASIH Variation Report v1.20.1"];
+  push @header, [ "#commandline: $0 @argv"];
+  push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
+  push @header, [ "#script version: $version"];
+  
+  push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
+  
+  push @header, ["$coverage"] if ( $coverage );
+  
+    
+  push @res, @header;
+  
+  my @annotations = ('Position', 'Change', 'Score', 'Depth', 'Genotype', 'AAF', 'FP');
+  
+  push @annotations, ('gene', 'transcript', 'exon', 'Effect', 'Nucleotide pos', 'AA change');
+  push @annotations, ('dbsnp');
+  push @annotations, ('dbsnp version');
+  push @annotations, ('HGMD');
+  
+    
+  push @res, [@annotations];
+    
+
+
+  print $filtered_out_fh text_table( \@res ) if ( $filtered_out );
+  print STDOUT text_table( \@res );
+  
+  
+}
+
+
+# Kim Brugger (08 Jul 2010)
 sub print_results {
   my ( $mapping ) = @_;
 
-#  die Dumper( $mapping );
-
-  my (@res, @filtered_res);
-  if ( ! $printed_header ) {
-
-    $0 =~ s/.*\///;
-    my @header;
-    push @header, [ "#EASIH Variation Report v1.20.1"];
-    push @header, [ "#commandline: $0 @argv"];
-    push @header, [ "#dbases: ". EASIH::SNPs::db_info()];
-    push @header, [ "#script version: $version"];
-    
-    push @header, [ "#bait filtering with a leeway of: $leeway and $baits as the bait file"] if ($baits );
-    
-    push @header, ["$coverage"] if ( $coverage );
-  
-    
-    push @res, @header;
-    push @filtered_res, @header;
-    
-    my @annotations = ('Position', 'Change', 'Score', 'Depth', 'Genotype', 'AAF', 'FP');
-    
-    push @annotations, ('gene', 'transcript', 'exon', 'Effect', 'Nucleotide pos', 'AA change');
-    push @annotations, ('dbsnp');
-    push @annotations, ('dbsnp version');
-    push @annotations, ('HGMD');
-    
-    
-    push @res, [@annotations];
-    push @filtered_res, [@annotations];
-    
-    $printed_header++;  
-  }
-  
-
+#  print STDERR "MAPPING DUMP :: " . Dumper( $mapping );
   my %done;
+  my (@res, @filtered_res);
 
   foreach my $name ( sort keys %$mapping ) {
 
-    $$mapping{$name}{res} = sort_effects( $$mapping{$name}{res});
+#    print STDERR "$name\n";
+
+
+
+#    print STDERR  Dumper( $$mapping{$name}{res} );
 
     my $first = 1;
 
     foreach my $effect ( @{$$mapping{$name}{res}} ) {
+
+#      print STDERR "$done{ $$effect{'transcript_id'}}\n";
 
       next if ($done{ $$effect{'transcript_id'}});
       $done{ $$effect{'transcript_id'}}++;
 
       my $transcript_id = $$effect{ transcript_id };
       $transcript_id =~ s/\.\d+//;
-      next if (!grep {$transcript_id eq $_} @ref_seqs);
       
       my @effect_line;
 
@@ -532,21 +544,27 @@ sub variation_effects {
 
       foreach my $tva (@{$tv->get_all_alternate_TranscriptVariationAlleles}) {
 
+
+
 	my %gene_res;
     
 #    $gene_res{ effect } = "INTERGENIC";
 	$gene_res{ name } = $name;
+#	print STDERR "TID:: : " . $tv->transcript->stable_id . "\n";
 	my $gene = ($tv->transcript ? $ga->fetch_by_transcript_stable_id($tv->transcript->stable_id) : undef);
 	my @entries = grep {$_->database eq 'HGNC'} @{$gene->get_all_DBEntries()};
 
+
 	my @e = map { $_->display_term } @{$tva->get_all_OverlapConsequences};
+
+#	print STDERR Dumper (@e );
+	
 	@e = sort { $effects{ $b } <=> $effects{ $a }} @e;
 
-	$gene_res{exon}     = exon_number($tv);
 	$gene_res{strand}   = $tv->transcript->strand();
 	
 	$gene_res{ effect } = $e[0];
-	$gene_res{hgvs_coding} = $tva->hgvs_coding if ($tva->hgvs_coding);
+	$gene_res{ hgvs_coding } = $tva->hgvs_coding if ($tva->hgvs_coding);
 
 	# HGVS
 	if (defined($tva->hgvs_coding)) {
@@ -570,8 +588,24 @@ sub variation_effects {
 	  
 	  $gene_res{ gene_id } = $entries[0]->display_id;
 	
-	  my $xref = $tva->transcript->get_all_DBEntries('RefSeq_dna' );
-	  $gene_res{ transcript_id } = $$xref[0]->display_id if ( $$xref[0] );
+	  my $xrefs = $tva->transcript->get_all_DBEntries('RefSeq_dna' );
+
+	  # ensure that this is one of the transcripts we are looking for...
+	  if ( $$xrefs[0] ) {
+	    foreach my $xref ( @$xrefs ) {
+	      
+	      my $xref_id = $xref->display_id;
+	      $xref_id =~ s/\.\d+//;
+	      my @grep_res = grep { /^$xref_id/ } @ref_seqs;
+
+	      next if ( @grep_res == 0 );
+#	      print STDERR   " $xref_id ==  '@ref_seqs' [[ '@grep_res' ]] $gene_res{ transcript_id }\n";
+	      $gene_res{ transcript_id } = $xref->display_id;
+
+	      $gene_res{exon}     = exon_number($tv);
+	    }
+	  }
+
  	  my $gene = $ga->fetch_by_transcript_stable_id($tva->transcript->stable_id);
 	  
  	  $gene_res{ cpos } = "?";
@@ -597,9 +631,10 @@ sub variation_effects {
 	    }
 	  }
 	}
-      
 
-	
+
+#	print STDERR Dumper ( \%gene_res );
+      
 	push @{$$vars{ $name }{res}}, \%gene_res if ( $gene_res{ exon });
       }
     }
@@ -744,11 +779,13 @@ sub exon_number {
 #  exit;
 
   my $exon_nr = undef;
-
   foreach my $region ( @{$$bait_regions{ $vf_chr }} ) {
     my ($reg_start, $reg_end, $exon, $reg_id) = @$region;
 
-    next if ( $reg_id ne $transcript );
+
+#    print STDERR "next if ( $reg_id ne $transcript );\n";
+
+#    next if ( $reg_id ne $transcript );
 
     if ( $vf_start >= $reg_start && $vf_start <= $reg_end && $vf_end >= $reg_start && $vf_end <= $reg_end ) {
       return $exon;
@@ -760,7 +797,7 @@ sub exon_number {
 #      return"INTRON";
 #    }
 
-#    if ( $vf_end > $reg_end && $vf_end <= $reg_end + $leeway) { 
+#    if ( $vf_end > $reg_end && $vf_end <= $reg_end NM_001099857+ $leeway) { 
 #      return "INTRON";
 #    }
 
@@ -954,10 +991,10 @@ sub one2three {
 # 
 # 
 # Kim Brugger (29 Apr 2010)
-sub AAF {
+sub AAF_two_alleles {
   my ( $chr, $SNP_pos, $ref_base, $alt_base) = @_;
 
-  print STDERR " $chr, $SNP_pos, $ref_base, $alt_base\n";
+#  print STDERR " $chr, $SNP_pos, $ref_base, $alt_base\n";
 
   if ( ! $bam ) {
 #    print STDERR "need a bam file for finding base distribution\n";
@@ -1040,11 +1077,50 @@ sub AAF {
 }
 
 
+
+# 
+# Now using a python program to calculate this
+# 
+# Kim Brugger (15 Nov 2012)
+sub AAF {
+  my ( $chr, $SNP_pos, $ref_base, $alt_base) = @_;
+
+#  return "0" if ($SNP_pos != 153791228);
+
+  my @alt_alleles = split(/,/, $alt_base);
+
+  use List::Util qw[max];    
+  my $max_allele_lenght = max(length($ref_base), map { length($_) } @alt_alleles);
+
+  map { $_ = $_."-"x(length($ref_base) - length($_)) } @alt_alleles;
+  
+
+  my $bam_allele_freq = "/home/kb468/easih-toolbox/scripts/bam_allele_freq.py";
+
+  my $freqs_line = `$bam_allele_freq $bam $chr $SNP_pos`;
+  chomp $freqs_line;
+  
+  my ( $pos, @freq_entries ) = split("\t", $freqs_line);
+  my %freqs;
+  my $depth = 0;
+  foreach my $freq ( @freq_entries ) {
+    my ($allele, $count) = split(":", $freq);
+    $freqs{ $allele } = $count;
+    $depth += $count;
+  }
+
+#  print STDERR "@alt_alleles\t$freqs_line\t$depth\n";
+#  print STDERR Dumper( \%freqs );
+
+  return join(",", map { sprintf("%.04f", $freqs{$_}/$depth)} @alt_alleles); 
+}
+
+
 # 
 # 
 # 
 # Kim Brugger (29 Apr 2010)
-sub AAF__ {
+sub AAF_old {
   my ( $chr, $SNP_pos, $ref_base, $alt_base) = @_;
 
   print STDERR " $chr, $SNP_pos, $ref_base, $alt_base\n";
@@ -1097,7 +1173,7 @@ sub AAF__ {
       exit;
     }
 
-    next if ( (ord( $qual ) - 33) < 17);
+#    next if ( (ord( $qual ) - 33) < 17);
 
     $base_stats{ $bases }++;
 
@@ -1105,11 +1181,10 @@ sub AAF__ {
   }
 
 
-  die Dumper( \%base_stats );
+ # print STDERR Dumper( \%base_stats );
 
 
   if ( @alt_alleles == 1 ) {
-
     return 1 if ($base_stats{$ref_base} == 0);
     return 0 if ($base_stats{$alt_base} == 0);
   }
@@ -1117,6 +1192,9 @@ sub AAF__ {
   map { $depth += $base_stats{$_} } @alt_alleles;
 
 
+  print STDERR Dumper( \%base_stats );
+
+  print STDERR  "$chr, $SNP_pos " .  $base_stats{$_} ."/" . $base_stats{$_} ." '$depth'  @alt_alleles \n"; 
 
 
   return join(",", map { sprintf("%.04f", $base_stats{$_}/($base_stats{$_}+$depth))} @alt_alleles); 
@@ -1234,7 +1312,7 @@ sub genotype_2_base {
 sub subtract_reference {
   my ($genotype, $reference) = @_;
 
-  print STDERR "$genotype, $reference\n";
+#  print STDERR "$genotype, $reference\n";
 
   return $genotype if ( $genotype eq 'A' ||
 			$genotype eq 'C' ||
@@ -1569,7 +1647,7 @@ sub DepthAndCoverage {
 #  last;
   }
 
-  print Dumper( \%res );
+#  print Dumper( \%res );
   
       
 #  return($DACstring);
@@ -1754,10 +1832,9 @@ sub coords2cpos {
     $$effect{transcript_id} =~ s/\.\d+//;
 
     next if ($$effect{transcript_id} ne $ref_id);
+
     if ( $$effect{ HGVSc } ) {
       	
-      #ENST00000544455.1:c.3215T>A
-      
       $$effect{ HGVSc } =~ s/.*://;
       $$effect{ HGVSc } =~ s/\D\>.*//;
       $$effect{ HGVSc } =~ s/del.*//;

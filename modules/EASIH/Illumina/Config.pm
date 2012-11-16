@@ -19,11 +19,41 @@ sub readin {
   
   $in .= '/config.xml' if ( -d $in );
 
-  my $config = XMLin($in);
+  my $run_config = XMLin($in);
 
 #  print Dumper( $config );
 
-  return $config;
+  my %config = ( raw => $run_config);
+#  my %config = ( raw => '');
+
+  
+
+  $config{ is_indexed } = 0;
+  $config{ is_indexed } = 1 if ($$run_config{ 'Run' }{ 'RunParameters' }{ 'Barcode'} );
+
+
+  if (ref($$run_config{ 'Run' }{'TileSelection'}{ 'Lane' }) eq "ARRAY") {
+    map { push @{$config{lanes}}, $$_{ 'Index' } } @{$$run_config{ 'Run' }{ 'TileSelection' }{ 'Lane' }};
+  }
+  else {
+    push @{$config{lanes}}, $$run_config{ 'Run' }{ 'TileSelection' }{ 'Lane' }{ 'Index' };
+  }
+
+#  print Dumper($$run_config{ 'Run' });
+
+  if (ref($$run_config{ 'Run' }{ 'RunParameters' }{ 'Reads' }) eq "ARRAY") {
+    map { push @{$config{reads}}, $$_{ 'Index' } } @{$$run_config{ 'Run' }{ 'RunParameters' }{ 'Reads' }};
+  }
+  else {
+    push @{$config{reads}}, $$run_config{ 'Run' }{ 'RunParameters' }{ 'Reads' }{ 'Index' };
+  }
+    
+
+#  die Dumper ( \%config );
+  
+    
+
+  return \%config;
 
 #  return \%res;
 }

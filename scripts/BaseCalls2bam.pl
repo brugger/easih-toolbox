@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 my $debug = 0;
-$debug = 1;
+#$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -49,7 +49,7 @@ EASIH::DONE::Connect('done_dev') if ($debug);
 
 my %opts;
 #getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmb:L:", \%opts);
-getopts("hB:L:bfS", \%opts);
+getopts("hB:L:bfSdo:", \%opts);
 
 
 # 
@@ -91,8 +91,7 @@ $PE = 1 if ( ( $indexed_run && $reads >= 3) ||
 
 my @lanes = @{$$run_config{ 'lanes'}};
 @lanes = verify_lane_names( \@lanes, split(',', $opts{'L'})) if ( $opts{'L'} ) ;
-
-print "Indexed: $indexed_run || PE: $PE || Lanes: @lanes || Reads: $reads\n";
+#print "Indexed: $indexed_run || PE: $PE || Lanes: @lanes || Reads: $reads\n";
 my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_folder );
 
 
@@ -112,6 +111,10 @@ my $bam_out = $opts{ 'b' } || 0;
 
 usage() if (! $sample_sheet || $opts{h});
 
+my $rid = EASIH::DONE::add_run($run_folder, 'ILLUMINA');
+print "RID :: $rid \n";
+ 
+
 my %filenames;
 my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
 
@@ -119,20 +122,27 @@ my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
 #exit;
 
 #$runfolder = "ILL_TEST_10" if ( $debug );
-my $rid = EASIH::DONE::add_run($run_folder, 'ILLUMINA');
-print "RID :: $rid \n";
+
+my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
+EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
+
+
 fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
 
 
 
 my (%fhs, %fids);
 
-for(my $lane = 1; $lane<=8; $lane++) {
-#for(my $lane = 4; $lane<=8; $lane++) {
-  next if (!$$sample_names{ $lane });
+print Dumper( %filenames );
 
-  EASIH::Parallel::job_push(\&analyse_lane, $lane);
+#exit;
+
+foreach my $lane_nr ( @lanes ) {
+#for(my $lane = 4; $lane<=8; $lane++) {
+  next if (!$$sample_names{ $lane_nr });
+  EASIH::Parallel::job_push(\&analyse_lane, $lane_nr );
 }
+
 
 if ( $parallel ) {
   print EASIH::Parallel::run_parallel( );
@@ -148,7 +158,7 @@ foreach my $lane_nr  (keys %filenames) {
   }
   # queue up the calculation of md5 sums
   foreach my $filename (keys %{$filenames{ $lane_nr }}) {
-#    EASIH::Parallel::job_push(\&EASIH::MD5::create_file, "$filenames{ $lane_nr }{$filename}.fq.gz");
+    EASIH::Parallel::job_push(\&EASIH::MD5::create_file, "$filenames{ $lane_nr }{$filename}");
   }
 }
 
@@ -160,16 +170,13 @@ else {
   EASIH::Parallel::run_serial( );
 }
 
-
-
 if ( $datamonger ) {
-
-  my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
-  EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
-
-  EASIH::DONE::add_offloading_status($rid, 
-				     "BASECALLS2FQ_DONE");
+    my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
+    EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
+    EASIH::DONE::add_offloading_status($rid, 
+				       "BASECALLS2FQ_DONE");
 }
+
 
 
 # 
@@ -185,9 +192,9 @@ sub outfile {
 
 #  my ($basename, $read_nr) = $sample_name =~ /^(.*?)\.[12]/;
 
-  my $sample_filename = $filenames{ $lane_nr }{$barcode};
+  my $sample_filename = $filenames{ $lane_nr }{ $barcode };
 
-  print "$lane_nr $barcode $sample_filename\n";
+#  print "$lane_nr $barcode $sample_filename\n";
   
   if ( $sample_filename =~ /\.1\.fq\.gz/ ||  $sample_filename =~ /\.2\.fq\.gz/ ) {
     my $base_filename = $filenames{ $lane_nr }{ $barcode } || die "No filename for '$sample_filename' in lane '$lane_nr'\n";
@@ -206,9 +213,9 @@ sub outfile {
   
   if ( $datamonger ) {
     
-#    my ($sample, $project) = EASIH::Sample::filename2sampleNproject($base_filename);
-#    my $fid = EASIH::DONE::add_file($base_filename, $sample, $project, $run_folder, 'ILLUMINA');
-#    $fids{ $lane_nr }{ $sample_filename }  = $fid;
+    my ($sample, $project) = EASIH::Sample::filename2sampleNproject($sample_filename);
+    my $fid = EASIH::DONE::add_file($sample_filename, $sample, $project, $run_folder, 'ILLUMINA');
+    $fids{ $lane_nr }{ $sample_filename }  = $fid;
   }
   
 #  return $fh;
@@ -235,11 +242,44 @@ sub validate_names_and_open_outfiles {
   }
 
   my ($sample_names, $errors, $warnings, $project_name ) = EASIH::Illumina::Sample_sheet::readin( $sample_sheet );
+
+  # if there is only one barcode in a lane change this so the whole lane gets assigned to the sample in the lane.
+  foreach my $lane_nr ( keys %$sample_names ) { 
+    if ( keys %{$$sample_names{ $lane_nr }} == 1 ) {
+      my ($barcode) = keys %{$$sample_names{ $lane_nr }};
+      if ( $barcode ne "default" || $barcode ne "") {
+	$$sample_names{ $lane_nr }{"default"} = $$sample_names{ $lane_nr }{$barcode};
+	delete $$sample_names{ $lane_nr }{$barcode};
+      }
+    }
+  }
+
+#die Dumper( $res );
   
-  fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
+#  print Dumper( $sample_names );
+#  print Dumper( \%filenames );
+  
+  my %DONE_sample_sheet = EASIH::DONE::fetch_sample_sheet_hash( $rid );
+
+
+  foreach my $lane_nr ( keys %DONE_sample_sheet ) {
+    my %barcodes;
+    map { s/\..*//; $barcodes{$_}++} keys %{$DONE_sample_sheet{ $lane_nr }};
+    if (keys %barcodes == 1 ) {
+      foreach my $barcode ( keys %{$DONE_sample_sheet{ $lane_nr }} ) {
+	my ($post_fix) = $barcode =~ /\.(.*)/;
+	$DONE_sample_sheet{ $lane_nr }{"default.$post_fix"} = $DONE_sample_sheet{ $lane_nr }{ $barcode };
+	delete $DONE_sample_sheet{ $lane_nr }{ $barcode };
+      }
+    }
+  }
+      
+#  die Dumper( \%DONE_sample_sheet );
+  
+#  fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
   $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, @lanes ) ;
-  fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
+#  fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
 
   # assign filenames to each sample in each lane, as this script can/will
   # run in parallel this has to be done before we loose control.
@@ -247,7 +287,6 @@ sub validate_names_and_open_outfiles {
     next if ( ! $$sample_names{ $lane_nr });
 
     foreach my $bcode (keys %{$$sample_names{$lane_nr}}) {
-
 
       my $sample_name = $$sample_names{ $lane_nr }{ $bcode };
 	
@@ -263,22 +302,28 @@ sub validate_names_and_open_outfiles {
       if ( $fq_out ) { 
       
 	$filenames{ $lane_nr }{ "$bcode.1" } = "$base_filename.1.fq.gz";
+
+	$filenames{ $lane_nr }{ "$bcode.1" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.1" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.1" });
+
+
 	outfile("$bcode.1", $lane_nr);
 	if ( $PE ) {
-	  $filenames{ $lane_nr }{ "$bcode.2" }   = "$base_filename.1.fq.gz";
+	  $filenames{ $lane_nr }{ "$bcode.2" }   = "$base_filename.2.fq.gz";
+	  $filenames{ $lane_nr }{ "$bcode.2" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.2" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.2" });
 	  outfile("$bcode.2", $lane_nr) if ( $PE && $fq_out);
 	}
       }
       
       if ( $bam_out ) {
 	$filenames{ $lane_nr }{ "$bcode.bam" } = "$base_filename.bam";
+	$filenames{ $lane_nr }{ "$bcode.bam" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" });
 #	print Dumper( %filenames );
 	outfile("$bcode.bam", $lane_nr);
       }
     }
   }
 
-  print Dumper ( \%filenames );
+#  print Dumper ( \%filenames );
   
   return $sample_names;
 }
@@ -292,8 +337,14 @@ sub validate_names_and_open_outfiles {
 sub verify_bcode {
   my ($bc1, @bc2s) = @_;
 
-  return $bc1 if ( $bc1 eq 'default');
+  return 'default' if ( $bc1 eq 'default');
+  return 'default' if ( $bc2s[0] eq 'default');
+  
+  if (length($bc1) > length($bc2s[0])) {
+    $bc1 = substr( $bc1, 0, length($bc2s[0]));
+  }
 
+#  exit;
   foreach my $bc2 ( @bc2s ) {
 
     if ( $mismatches == 0) {
@@ -448,32 +499,47 @@ sub analyse_lane {
 
   my %stats;
   
-  my $cmd = "illumina2bam -T Illumina2bam.jar I=$intensities_folder R=$basecall_folder/../../../ B=$basecall_folder L=$lane_nr O=/dev/stdout SC=EASIH | samtools view -h - | ";
+  my $cmd = "illumina2bam -T Illumina2bam.jar I=$intensities_folder R=$basecall_folder/../../../ B=$basecall_folder L=$lane_nr O=/dev/stdout SC=EASIH  PF_FILTER=false | samtools view -h - | ";
 
-#  print "$cmd\n";
+  $cmd = "illumina2bam -T Illumina2bam.jar TILE_LIMIT=1 I=$intensities_folder R=$basecall_folder/../../../ B=$basecall_folder L=$lane_nr O=/dev/stdout SC=EASIH  PF_FILTER=false | samtools view -h - | " if ( $debug );
+
+  print STDERR "$cmd\n";
+#  exit;
+  # The stats is done on a lane basis as we are running this bastard in parallel this is the way to do it. 
+  # Way nicer than named fork-pipes etc.
+  my %sample_stats;
+  my $read_length = 0;
 
   my $prev_read_barcode = undef;
   my $strand = 1;
 
-#  print STDERR Dumper (%filenames);
-#  print Dumper (%filenames);
-  
+#  my $exit_counter = 5000;
+  my ($lane_total, $lane_pass, $lane_bases, $lane_QV30) = (0,0,0,0);
+
   open ( my $i2b_pipe,  "$cmd") || die "Could not open illumina2bam pipe: $!\n";
   while (my $line = <$i2b_pipe>) {
     
-    if ($line =~ /^\@/ && $bam_out) {
-      foreach my $bcode ( keys %{$fhs{ $lane_nr }} ) {
-	if ($bcode =~ /\.bam/) {
-	  my $fh = outfile($bcode, $lane_nr);
-	  print $fh $line;
+    if ($line =~ /^\@/ ) {
+      if ( $bam_out ) {
+	foreach my $bcode ( keys %{$fhs{ $lane_nr }} ) {
+	  if ($bcode =~ /\.bam/) {
+	    my $fh = outfile($bcode, $lane_nr);
+	    print $fh $line;
+	  }
 	}
       }
       next;
     }
 
-    $stats{lane_total}++;
-      
+    $lane_total++;
+     
     my ($id, $flag, undef, undef, undef, undef, undef, undef, undef, $seq, $qual, $read_barcode) = split("\t", $line, 12);
+
+    # read did not pass filter (PF == 0)
+    next if ($flag & 0x0200 );
+    $lane_pass++;
+
+    $read_length = length( $seq ) if ( ! $read_length );
 
 #    print "$read_barcode $strand\n";
 
@@ -484,7 +550,7 @@ sub analyse_lane {
       $strand = 2;
     }
  
-    if ($PE && $indexed_run && $read_barcode =~ /.*?BC:Z:(.*?)\t.*/) {
+    if ($indexed_run && $read_barcode =~ /.*?BC:Z:(.*?)\t.*/) {
       $read_barcode =~ s/.*?BC:Z:(.*?)\t.*/$1/;
       chomp( $read_barcode );
       $prev_read_barcode = $read_barcode;
@@ -495,26 +561,74 @@ sub analyse_lane {
 
     if ( $indexed_run ) {
     
-      print "$read_barcode\n";
+#      print "$read_barcode\n";
       $read_barcode = verify_bcode($read_barcode, @bar_codes) if ( $indexed_run );
-
+      
       next if (! $read_barcode );
     }
       
     $read_barcode ||= 'default';
 
     my $sample_name = $$sample_names{ $lane_nr }{ $read_barcode } if ($$sample_names{ $lane_nr }{ $read_barcode });
+
+
+
+    map{ $lane_QV30++ if (ord($_) - 33 > 30)} split("", $qual);
+
+    $lane_bases += $read_length;
     
     if ( $fq_out ) {
       my $bfout = outfile("$read_barcode.$strand", $lane_nr);
       print $bfout "\@$id\n$seq\n+\n$qual\n";
+      $sample_stats{"$read_barcode"}{"$strand"}++;
     }
 
     if ( $bam_out ) {
       my $bfout = outfile("$read_barcode.bam", $lane_nr );
-      print $bfout $line
+      print $bfout $line;
+      $sample_stats{"$read_barcode"}{"bam"}++;
+    }
+
+#    last if ( ! $exit_counter--);
+  }
+
+
+  if ( $datamonger ) {
+
+    EASIH::DONE::add_illumina_lane_stats( $rid, 1, $lane_nr, $lane_total, $lane_pass, $lane_bases, $lane_QV30 );
+
+    foreach my $barcode ( keys %sample_stats ) {
+      foreach my $read ( keys %{$sample_stats{ $barcode }}) {
+	next if ($read eq "bam");
+	
+
+	my $filename = $filenames{$lane_nr}{"$barcode.$read"};
+	
+	my $fid = $fids{ $lane_nr }{ $filename };
+	
+
+#print STDERR Dumper( \%fids );
+#print STDERR Dumper( \%filenames );
+#print STDERR Dumper( $sample_names );
+#	exit;
+
+	my $sample_name = $$sample_names{ $lane_nr }{ $barcode };
+#	exit;
+	
+	print STDERR  "'$barcode.$read' --> $filename --> $fid\n";
+	
+	$barcode = "" if ( $barcode eq "default" );
+	EASIH::DONE::add_illumina_sample_stats( $rid, $fid, $lane_nr, $read, $sample_name, $barcode);
+	EASIH::DONE::update_file($fid , $sample_stats{$barcode}{$read}, $read_length);
+
+	$barcode = "default" if ( $barcode eq "" );
+	
+	
+      }
     }
   }
+
+  
   
 }
 
@@ -536,13 +650,13 @@ sub analyse_lane_old {
       $bcode2sample{ $$sample_names{ $lane_nr }{ $bcode }} = $bcode;
     }    
   }
+
+  my %sample_stats;
   
   # Get all the files for the lane.
   my @files = glob("$basecall_folder/s_$lane_nr\_1_*_qseq.txt");
 
   my ($lane_total, $lane_pass, $lane_QV30, $lane_bases) = (0, 0, 0, 0);
-  my $read_length = 0;
-  my %sample_stats;
 
   foreach my $file (@files) {
     my $tile_stats = analyse_tile( $file, $lane_nr );
@@ -551,7 +665,7 @@ sub analyse_lane_old {
     $lane_QV30    += $$tile_stats{ 'lane_QV30'  } || 0;
     $lane_bases   += $$tile_stats{ 'lane_bases' } || 0;
 
-    $read_length = $$tile_stats{'lane_read_length'};
+    my $read_length = $$tile_stats{'lane_read_length'};
 
     foreach my $k ( keys %$tile_stats ) {
       next if ( $k =~ /^lane_/ );
@@ -579,24 +693,7 @@ sub analyse_lane_old {
       if( $datamonger );
 
 
-  foreach my $sample ( keys %sample_stats ) {
-    my $perc = sprintf("%.2f", $sample_stats{$sample}*100/$lane_pass);
-    my $barcode = $bcode2sample{$sample} || "";
-    printf("lane $lane_nr\t$sample\t$barcode\t$sample_stats{$sample}\t$perc %%\n");
 
-    if($datamonger) {
-
-      if ( $fids{ $lane_nr }{"$sample.1"}) {
-	EASIH::DONE::add_illumina_sample_stats( $rid, $fids{$lane_nr}{"$sample.1"}, $lane_nr, 1, "$sample", $barcode, $sample_stats{$sample}, $perc);
-	EASIH::DONE::update_file($fids{$lane_nr}{"$sample.1"}, $sample_stats{$sample}, $read_length);
-      }
-
-      if ( $fids{ $lane_nr }{"$sample.2"}) {
-	EASIH::DONE::add_illumina_sample_stats( $rid, $fids{$lane_nr}{"$sample.2"}, $lane_nr, 2, "$sample", $barcode, $sample_stats{$sample}, $perc);
-	EASIH::DONE::update_file($fids{$lane_nr}{"$sample.1"}, $sample_stats{$sample}, $read_length);
-      }
-    }
-  }
 }
 
 # 

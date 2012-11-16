@@ -51,7 +51,6 @@ $debug = 1;
 my $easih_toolbox = '/software/installed/easih-toolbox/';
 $easih_toolbox = '/home/kb468/easih-toolbox/' if ( $debug );
 
-
 EASIH::DONE::Connect('done_dev') if ($debug); 
 
 my %opts;
@@ -109,7 +108,7 @@ foreach my $sequencer_dir ( @sequencer_dirs ) {
       my $rid = EASIH::DONE::add_run($run_dir, 'ILLUMINA');
       my $last_status = EASIH::DONE::fetch_latest_offloading_status( $rid ); 
       $last_status ||= "Unknown";
-      print "$run_dir last status: $last_status\n";
+      print "$run_dir last status: $last_status [$rid]\n";
 
 
       next if ($last_status && $last_status ne "RETRY_OFFLOAD");

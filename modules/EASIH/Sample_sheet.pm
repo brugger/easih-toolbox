@@ -33,12 +33,14 @@ sub readin {
     $_ =~ s/\r\n/\n/g; 
     $_ =~ s/\n\r/\n/g; 
     $_ =~ s/\r/\n/g; 
+    $_ =~ s/\"//g; 
     push @lines, split("\n",$_);
   }
   close $in;
 
   while($_ = shift @lines ) {
     chomp;
+    $_ =~ s/\"//g; 
     
     # As I dont trust they can export the csv file in the same format each time
     # we will use the first line to identify field and text delimiters.

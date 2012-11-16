@@ -198,7 +198,12 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
     #lane_nr, total_reads, readsPF
     push @lane_data, $$lane[2], _round($$lane[3]), _round($$lane[4]);
     # %PF
-    push @lane_data, sprintf("%.2f%%", $$lane[4]*100/$$lane[3]);
+    if ( $$lane[4] && $$lane[3] ) {
+      push @lane_data, sprintf("%.2f%%", $$lane[4]*100/$$lane[3]);
+    }
+    else {
+      push @lane_data, "0%";
+    }
     # %QV30+ bases
     if ($$lane[6] && $$lane[5] ) {
       push @lane_data, sprintf("%.2f%%", $$lane[6]*100/$$lane[5]) ;
@@ -281,46 +286,89 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
 
   print "<BR><H3>Sample statistics</H3>\n";
 
-  my @data = (["Lane", "Sample", "reads", "Barcode","% split"]);
+  my @data = (["Lane", "Sample", "reads", "Barcode","% split", 'Q30 bases', 'Duplicates', 'Partial adaptors']);
+
+
+#  print "<pre>". Dumper( \@mplexs ) ."</pre>";
 
   my %sample_stats;
-  foreach my $mplex (sort {$$a[2] <=> $$b[2] } @mplexs ) {
-#  foreach my $mplex (sort {$$a[1] cmp $$b[1] } @mplexs ) {
-#    next if ($$mplex[3]  != 1 );
 
-#    push @data, [$$mplex[2], $$mplex[4], $$mplex[5], $$mplex[7], $$mplex[6]];
-    push @{$sample_stats{$$mplex[4]}{fids}}, $$mplex[1];
-    $sample_stats{$$mplex[4]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
-    $sample_stats{$$mplex[4]}{ lane } = $$mplex[2];
-    $sample_stats{$$mplex[4]}{ bcode } = $$mplex[5] || "&nbsp;";
-    $sample_stats{$$mplex[4]}{ reads } = _round($$mplex[7]);
-    $sample_stats{$$mplex[4]}{ perc } = $$mplex[6] || "&nbsp;";
+  my ( $RID, $FID, $LANE_NR, $SAMPLE_NAME) = (0, 1, 2, 4);
+
+  # sort by lane nr...
+  foreach my $mplex (sort {$$a[ $LANE_NR ] <=> $$b[ $LANE_NR ] } @mplexs ) {
+
+    push @{$sample_stats{ $$mplex[ $LANE_NR] }{$$mplex[ $SAMPLE_NAME ]}{fids}}, $$mplex[1];
+    $sample_stats{ $$mplex[ $LANE_NR] }{$$mplex[ $SAMPLE_NAME ]}{ filename } = EASIH::DONE::fetch_filename( $$mplex[1] );
+    $sample_stats{ $$mplex[ $LANE_NR] }{$$mplex[ $SAMPLE_NAME ]}{ bcode } = $$mplex[5] || "&nbsp;";
+    $sample_stats{ $$mplex[ $LANE_NR] }{$$mplex[ $SAMPLE_NAME ]}{ reads } = _round($$mplex[7]);
+    $sample_stats{ $$mplex[ $LANE_NR] }{$$mplex[ $SAMPLE_NAME ]}{ perc  } = $$mplex[6] || "&nbsp;";
+
+  }
+
+    
+  foreach my $lane (sort {$a <=> $b } keys %sample_stats ) {
+    my ($S_NAME, $TOTAL_READS, $READ_LENGTH, $SAMPLE_SIZE, $Q30_BASES, $DUPS, $PART_ADAP, $AVG_AC ) = (0, 1, 2, 3, 4, 5, 6, 7, 8);
+    my $reads_in_lane = 0;
+
+    # this is the wrong way to do this, but we need to reimplement the whole thing anyway...
+    foreach my $sample (sort {$a cmp $b } keys %{$sample_stats{ $lane }} ) {
+      my @fid_info = EASIH::DONE::fetch_file_info(${$sample_stats{ $lane }{ $sample }{fids}}[0]);
+      $reads_in_lane += $fid_info[ $TOTAL_READS ] || 0;
+    }
+    
+    foreach my $sample (sort {$a cmp $b } keys %{$sample_stats{ $lane }} ) {
+
+
+      my @fid_info = EASIH::DONE::fetch_file_info(${$sample_stats{ $lane }{ $sample }{fids}}[0]);
+
+      
+      my ( $Q30bases, $duplicates, $partial_adaptors ) = ($fid_info[ $Q30_BASES ], $fid_info[ $DUPS ], $fid_info[ $PART_ADAP ]);
+      my $total_reads = $fid_info[ $TOTAL_READS ];
+      $total_reads ||= "NA";
+
+      my $Q30_colour = 'red';
+      $Q30_colour = 'yellow' if ($Q30bases >= 70 );
+      $Q30_colour = '#00DD00'  if ($Q30bases >= 90 );
+      
+      
+      my $dups_colour = 'red';
+      $dups_colour = 'yellow' if ($duplicates <10 );
+      $dups_colour = '#00DD00'  if ($duplicates < 1 );
+      
+      my $pa_colour = 'red';
+      $pa_colour = 'yellow' if ($partial_adaptors < 10  );
+      $pa_colour = '#00DD00'  if ($partial_adaptors < 1 );
+
+
+      $sample_stats{ $lane }{ $sample }{ fids } = join(",", @{$sample_stats{ $lane }{ $sample }{fids}});
+    
+      $sample_stats{ $lane}{ $sample }{ filename } =~ s/^.*\///;
+      $sample_stats{ $lane}{ $sample }{ filename } =~ s/\.gz//;
+      $sample_stats{ $lane}{ $sample }{ filename } =~ s/\.fq//;
+      $sample_stats{ $lane}{ $sample }{ filename } =~ s/\.[12]\z//;
+      
+      my $colour = "grey";
+      $colour = "lightgrey" if ( $lane % 2);
+      
+     
+      push @data, [{value=>$lane, bgcolor => $colour},
+		   {value=>"<a href=$0?QC=1&fid=$sample_stats{$lane}{$sample}{fids}>$sample</a>", bgcolor => $colour},
+		   {value=>_round($total_reads), bgcolor => $colour}, 
+		   {value=>$sample_stats{$lane}{$sample}{ bcode }, bgcolor => $colour}, 
+		   {value=>sprintf("%.2f%%", $total_reads*100/$reads_in_lane),bgcolor => $colour}, 
+		   #"$sample_stats{$lane}{$sample}{ perc } %", bgcolor => $colour},
+		   {value=>"$Q30bases %", bgcolor => $Q30_colour},
+		   {value=>"$duplicates %", bgcolor => $dups_colour},
+		   {value=>"$partial_adaptors %", bgcolor => $pa_colour}];
+
+
+
+    }
   }
 
 
-    
-  foreach my $sample (sort {$sample_stats{$a}{lane} <=> $sample_stats{$b}{lane} || $a cmp $b} keys %sample_stats ) {
-
-    $sample_stats{$sample}{fids} = join(",", @{$sample_stats{$sample}{fids}});
-    
-    $sample_stats{$sample}{ filename } =~ s/^.*\///;
-    $sample_stats{$sample}{ filename } =~ s/\.gz//;
-    $sample_stats{$sample}{ filename } =~ s/\.fq//;
-    $sample_stats{$sample}{ filename } =~ s/\.[12]\z//;
-
-    my $colour = "grey";
-    $colour = "lightgrey" if ( $sample_stats{$sample}{lane} % 2);
-    
-    
-    push @data, [{value=>$sample_stats{$sample}{lane}, bgcolor => $colour},
-		 {value=>"<a href=$0?QC=1&fid=$sample_stats{$sample}{fids}>$sample</a>", bgcolor => $colour},
-		 {value=>$sample_stats{$sample}{ reads }, bgcolor => $colour}, 
-		 {value=>$sample_stats{$sample}{ bcode }, bgcolor => $colour}, 
-		 {value=>"$sample_stats{$sample}{ perc } %", bgcolor => $colour}];
-  }
-  
-  
-  print EASIH::HTML::advanced_table(\@data, 1, 1, 1, undef, undef, 600);
+  print EASIH::HTML::advanced_table(\@data, 1, 1, 1, undef, undef, 700);
 
   easih_foot();
 

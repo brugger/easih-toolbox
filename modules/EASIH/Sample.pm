@@ -75,6 +75,8 @@ sub sample2outfilename {
   $sample_name =~ s/fastq/fq/;
   
   my ($sample, $postfix) = $sample_name =~ /^([A-Z]\d{6,7})(.*)/;
+
+  $postfix ||= "";
   
 #  print "$sample $postfix\n";
 

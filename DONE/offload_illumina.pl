@@ -92,8 +92,8 @@ my $RunDir; #global
 my $rid;
 
 my @dirs  = ('/seqs/illumina2/', 
-	     '/seqs/illumina3/', 
-	     '/seqs/illumina4/',
+	     #'/seqs/illumina3/', 
+	     #'/seqs/illumina4/',
     );
 
 @dirs = split(/,/, $opts{ 's' }) if ( $opts{ 's' } );
@@ -125,10 +125,10 @@ foreach my $dir ( @dirs ) {
 				  '03-failstatus' => "BCL2QSEQ_SETUP_FAILED", 
 				  '04-poststatus' => "BCL2QSEQ_DONE"},
 	       
-#	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
-#				  '02-prestatus'  => "MAKE_STARTED", 
-	#			  '03-failstatus' => "MAKE_FAILED", 
-	#			  '04-poststatus' => "MAKE_DONE"},
+	       '02-MAKE'      => {'01-command'    => "cd $Basecalls; make -j 8;", 
+				  '02-prestatus'  => "MAKE_STARTED", 
+				  '03-failstatus' => "MAKE_FAILED", 
+				  '04-poststatus' => "MAKE_DONE"},
 	       
 	       '03-BCL2FQ'    => {'01-command'    => "$easih_toolbox/scripts/BaseCalls2fq.pl -di $Basecalls", 
 				  '02-prestatus'  => "BCL2FQ_STARTED", 
@@ -217,7 +217,7 @@ foreach my $dir ( @dirs ) {
 	  push @GARstring, $Execute{'04-QC_Report'}{'03-failstatus'};
 	  push @GARstring, $Execute{'04-QC_Report'}{'04-poststatus'};
 	  
-#	  last if(!GrabAndRun(@GARstring));
+	  GrabAndRun(@GARstring);
 	}
 	
 	  
@@ -237,7 +237,7 @@ foreach my $dir ( @dirs ) {
 	  push @GARstring, $Execute{'05-QC_DB'}{'03-failstatus'};
 	  push @GARstring, $Execute{'05-QC_DB'}{'04-poststatus'};
 	  
-	  last if( !GrabAndRun(@GARstring) );
+	  GrabAndRun(@GARstring);
 	}
 	
 	

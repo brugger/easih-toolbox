@@ -16,7 +16,7 @@ getopts('b:d:R:B:hs:Sr:UM:m:L:l:s:m:o:', \%opts);
 my %calib_stats;
 my %calib_matrix;
 
-my $report_ratio = 0.1;
+my $report_ratio = 0.03;
 
 
 my $bam_file = $opts{'b'} || Usage();
@@ -47,7 +47,8 @@ my ( $s, $d, $e, $b_pre, $b_post) = (0,0,0, 0, 0);
 
 my $region      = $opts{'r'};
 my $sample_size = $opts{'s'} || 0;
-$region = "'gi|170079663|ref|NC_010473.1|'";
+my $min_depth   = $opts{'d'} || -1;
+#$region = "'gi|170079663|ref|NC_010473.1|'";
 
 my $fasta;
 
@@ -131,6 +132,8 @@ sub analyse {
       
       if ( $total ) {
 
+	next if ( $min_depth >= 1 && $total < $min_depth);
+
 	my $ratio = (1 -  $right/$total);
       
 	printf("$splits[0]{pos}\t%.2f $total\n", $ratio*100) if ( $ratio > $report_ratio);
@@ -176,10 +179,14 @@ sub analyse {
 	  $right += $splits[0]{ $_ } if ( $splits[0]{ $_ } && $splits[0]{ref} eq $_)}
     ( 'A','C','G','T');
 
-    my $ratio = (1 -  $right/$total);
+    if ( $total ) {
+      next if ( $min_depth >= 1 && $total < $min_depth);
+
+      my $ratio = (1 -  $right/$total);
       
-    printf("$splits[0]{pos}\t%.2f\n", $ratio*100) if ( $ratio > $report_ratio);
-    
+      printf("$splits[0]{pos}\t%.2f\t$total\n", $ratio*100) if ( $ratio > $report_ratio);
+    }
+
     shift @splits;
   }
 

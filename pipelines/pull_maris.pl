@@ -28,6 +28,8 @@ print "scp \"login.hpc.cam.ac.uk:$project_path/*.done\" $tmp_dir/ \n";
 
 print "$tmp_dir\n";
 
+my $project_dir = find_project_dir( $opts{p} );
+
 opendir(my $done_dir, "$tmp_dir");
 while ( my $done_file =  readdir($done_dir)) {
   next if ( $done_file =~ /^\."/);
@@ -35,8 +37,8 @@ while ( my $done_file =  readdir($done_dir)) {
   open (my $done_fh, "$tmp_dir/$done_file") || die "Could not open '$tmp_dir/$done_file': $!\n";
   while (<$done_fh>) {
     chomp;
-    system "mkdir /data/$opts{p}/MARIS/" if ( ! -e "/data/$opts{p}/MARIS/" );
-    system "scp login.hpc.cam.ac.uk:$project_path/$_ /data/$opts{p}/MARIS/";
+    system "mkdir $project_dir/MARIS/" if ( ! -e "$project_dir/MARIS/" );
+    system "scp login.hpc.cam.ac.uk:$project_path/$_ $project_dir/MARIS/";
   }
   close ($done_fh);
 }
@@ -58,3 +60,22 @@ sub create_tmp_dir {
   return $tmp_dir;
 }
 
+
+# 
+# 
+# 
+# Kim Brugger (14 Nov 2012)
+sub find_project_dir {
+  my $project_id = shift;
+
+  return "/data/$project_id/" if ( -e "/data/$project_id/");
+  
+  my $letter  = substr($project_id, 0, 1);
+  my $number  = substr($project_id, 1, 2);  
+
+  my $project_dir = sprintf("/data/$letter/%02d_%02d/$project_id/", (int($number/10)*10), (int($number/10)*10+9));
+  return $project_dir if ( -e $project_dir );
+
+  die "Could not resolve project dir for $project_id\n";
+  
+}

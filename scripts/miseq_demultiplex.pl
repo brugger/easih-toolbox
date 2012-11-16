@@ -17,10 +17,10 @@ my $sample_sheet = sample_sheet();
 
 my ($r1_fh, $r2_fh, $i1_fh, $i2_fh);
 
-print shift @{$files{ R1 }}, "\n";
-print shift @{$files{ R2 }}, "\n";
-print shift @{$files{ I1 }}, "\n";
-print shift @{$files{ I2 }}, "\n";
+# print shift @{$files{ R1 }}, "\n";
+# print shift @{$files{ R2 }}, "\n";
+# print shift @{$files{ I1 }}, "\n";
+# print shift @{$files{ I2 }}, "\n";
 
 
 open_file(\$r1_fh, shift @{$files{ R1 }});

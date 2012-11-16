@@ -75,18 +75,18 @@ sub bc_length {
   "TCGAAG"  =>  47,
   "TCGGCA"  =>  48,
   # NEB barcodes::
-  "CGTGAT"  => "NEBNext1",
-  "ACATCG"  => "NEBNext2",
-  "GCCTAA"  => "NEBNext3",
-  "TGGTCA"  => "NEBNext4",
-  "CACTGT"  => "NEBNext5",
-  "ATTGGC"  => "NEBNext6",
-  "GATCTG"  => "NEBNext7",
-  "TCAAGT"  => "NEBNext8",
-  "CTGATC"  => "NEBNext9",
-  "AAGCTA"  => "NEBNext10",
-  "GTAGCC"  => "NEBNext11",
-  "TACAAG"  => "NEBNext12");
+  "ATCACG"  => "NEBNext1",
+  "CGATGT"  => "NEBNext2",
+  "TTAGGC"  => "NEBNext3",
+  "TGACCA"  => "NEBNext4",
+  "ACAGTG"  => "NEBNext5",
+  "GCCAAT"  => "NEBNext6",
+  "CAGATC"  => "NEBNext7",
+  "ACTTGA"  => "NEBNext8",
+  "GATCAG"  => "NEBNext9",
+  "TAGCTT"  => "NEBNext10",
+  "GGCTAC"  => "NEBNext11",
+  "CTTGTA"  => "NEBNext12");
 
 # 
 # 

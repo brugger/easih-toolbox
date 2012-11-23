@@ -406,6 +406,7 @@ sub print_results {
  	$$effect{ HGVSc } =~ s/ins.*//;
 
 	$$effect{ cpos } = $$effect{ HGVSc };
+
       }
       else {
 	next;
@@ -574,6 +575,9 @@ sub variation_effects {
 	    my $cds_end = $tv->transcript->length;
 	    $gene_res{ 'HGVSc' } =~ s/c\.\*/c.$cds_end+/;
 	  }
+
+	    
+
 	}
 
 	$gene_res{ transcript_id }  = $tv->transcript->stable_id;
@@ -627,6 +631,11 @@ sub variation_effects {
 	      $new = $old if ( !$new || $new eq "");
 	      $old = one2three( $old );
 	      $new = one2three( $new );
+	      
+	      if ($gene_res{ effect } eq 'FRAMESHIFT_CODING') {
+		$new = "FS";
+	      }
+
 	      $gene_res{ ppos } = "p.$old".$tv->translation_start . " $new";
 	    }
 	  }

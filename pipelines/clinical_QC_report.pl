@@ -50,7 +50,14 @@ my ($sample_names, $errors, $warnings, $project_name ) = EASIH::Illumina::Sample
 
 print Dumper($sample_names);
 
-my $excel_file = "CP0007.xls";
+my $cwd = `pwd`;
+chomp( $cwd );
+
+$cwd =~ /(CP\d+)/;
+
+die "Could not resolve the pool id: $cwd\n" if ( ! $1 );
+
+my $excel_file = "$1.xls";
 
 my $workbook = Spreadsheet::WriteExcel->new( $excel_file );
 my $bold     = $workbook->add_format(bold => 1);

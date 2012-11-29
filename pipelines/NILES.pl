@@ -155,8 +155,8 @@ sub bwa_aln {
   my $tmp_sai1  = EASIH::Pipeline::tmp_file(".sai");
   my $tmp_sai2  = EASIH::Pipeline::tmp_file(".sai");
     
-  my $cmd = "$bwa aln  $align_param -f $tmp_sai1 $small_reference $first ; ";
-  $cmd   .= "$bwa aln  $align_param -f $tmp_sai2 $small_reference $second";
+  my $cmd = "$bwa aln  $align_param -f $tmp_sai1 $small_reference $first 2> /dev/null ; ";
+  $cmd   .= "$bwa aln  $align_param -f $tmp_sai2 $small_reference $second 2> /dev/null";
   
   my $output = { "first_fq"   => $first,
 		 "first_sai"  => $tmp_sai1,
@@ -174,7 +174,7 @@ sub bwa_sampe {
   my $tmp_file = EASIH::Pipeline::tmp_file(".sam");
 
   my $cmd;
-  $cmd = "$bwa sampe -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file";
+  $cmd = "$bwa sampe -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file 2> /dev/null";
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
@@ -231,9 +231,9 @@ sub bam_sort {
   $sample =~ s/\..*//;
   $sample =~ s/_\d*//;
 
-  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$fixed_bam O=$tmp_file SO=coordinate CN=EASIH PL=$platform LB=$readgroup PU=1  SM=$sample VALIDATION_STRINGENCY=SILENT ";
+  my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$fixed_bam O=$tmp_file SO=coordinate CN=EASIH PL=$platform LB=$readgroup PU=1  SM=$sample VALIDATION_STRINGENCY=SILENT  2> /dev/null";
 
-  print "$cmd\n";
+#  print "$cmd\n";
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
@@ -249,7 +249,7 @@ sub mark_dups {
   my $username = scalar getpwuid $<;
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $metrix_file = EASIH::Pipeline::tmp_file(".mtx");
-  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT ";
+  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT  2> /dev/null";
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
@@ -264,7 +264,7 @@ sub count_covariates {
   my $tmp_file = EASIH::Pipeline::tmp_file("_recal.csv.");
 
   my $cmd = "$gatk -T CountCovariates -R $reference -I $input -cov ReadGroupCovariate  -cov QualityScoreCovariate  -cov CycleCovariate  -cov DinucCovariate  -recalFile $tmp_file -L $out.intervals";
-  $cmd .= " -knownSites $dbsnp ";
+  $cmd .= " -knownSites $dbsnp -log /dev/null -l FATAL ";
 
   EASIH::Pipeline::submit_job($cmd, "$input $tmp_file");
 }
@@ -278,7 +278,7 @@ sub table_recalibration {
   my ($input) = @_;
   my ($tmp_bam, $recal) = split(" ", $input);
 
-  my $cmd = "$gatk -T TableRecalibration  -R $reference -I $tmp_bam -recalFile $recal -baq RECALCULATE -o $bam_file -L $out.intervals"; 
+  my $cmd = "$gatk -T TableRecalibration  -R $reference -I $tmp_bam -recalFile $recal -baq RECALCULATE -o $bam_file -L $out.intervals -log /dev/null  -l FATAL"; 
 
   EASIH::Pipeline::submit_job($cmd, $bam_file);
 }
@@ -292,7 +292,7 @@ sub UnifiedGenotyper {
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".vcf");
   my $cmd = "$gatk -T UnifiedGenotyper  -R $reference -I $input -glm BOTH -G Standard -A AlleleBalance -stand_call_conf 30.0 -stand_emit_conf 10.0 -dcov 1000 -minIndelFrac 0.1 -baq CALCULATE_AS_NECESSARY -o $vcf_file";
-  $cmd .= " -L $out.intervals --max_alternate_alleles 4";
+  $cmd .= " -L $out.intervals --max_alternate_alleles 4 -log /dev/null -l FATAL";
   
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
@@ -380,7 +380,7 @@ sub realign_targets {
   my ($input) = @_;
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
-  my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -L $out.intervals -I $input";
+  my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file -L $out.intervals -I $input -log /dev/null -l FATAL";
   EASIH::Pipeline::submit_job($cmd, "$tmp_file $input");
 }
 
@@ -409,7 +409,7 @@ sub bam_realign {
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $cmd;
-  $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $out.intervals -o $tmp_file -R $reference -I $tmp_bam_file ";
+  $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $out.intervals -o $tmp_file -R $reference -I $tmp_bam_file -log /dev/null -l FATAL";
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }

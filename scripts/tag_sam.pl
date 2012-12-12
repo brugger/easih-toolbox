@@ -13,21 +13,28 @@ use File::Temp qw/ tempfile /;
 
 
 my %opts;
-getopts('i:o:r:s:l:p:c:a:A:R:', \%opts);
+getopts('i:o:O:r:s:l:p:c:a:A:R:', \%opts);
 usage() if ( $opts{h});
 
 my $infile    = $opts{i};
 my $outfile   = $opts{o};
 my $readgroup = $opts{r} || usage();
+$readgroup    =~ s/.*\///;
+my $reference = $opts{R} || "";
+$reference =~ s/.*\///;
+$reference =~ s/^(.*?)\..*/$1/;
+
 my $sample    = $opts{s} || $readgroup;
+$sample =~ s/.*\///;
 my $library   = $opts{l} || $readgroup;
+$library =~ s/.*\///;
 my $platform  = $opts{p} || usage();
 my $center    = $opts{c} || "EASIH";
 
 my $aligner   = $opts{a};
 my $a_line    = $opts{A};
 
-my $replace   = $opts{R};
+my $replace   = $opts{O};
 $infile = $replace if ( ! $infile && $replace );
 open (*STDIN, $infile) || die "Could not open '$infile': $!\n" if ( $infile );
 
@@ -82,6 +89,12 @@ while(<STDIN>) {
       next;
     }
   }
+
+  if ($reference && /^\@SQ/ && !/\tAN:/) {
+    chomp;
+    $_ .= "\tAN:$reference\n";
+  }
+    
     
 
   if ( ! /^\@/ ) {
@@ -100,29 +113,29 @@ while(<STDIN>) {
 
   
     if ( (/\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/) && 
-	 (/\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/)) {
+	 (/\tLB:Z:(\w+)\t/ || /\tLB:Z:(\w+)\Z/)) {
       
       s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
-      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
+      s/(.*\tLB:Z:)(.*?)(\t.*)/$1$library$3/;
       
       s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
-      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tLB:Z:)(.*?)\Z/$1$library/;
     }
     elsif ( /\tRG:Z:(\w+)\t/ || /\tRG:Z:(\w+)\Z/ ) {
       chomp($_);
       s/(.*\tRG:Z:)(.*?)(\t.*)/$1$readgroup$3/;
       s/(.*\tRG:Z:)(.*?)\Z/$1$readgroup/;
-      $_ .= "\tSM:$sample\n";
+      $_ .= "\tLB:$library\n";
     }
-    elsif ( /\tSM:Z:(\w+)\t/ || /\tSM:Z:(\w+)\Z/ ) {
+    elsif ( /\tLB:Z:(\w+)\t/ || /\tLB:Z:(\w+)\Z/ ) {
       chomp($_);
-      s/(.*\tSM:Z:)(.*?)(\t.*)/$1$sample$3/;
-      s/(.*\tSM:Z:)(.*?)\Z/$1$sample/;
+      s/(.*\tLB:Z:)(.*?)(\t.*)/$1$library$3/;
+      s/(.*\tLB:Z:)(.*?)\Z/$1$library/;
       $_ .= "\tRG:$readgroup\n";
     }
     else {
       chomp($_);
-      $_ .= "\tRG:Z:$readgroup\tSM:Z:$sample\n";
+      $_ .= "\tRG:Z:$readgroup\tLB:Z:$library\n";
     }
   }
 
@@ -147,7 +160,7 @@ sub usage {
 
   $0 =~ s/.*\///;
   print "$0 adds/replaces the readgroup/library/sample/platform/center tags in a sam file/stream\n";
-  print "$0 -i[nfile (or stdin] -o[utfile (or stdout)] -r[eadgroup] -s[ample] -l[ibrary] -p[latform] -c[enter] -a[ligner] -A[ligner param] -R[eplace infile with fixed file]\n";
+  print "$0 -i[nfile (or stdin] -o[utfile (or stdout)] -r[eadgroup] -s[ample] -l[ibrary] -p[latform] -c[enter] -a[ligner] -A[ligner param] -O[verwrite the original file] -R[eference]\n";
 
   exit 1;
 }

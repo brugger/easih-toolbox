@@ -84,9 +84,8 @@ sub version {
   chomp( $VERSION );
   chomp( $TAG     );
 
-
   return "$TAG-$VERSION" if  ($TAG ne "");
-  return "$VERSION";
+  return $VERSION;
 }
 
 

@@ -138,8 +138,6 @@ EASIH::Pipeline::add_merge_step('bam_sort', 'bam_merge');
 EASIH::Pipeline::add_step('bam_merge', 'bam_clean');
 EASIH::Pipeline::add_step('bam_clean', 'bam_index');
 EASIH::Pipeline::add_step('bam_index', 'realign_targets');
-EASIH::Pipeline::add_step('bam_index', 'get_unmapped_reads');
-EASIH::Pipeline::add_step('get_unmapped_reads', 'bam_merge_realigned');
 EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
 EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge_realigned', 'bam_merge');
 EASIH::Pipeline::add_step('bam_merge_realigned', 'mark_dups');
@@ -245,8 +243,6 @@ sub bwa_sampe {
 sub bam_sort {
   my ($input) = @_;
 
-  EASIH::Pipeline::max_jobs( $host_cpus );
-
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $readgroup =   $file2bam{ $input };
@@ -259,7 +255,6 @@ sub bam_sort {
   $sample =~ s/_\d*//;
 
   my $run_id    = $run_ids{ $file2bam{ $input } };
-
 
   my $cmd = "$picard -T AddOrReplaceReadGroups.jar I=$input O=$tmp_file SORT_ORDER=coordinate CN=EASIH PL=$platform LB=$readgroup PU=$run_id  SM=$sample VALIDATION_STRINGENCY=SILENT ";
 
@@ -275,6 +270,7 @@ sub bam_sort {
 sub bam_merge {
   my (@inputs) = @_;
 
+  EASIH::Pipeline::max_jobs( $host_cpus );
 
 
   @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
@@ -412,7 +408,6 @@ sub realign_targets {
   foreach my $name ( @names ) {
     my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
     my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
-
     $cmd .= " --known $mills ";
     $cmd .= " --known $kg_indel ";
 
@@ -431,18 +426,14 @@ sub bam_realign {
   my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
-  my $cmd;
-  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
-  if (  -z $interval_file ) {
-    $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
-  }
-  else {
-    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
+    my $cmd = "$gatk -T IndelRealigner -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
 
-    $cmd .= " -known $mills ";
-    $cmd .= " -known $kg_indel ";
+  $cmd .= " -known $mills ";
+  $cmd .= " -known $kg_indel ";
 
-  }
+  if ( -z $interval_file ) {
+      $cmd .= " -targetIntervals $interval_file ";
+    }
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }

@@ -59,6 +59,17 @@ sub sample_n_version {
 }
 
 
+
+# 
+# For clinical CP runs, as they dont go into the standard sub project directory structure
+# 
+# Kim Brugger (30 Oct 2012)
+sub sample2outfilename_wo_project_dir {
+  my ($sample_name, $outdir ) = @_;
+  return sample2outfilename($sample_name, $outdir, 1);
+}
+
+
 # 
 # Finds the filename a sample should go to. Will check for std naming + if previous files exsists.
 # outdir overrides the default /data/<PROJECTID>/raw folder.
@@ -67,7 +78,7 @@ sub sample_n_version {
 # 
 # Kim Brugger (13 Jun 2011)
 sub sample2outfilename {
-  my ($sample_name, $outdir) = @_;
+  my ($sample_name, $outdir, $no_project_dir) = @_;
 
   chomp($sample_name);
 
@@ -78,66 +89,64 @@ sub sample2outfilename {
 
   $postfix ||= "";
   
-#  print "$sample $postfix\n";
+#  print "$sample_name --> $sample $postfix\n";
 
-  if ( $outdir ) {
-    if ( -e "$outdir" && ! -d "$outdir") {
-      return (undef,  "$outdir is not a directory\n");
-#      die "$outdir is not a directory\n";
-    }
-    elsif ( -e "$outdir" && ! -w "$outdir") {
-      return (undef,  "$outdir is not writeable\n");
-#      die "$outdir is not writeable\n";
-    }
-    if ( $outdir && ! -d $outdir ) {
-      if (!system "mkdir -p $outdir") {
-	return (undef,  "Could not create directory '$outdir': $!\n");
-      }
-    }
+  my $root_dir = $outdir || "/data/";
+
+  if ( -e "$root_dir" && ! -d "$root_dir") {
+    return (undef,  "$root_dir is not a directory\n");
   }
-
-  my $root_dir = "/data/";
-  my $project = substr($sample, 0, 3);
-  my $file = "$root_dir/$project/raw/$sample";
-
-  if ( $outdir ) {
-    $root_dir = $outdir;
-    $file     = "$outdir/$sample";
+  elsif ( -e "$root_dir" && ! -w "$root_dir") {
+    return (undef,  "$root_dir is not writeable\n");
   }
-  else {
-    if ( -e "$root_dir/$project" && ! -d "$root_dir/$project") {
-      return (undef, "$root_dir/$project is not a directory\n");
+  if ( $root_dir && ! -d $root_dir ) {
+    if (system "mkdir -p $root_dir") {
+      return (undef,  "Could not create directory '$root_dir': $!\n");
     }
-    elsif ( -e "$root_dir/$project" && ! -w "$root_dir/$project") {
-      return (undef, "$root_dir/$project is not writeable\n");
-    }
-    
-    $root_dir .= "$project/raw/";
-    system "mkdir -p $root_dir" if ( ! -d "$root_dir" );
   }
   
-#  my @files = `find $root_dir | grep $sample `;
-  my @files = sort glob("$root_dir/$sample*");
-  my $version = 0;
-  if ( @files ) {
-    while ( $_ = pop @files ) {
-      chomp;
-      if (  /[A-Z]\d{6,7}\_(\d+)\.\d+$postfix/ || /[A-Z]\d{6,7}\_(\d+)$postfix/) {
-	$version = $1 + 1 if ($version < $1 + 1 );
-      }
-      elsif ( $version == 0 && ( /[A-Z]\d{6,7}\.\d+$postfix/  || /[A-Z]\d{6,7}$postfix/)) {
-	$version = 1;
-      }
-    }
-    
-    $file = "$root_dir/$sample\_$version" if ($version);
-    $file = "$root_dir/$sample" if (!$version);
+  my $project = substr($sample, 0, 3);
+  my $letter  = substr($sample, 0, 1);
+  my $number  = substr($sample, 1, 2);  
+
+
+  my $project_dir = sprintf("$root_dir/$letter/%02d_%02d/$project/", (int($number/10)*10), (int($number/10)*10+9));
+  $project_dir = $root_dir if ( $no_project_dir );
+
+  if ( -e "$project_dir" && ! -d "$project_dir") {
+    return (undef, "$project_dir is not a directory\n");
   }
+  elsif ( -e "$project_dir" && ! -w "$project_dir") {
+    return (undef, "$project_dir is not writeable\n");
+  }
+  
+  my $raw_dir .= "$project_dir/raw/";
+  system "mkdir -p $raw_dir" if ( ! -d "$raw_dir" );
+
+  my $file = "$raw_dir/$sample";
+
+#  my @files = `find $root_dir | grep $sample `;
+  my %files;
+  map { s/(.*?)\..*/$1/; $files{ $_ }++ } glob("$raw_dir/$sample*");
+  my $version = 0;
+  foreach $_ ( sort keys %files ) {
+#    print "'$_' $sample $postfix $sample\n";
+    chomp;
+    if (  /[A-Z]\d{6,7}\_(\d+)/ || /[A-Z]\d{6,7}\_(\d+)/) {
+      $version = $1 + 1 if ($version < $1 + 1 );
+    }
+    elsif ( $version == 0 && ( /[A-Z]\d{6,7}/  || /[A-Z]\d{6,7}/)) {
+      $version = 1;
+    }
+#    print "$version $postfix\n";
+
+  }
+    
+
+  $file = "$raw_dir/$sample\_$version" if ($version);
+  $file = "$raw_dir/$sample" if (!$version);
 
   $file =~ s/\/{2,}/\//g;
-
-#  print "$file$postfix\n\n";
-  
 
   return ("$file$postfix", undef);
 }

@@ -47,7 +47,7 @@ int main(int argc, char **argv){
 
     int QV30 = 0;
     for(i=0;line[ index[8] + i];i++) {
-	line[ index[8] + i] -= 33;
+	line[ index[8] + i] -= 31;
 	if (line[ index[8] + i] >= 30 + 33)
 	  QV30++;
     }

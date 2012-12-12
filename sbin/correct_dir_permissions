@@ -8,13 +8,19 @@
 for basedir in `ls /data/`
 do
 
- if [[ "$basedir" =~ [A-Z][0-9] ]]; then
-#    echo "Looking in: /data/$basedir/";
-    for dir in `find "/data/$basedir/"  -type d -not -perm -g+w `
+ if [[ "$basedir" =~ [A-Z]$ ]]; then
+    for range in `ls /data/$basedir/`
     do
-#      echo "Need to change permissions on $dir"
-      chmod 4775 $dir;
-  done
+    
+    if [[ "$range" =~ [0-9]_[0-9] ]]; then
+#        echo "Looking in: /data/$basedir/$range/";
+
+        for project in `ls /data/$basedir/$range/`
+        do
+	    chmod -R 4775 /data/$basedir/$range/$project
+	done
+    fi
+    done
  fi
 done
 

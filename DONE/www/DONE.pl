@@ -351,16 +351,24 @@ elsif ( $EASIH::HTML::parameters{ 'rid' } ) {
       my $colour = "grey";
       $colour = "lightgrey" if ( $lane % 2);
       
-     
-      push @data, [{value=>$lane, bgcolor => $colour},
-		   {value=>"<a href=$0?QC=1&fid=$sample_stats{$lane}{$sample}{fids}>$sample</a>", bgcolor => $colour},
-		   {value=>_round($total_reads), bgcolor => $colour}, 
-		   {value=>$sample_stats{$lane}{$sample}{ bcode }, bgcolor => $colour}, 
-		   {value=>sprintf("%.2f%%", $total_reads*100/$reads_in_lane),bgcolor => $colour}, 
+
+      my $perc_lane_split;
+      if ( ! $reads_in_lane ) {
+	$perc_lane_split = "NA";
+      }
+      else {
+	$perc_lane_split = sprintf("%.2f%%", $total_reads*100/$reads_in_lane);
+      }
+
+      push @data, [{value=> $lane, bgcolor => $colour},
+		   {value=> "<a href=$0?QC=1&fid=$sample_stats{$lane}{$sample}{fids}>$sample</a>", bgcolor => $colour},
+		   {value=> _round($total_reads), bgcolor => $colour}, 
+		   {value=> $sample_stats{$lane}{$sample}{ bcode }, bgcolor => $colour}, 
+		   {value=> $perc_lane_split,bgcolor => $colour}, 
 		   #"$sample_stats{$lane}{$sample}{ perc } %", bgcolor => $colour},
-		   {value=>"$Q30bases %", bgcolor => $Q30_colour},
-		   {value=>"$duplicates %", bgcolor => $dups_colour},
-		   {value=>"$partial_adaptors %", bgcolor => $pa_colour}];
+		   {value=> "$Q30bases %", bgcolor => $Q30_colour},
+		   {value=> "$duplicates %", bgcolor => $dups_colour},
+		   {value=> "$partial_adaptors %", bgcolor => $pa_colour}];
 
 
 
@@ -603,10 +611,7 @@ else {
 sub _round {
   my ($value) = @_;
 
-  return $value if ($value !~ /^\d+\z/ && $value =~ /^\d+\.\d+\z/ );
-
-
-
+  return $value if (! $value || ($value !~ /^\d+\z/ && $value =~ /^\d+\.\d+\z/ ));
 
   if ( $value > 100 && $value < 1000) {
     $value = sprintf("%.2fK", $value/1000);

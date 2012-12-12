@@ -65,18 +65,22 @@ sub version {
 
   }
 
-  my $VERSION   = "unknown";
+  my $VERSION   = "Unknown";
+  my $TAG = "";
 
   if ($file && $file =~ /(.*)\//) {
     $VERSION = `cd $1; git describe --always --dirty 2> /dev/null`;
+    $TAG     = `cd $1; git tag 2> /dev/null`;
   }
   else {
     $VERSION = `git describe --always --dirty 2> /dev/null`;
+    $TAG     = `git tag 2> /dev/null`;
   }
-  $VERSION ||= "Unknown";
 
   chomp( $VERSION );
+  chomp( $TAG     );
 
+  return "$TAG-$VERSION" if  ($TAG ne "");
   return $VERSION;
 }
 

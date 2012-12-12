@@ -77,8 +77,6 @@ $added_worksheets{ 'QC' }->write(1, 0, 'GM No');
 $added_worksheets{ 'QC' }->write(0, 3, 'Pipeline version:');
 $added_worksheets{ 'QC' }->write(0, 4, "$PIPELINE_VERSION-".EASIH::Toolbox::version(), $bold);
 
-
-
 $added_worksheets{ 'QC' }->write(4, 0, 'Name', $bold); 
 $added_worksheets{ 'QC' }->write(4, 1, 'Min depth', $bold);     
 $added_worksheets{ 'QC' }->write(4, 2, 'Max depth', $bold);     
@@ -86,7 +84,6 @@ $added_worksheets{ 'QC' }->write(4, 3, 'Mean depth', $bold);
 $added_worksheets{ 'QC' }->write(4, 4, 'Lows', $bold);    
 $added_worksheets{ 'QC' }->write(4, 5, 'Missing', $bold);
 $worksheet_offset{ 'QC' } = 5;
-
 
 #exit;
 my @header;
@@ -128,7 +125,11 @@ while(<$var_fh>) {
   
   my @values = split("\t");
 
-  my $gene = $values[$columns{ 'gene' }];
+  my $gene    = $values[$columns{ 'gene' }];
+  my $exon    = $values[$columns{ 'exon' }];
+
+  next if ($exon ne "INTRON" && $exon !~ /$gene/);
+
   my $effect  = $values[$columns{ 'Effect' }];;
 
 #  print "$effect\n";
@@ -166,6 +167,7 @@ while(<$var_fh>) {
     
     $worksheet_offset{ "$gene full" } = 10;
     for(my $i=0;$i<@col_order;$i++) {
+
       $added_worksheets{ "$gene full" }->write($worksheet_offset{ "$gene full" }, $i, 
 					ucfirst($col_order[$i]), $bold);
     }
@@ -201,6 +203,11 @@ foreach my $gene (keys %vars ) {
       $col_value = $values[$col_nr] if ( defined $col_nr && $values[$col_nr] );
       $col_value = "INTRON" if ( $col_value eq "" && $col_name eq "exon");
       $col_value = "Yes" if ( $col_name eq "Common poly" && $common_polys{$gene}{$cpos});
+
+
+      if ($col_name eq "exon" && $col_value =~ /exon/i) {
+	$col_value =~ s/ INTRON//;
+      }
 
 
       if ($col_name eq "dbsnp" && $col_value ) {

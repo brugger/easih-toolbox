@@ -114,6 +114,9 @@ my $baits        = $opts{B} || "";
 my $leeway       = 30;
 
 my $bait_regions = readin_bed( $baits, $leeway ) if ( $baits );
+
+#die Dumper( $bait_regions );
+
 my $out          = $opts{o} || undef;
 my $filtered_out = $opts{O} || undef;
 
@@ -377,6 +380,8 @@ sub print_results {
 
     foreach my $effect ( @{$$mapping{$name}{res}} ) {
 
+#      print STDERR "$$effect{'transcript_id'}\n";
+
 #      print STDERR "$done{ $$effect{'transcript_id'}}\n";
 
       next if ($done{ $$effect{'transcript_id'}});
@@ -603,10 +608,15 @@ sub variation_effects {
 	      my @grep_res = grep { /^$xref_id/ } @ref_seqs;
 
 	      next if ( @grep_res == 0 );
+
 #	      print STDERR   " $xref_id ==  '@ref_seqs' [[ '@grep_res' ]] $gene_res{ transcript_id }\n";
 	      $gene_res{ transcript_id } = $xref->display_id;
-
 	      $gene_res{exon}     = exon_number($tv);
+
+	      if ( $gene_res{ transcript_id } =~ /NM_080629/ ) {
+		$gene_res{ gene_id } = "COL11A1b";
+	      }
+
 	    }
 	  }
 
@@ -709,17 +719,6 @@ sub exon_offset {
   
   my $tran = $tv->transcript;
 
-  # CJP - this seems to get alternative transcripts each time, from speaking with Howard, this should always be the same one,
-  # so BRCA1 should always be transcript BRCA1-001 ENST00000357654 I think from comparing his exon numbering with those in EnsEMBL.
-  # Maybe we need to do the same with other genes like BRCA2, Sticklers, etc.
-
-  # TODO: One or two EnsEMBL exon starts/stops are slightly different than the clinical exon starts/stops
-  # so this may need to be taken into account.
-  # Maybe this also happens with BRCA2 exons?
-
-#  if ($tran->external_name =~ /^BRCA1/) {
-#    $tran = $ta->fetch_by_stable_id('ENST00000357654');
-#  }
 
   my $exons = $tran->{_variation_effect_feature_cache}->{exons} ||= $tran->get_all_Exons;
 #  @$exons = reverse( @$exons);
@@ -800,15 +799,18 @@ sub exon_number {
       return $exon;
     }
 
+
     $exon_nr = "INTRON";
 
-#    if ( $vf_start >= $reg_start - $leeway && $vf_start < $reg_start) { 
-#      return"INTRON";
-#    }
+    if (1) {
+    if ( $vf_start >= $reg_start - $leeway && $vf_start < $reg_start) { 
+      return "$exon INTRON";
+    }
 
-#    if ( $vf_end > $reg_end && $vf_end <= $reg_end NM_001099857+ $leeway) { 
-#      return "INTRON";
-#    }
+    if ( $vf_end > $reg_end && $vf_end <= $reg_end + $leeway) { 
+      return "$exon INTRON";
+    }
+    }
 
   }
 
@@ -817,81 +819,6 @@ sub exon_number {
 
 
 
-
-# 
-# 
-# 
-# Kim Brugger (22 May 2012)
-sub exon_number_ensembl {
-  my ($tv) = @_;
-
-    # work out which exon or intron this variant falls in
-
-    # ensure the keys exist so even if we don't fall in an exon 
-    # or intron we'll only call this method once
-
-
-  my $vf = $tv->variation_feature;    
-  
-  my $vf_start = $vf->start;
-  my $vf_end   = $vf->end;
-  
-  my $strand = $tv->transcript->strand;
-  my $tran = $tv->transcript;
-
-  # CJP - this seems to get alternative transcripts each time, from speaking with Howard, this should always be the same one,
-  # so BRCA1 should always be transcript BRCA1-001 ENST00000357654 I think from comparing his exon numbering with those in EnsEMBL.
-  # Maybe we need to do the same with other genes like BRCA2, Sticklers, etc.
-
-  if ($tran->external_name =~ /^BRCA1/) {
-    $tran = $ta->fetch_by_stable_id('ENST00000357654');
-  }
-
-  my $exons = $tran->{_variation_effect_feature_cache}->{exons} ||= $tran->get_all_Exons;
-
-  my $tot_exons = scalar(@$exons);
-
-  my $exon_count = 0;
-
-  my $prev_exon;
-  my $exon_nr = "";
-  my $intron_nr = "";
-
-  for my $exon (@$exons) {
-
-    $exon_count++;
-
-    if ($exon_count == 4 and $tran->external_name =~ /^BRCA1\-001/) {
-      $exon_count++; # To deal with clinical exon numbering system for BRCA1
-    }
-    
-    if (overlap($vf_start, $vf_end, $exon->start, $exon->end)) {
-      $exon_nr = $exon_count;
-      last;
-    }
-    
-    if ($prev_exon) {
-      my $intron_start = $strand == 1 ? $prev_exon->end + 1 : $exon->end + 1;
-      my $intron_end   = $strand == 1 ? $exon->start - 1 : $prev_exon->start - 1;
-      
-      if ($prev_exon && overlap($vf_start, $vf_end, $intron_start, $intron_end)) {
-	$intron_nr = sprintf "%d/%d", $exon_count - 1, $tot_exons - 1;
-	last;
-      }
-    }
-    
-    $prev_exon = $exon;
-  }
-  return $exon_nr;
-}
-
-
-
-sub overlap {
-  my ( $f1_start, $f1_end, $f2_start, $f2_end ) = @_;
-   
-  return ( ($f1_end >= $f2_start) and ($f1_start <= $f2_end) );
-}
 
 # 
 # 
@@ -1512,6 +1439,7 @@ sub readin_bed {
 
     chomp;
     next if (/^\z/);
+    next if (/#/);
 
     next if ((/^chromosome/) && (! $leeway)); 
     
@@ -1547,6 +1475,9 @@ sub readin_bed {
       # contained in the region
       if ( $data[ $i ][ 0 ] >= $tmp[ -1 ][ 0 ]  &&
 	   $data[ $i ][ 1 ] <= $tmp[ -1 ][ 1 ] ) {
+
+#	print STDERR "@{$tmp[-1]}\n";	
+#	print STDERR "Skipping @{$data[$i]}\n";
 	next;
       }
       # overlapping

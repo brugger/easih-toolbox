@@ -288,6 +288,8 @@ foreach my $well ( keys %well_starts ) {
 sub flagstats {
   my ($file ) = @_;
 
+  print "$file\n";
+
   return undef if ( !-e $file);
 
   my %res;

@@ -37,6 +37,9 @@ iter = samfile.pileup(max_depth=20000)
 
 iter = samfile.pileup(chromosome, position,position+1,max_depth=20000);
 
+MIN_BASEQ        =  0
+
+
 for x in iter:
  
     if (position != x.pos ):
@@ -50,7 +53,6 @@ for x in iter:
         if (read.alignment.is_unmapped or read.alignment.is_duplicate or read.is_del):
             continue
 
- 
         if ( read.indel > 0):
             insertion = read.alignment.seq[ read.qpos:read.qpos+ read.indel + 1]
             base_counts = update_counts(base_counts, insertion)
@@ -64,7 +66,10 @@ for x in iter:
             base_counts = update_counts(base_counts, deletion)
             
         else:
-            alt_base = read.alignment.seq[ read.qpos];
+            base_qual = ord( read.alignment.qual[ read.qpos] ) - 33
+            if ( base_qual < MIN_BASEQ):
+                continue
+            alt_base = read.alignment.seq[ read.qpos ];
             base_counts = update_counts(base_counts, alt_base)
 
 

@@ -119,12 +119,13 @@ my %filenames;
 my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
 
 
-#exit;
 
 #$runfolder = "ILL_TEST_10" if ( $debug );
 
-my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
-EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
+#my $res = EASIH::Illumina::Summary::readin_summaries($basecall_folder);
+#EASIH::DONE::add_illumina_lane_stats_summary( $rid,  $res );
+
+#exit;
 
 
 fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_sheet || ($sample_sheet && ! -e $sample_sheet));
@@ -133,7 +134,7 @@ fail("no sample sheet!\n", "MISSING_SAMPLESHEET") if ($datamonger && ! $sample_s
 
 my (%fhs, %fids);
 
-print Dumper( %filenames );
+print Dumper( \%filenames );
 
 #exit;
 
@@ -242,19 +243,20 @@ sub validate_names_and_open_outfiles {
   }
 
   my ($sample_names, $errors, $warnings, $project_name ) = EASIH::Illumina::Sample_sheet::readin( $sample_sheet );
+#  print Dumper( $sample_names );
 
   # if there is only one barcode in a lane change this so the whole lane gets assigned to the sample in the lane.
   foreach my $lane_nr ( keys %$sample_names ) { 
     if ( keys %{$$sample_names{ $lane_nr }} == 1 ) {
       my ($barcode) = keys %{$$sample_names{ $lane_nr }};
-      if ( $barcode ne "default" || $barcode ne "") {
+      if ( $barcode ne "default" && $barcode ne "") {
 	$$sample_names{ $lane_nr }{"default"} = $$sample_names{ $lane_nr }{$barcode};
 	delete $$sample_names{ $lane_nr }{$barcode};
       }
     }
   }
 
-#die Dumper( $res );
+#  die Dumper( $res );
   
 #  print Dumper( $sample_names );
 #  print Dumper( \%filenames );
@@ -293,7 +295,7 @@ sub validate_names_and_open_outfiles {
       my ($base_filename, $error);
 
       if ( $project_name && $project_name =~ /^CP\d+/) {
-	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir( "$sample_name", "$outdir/$project_name/");
+	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir( "$sample_name", "/data/CP/$project_name/");
       }
       else {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);

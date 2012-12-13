@@ -30,7 +30,6 @@ use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
 use EASIH::Pipeline;
 use EASIH::Pipeline::Misc;
 
-
 my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:vV';
 my %opts;
 getopts($opts, \%opts);
@@ -245,8 +244,6 @@ sub bwa_sampe {
 sub bam_sort {
   my ($input) = @_;
 
-  EASIH::Pipeline::max_jobs( $host_cpus );
-
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $readgroup =   $file2bam{ $input };
@@ -275,6 +272,7 @@ sub bam_sort {
 sub bam_merge {
   my (@inputs) = @_;
 
+  EASIH::Pipeline::max_jobs( $host_cpus );
 
 
   @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
@@ -431,18 +429,11 @@ sub bam_realign {
   my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
-  my $cmd;
-  # If the interval file is empty the realigner ignores the region and produces an empty bamfile...
-  if (  -z $interval_file ) {
-    $cmd = "$samtools view -b $tmp_bam_file $region > $tmp_file";
-  }
-  else {
-    $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
 
-    $cmd .= " -known $mills ";
-    $cmd .= " -known $kg_indel ";
+  my $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
 
-  }
+  $cmd .= " -known $mills ";
+  $cmd .= " -known $kg_indel ";
 
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
@@ -477,8 +468,6 @@ sub print_reads {
 
   EASIH::Pipeline::submit_job($cmd, $bam_file);
 }
-
-
 
 
 sub run_stats {

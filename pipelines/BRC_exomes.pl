@@ -438,6 +438,7 @@ sub bam_realign {
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
+
 # 
 # 
 # 
@@ -455,6 +456,7 @@ sub base_recalibrator {
 
   EASIH::Pipeline::submit_job($cmd, "$input $tmp_file");
 }
+
 
 # 
 # 

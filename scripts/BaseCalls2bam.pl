@@ -406,6 +406,13 @@ sub id_run_folder {
 
   # remove double // in the name
   $dir =~ s/\/{2,}/\//g;
+  # and any /./
+  $dir =~ s/\/\.\//\//g;
+
+  if ($dir !~ /Data\/Intensities\/BaseCalls/) {
+    fail("Not a illumin runfolder/BaseCalls directory \n", "BASECALL2FQ_INPATH_ERROR");
+  }
+  
 
   if ( $dir  =~ /\.\./ ) {
     fail("Cannot handle input paths containing: ../\n", "BASECALL2FQ_INPATH_ERROR");

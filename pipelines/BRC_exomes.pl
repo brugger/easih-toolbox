@@ -95,6 +95,8 @@ my $bam_file      = "$report.bam";
 my $vcf_file      = "$report.vcf";
 my $host_cpus      = nr_of_cpus();
 
+my $RUN_ON_SGE   = 1;
+
 #$host_cpus = int($host_cpus/2);
 
 my $freeze_file = "$opts{'o'}.maris";
@@ -123,11 +125,11 @@ my %run_ids         = ();
 
 #validate_input();
 
-EASIH::Pipeline::verbosity(10);
+#EASIH::Pipeline::verbosity(10);
 #EASIH::Pipeline::backend('Darwin');
 EASIH::Pipeline::backend('Local');
-#EASIH::Pipeline::backend('SGE');
-EASIH::Pipeline::max_jobs( $host_cpus );
+EASIH::Pipeline::backend('SGE') if ( $RUN_ON_SGE );
+EASIH::Pipeline::max_jobs( $host_cpus ) if ( !$RUN_ON_SGE );;
 EASIH::Pipeline::max_retry(0);
 
 EASIH::Pipeline::add_start_step('bwa_aln');
@@ -151,7 +153,7 @@ EASIH::Pipeline::add_step('run_stats', 'finished');
 
 EASIH::Pipeline::print_flow();
 
-EASIH::Pipeline::max_jobs( 1 );
+EASIH::Pipeline::max_jobs( 1 ) if ( !$RUN_ON_SGE );
 
 #exit;
 &EASIH::Pipeline::run();
@@ -199,7 +201,7 @@ sub bwa_aln {
 		   "second_fq"  => $second_file,
 		   "second_sai" => $tmp_sai2};
     
-    EASIH::Pipeline::submit_job($cmd, $output);
+    EASIH::Pipeline::submit_job($cmd, $output, "t=$host_cpus");
   }
 
 }
@@ -228,11 +230,11 @@ sub bwa_sampe {
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
   my $cmd;
-  $cmd = "$bwa sampe -t $host_cpus -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} | samtools view  -t $reference -Sb - > $tmp_file";
+  $cmd = "$bwa sampe -t $host_cpus -P $reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} -f $tmp_file";
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
-  EASIH::Pipeline::submit_job($cmd, $tmp_file);
+  EASIH::Pipeline::submit_job($cmd, $tmp_file, "t=$host_cpus");
 }
 
 
@@ -272,7 +274,7 @@ sub bam_sort {
 sub bam_merge {
   my (@inputs) = @_;
 
-  EASIH::Pipeline::max_jobs( $host_cpus );
+  EASIH::Pipeline::max_jobs( $host_cpus ) if ( ! $RUN_ON_SGE );
 
 
   @inputs = @{$inputs[0]} if ( @inputs == 1 && ref($inputs[0]) eq "ARRAY" );
@@ -409,7 +411,10 @@ sub realign_targets {
 
   foreach my $name ( @names ) {
     my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
-    my $cmd = "$gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
+
+    my $sleep_time = rand(120);
+
+    my $cmd = "sleep $sleep_time; $gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
 
     $cmd .= " --known $mills ";
     $cmd .= " --known $kg_indel ";
@@ -430,7 +435,12 @@ sub bam_realign {
 
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
 
-  my $cmd = "$gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
+  my $sleep_time = rand(120);
+
+  # The system will die if an interval file is not present, so make an empty one if ones does not exists.
+  system "touch $interval_file" if ( ! -e $interval_file );
+
+  my $cmd = "sleep $sleep_time; $gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
 
   $cmd .= " -known $mills ";
   $cmd .= " -known $kg_indel ";

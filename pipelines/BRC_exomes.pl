@@ -130,7 +130,7 @@ my %run_ids         = ();
 EASIH::Pipeline::backend('Local');
 EASIH::Pipeline::backend('SGE') if ( $RUN_ON_SGE );
 EASIH::Pipeline::max_jobs( $host_cpus ) if ( !$RUN_ON_SGE );;
-EASIH::Pipeline::max_retry(0);
+EASIH::Pipeline::max_retry( 3 );
 
 EASIH::Pipeline::add_start_step('bwa_aln');
 EASIH::Pipeline::add_step('bwa_aln', 'bwa_sampe', );

@@ -166,7 +166,7 @@ for x in iter:
     print "Allele ratio: %.2f %%" % first_second_ratio
     
     print "strand bias (pvalue): %.2f (> 0.05 no bias)" % pvalue
-    print "read start bias (pvalue): %2f (> 0.05 no bias)" % pvalue2
+    print "read start bias (pvalue): %.2f (> 0.05 no bias)" % pvalue2
 
 
 

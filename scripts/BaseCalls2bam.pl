@@ -17,7 +17,7 @@ my $debug = 0;
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
 BEGIN {
-  my $DYNAMIC_LIB_PATHS = 0;
+  my $DYNAMIC_LIB_PATHS = 1;
   if ( $DYNAMIC_LIB_PATHS ) {
     my $path = $0;
     if ($path =~ /.*\//) {
@@ -398,8 +398,21 @@ sub id_run_folder {
     $dir = $cwd;
   }
 
+  # the user might only have given the top run folder as input, so lets go on a guessing expedition
+  $dir = "$dir/Data/" if ( -e "$dir/Data");
+  $dir = "$dir/Intensities/" if ( -e "$dir/Intensities/");
+  $dir = "$dir/BaseCalls/" if ( -e "$dir/BaseCalls");
+
+
   # remove double // in the name
   $dir =~ s/\/{2,}/\//g;
+  # and any /./
+  $dir =~ s/\/\.\//\//g;
+
+  if ($dir !~ /Data\/Intensities\/BaseCalls/) {
+    fail("Not a illumin runfolder/BaseCalls directory \n", "BASECALL2FQ_INPATH_ERROR");
+  }
+  
 
   if ( $dir  =~ /\.\./ ) {
     fail("Cannot handle input paths containing: ../\n", "BASECALL2FQ_INPATH_ERROR");
@@ -636,177 +649,3 @@ sub analyse_lane {
 
 
 
-
-
-# 
-# 
-# 
-# Kim Brugger (04 Jan 2011)
-sub analyse_lane_old {
-  my ( $lane_nr ) = @_;
-
-  # There is a need to go from sample name to barcode later on.
-  my %bcode2sample;
-  if ( ref($$sample_names{ $lane_nr }) eq 'HASH' && ! $$sample_names{ $lane_nr }{'default'}) {
-    foreach my $bcode  ( keys %{$$sample_names{ $lane_nr }} ) {
-      $bcode2sample{ $$sample_names{ $lane_nr }{ $bcode }} = $bcode;
-    }    
-  }
-
-  my %sample_stats;
-  
-  # Get all the files for the lane.
-  my @files = glob("$basecall_folder/s_$lane_nr\_1_*_qseq.txt");
-
-  my ($lane_total, $lane_pass, $lane_QV30, $lane_bases) = (0, 0, 0, 0);
-
-  foreach my $file (@files) {
-    my $tile_stats = analyse_tile( $file, $lane_nr );
-    $lane_total   += $$tile_stats{ 'lane_total' } || 0;
-    $lane_pass    += $$tile_stats{ 'lane_pass'  } || 0;
-    $lane_QV30    += $$tile_stats{ 'lane_QV30'  } || 0;
-    $lane_bases   += $$tile_stats{ 'lane_bases' } || 0;
-
-    my $read_length = $$tile_stats{'lane_read_length'};
-
-    foreach my $k ( keys %$tile_stats ) {
-      next if ( $k =~ /^lane_/ );
-#      print "$k\n";
-      
-      $sample_stats{ $k } += $$tile_stats{ $k };
-    }
-
-    last if ($debug);
-  }
-
-  my $perc_lane_pass = 0;
-  $perc_lane_pass = $lane_pass*100/$lane_total if ($lane_pass && $lane_total);
-
-  my $tile_pass = 0;
-  $tile_pass    = $lane_pass/120 if ($lane_pass);
-  
-  my $perc_QV30_bases = 0;
-  $perc_QV30_bases = 100*$lane_QV30/$lane_bases if ($lane_QV30 && $lane_bases);
-
-  printf("lane $lane_nr\t\t$lane_total\t$lane_pass (%.2f %%)\t%.2f avg clusters per tile. %.2f%% bases >= QV30\n", $perc_lane_pass, $tile_pass, $perc_QV30_bases);
- 
-
-  EASIH::DONE::add_illumina_lane_stats( $rid, 1, $lane_nr, $lane_total, $lane_pass, $lane_bases, $lane_QV30 )   
-      if( $datamonger );
-
-
-
-}
-
-# 
-# 
-# 
-# Kim Brugger (15 Sep 2011)
-sub analyse_tile {
-  my ($file1, $lane_nr ) = @_;
-
-  my ($file2, $file3) = ($file1, $file1);
-  
-  $file2 =~ s/(s_\d)_1_/$1_2_/;
-  $file3 =~ s/(s_\d)_1_/$1_3_/;
-
-
-  my ($fh1, $fh2, $fh3);
-  my $tile2seq = "";
-	
-  open ($fh1, "$tile2seq $file1 |") || die "Could not open '$file1': $!\n" if ( -e $file1 );
-  open ($fh2, "$tile2seq $file2 |") || die "Could not open '$file2': $!\n" if ( -e $file2 );
-  open ($fh3, "$tile2seq $file3 |") || die "Could not open '$file3': $!\n" if ( -e $file3 );
-
-  # this is a multiplexed run, so flip the file handle for file 2 & 3.
-  # I am so going to regret this later on, I am sure of it...
-  ($fh2, $fh3) = ($fh3, $fh2) if ( $indexed_run );
-
-#  $fh3 = $fh2 if (  $paired_data && ! $fh3);
-
-  my $read_length;
-  my %stats;
-    
-  if ( $fh3 ) {
-
-    my @bar_codes = sort keys %{$$sample_names{ $lane_nr }} if (ref $$sample_names{ $lane_nr } eq "HASH");
-    
-    while (my $line3 = <$fh3>) {
-      chomp ( $line3 );
-      $stats{lane_total}++;
-      
-      my $line1 = <$fh1>;
-      my $line2 = <$fh2> if ($fh2);
-      my ($name3, $bases3, $qual3, $pf3) = split /\t/, $line3;
-      next if ( ! $pf3 );
-
-      chomp ( $line1 );
-      chomp ( $line2 ) if ($line2);
-
-      my $barcode = verify_bcode($bases3, @bar_codes) if (ref $$sample_names{ $lane_nr } eq "HASH");
-      my ($name1, $bases1, $qual1, $pf1, $QV30_1) = split /\t/, $line1;
-      my ($name2, $bases2, $qual2, $pf2, $QV30_2) = split /\t/, $line2 if ($fh2);
-      next if (! $barcode && ref $$sample_names{ $lane_nr } eq "HASH");
-      
- 
-      my $sample_name = $$sample_names{ $lane_nr };
-      $sample_name = $$sample_names{ $lane_nr }{ $barcode } if ( $barcode && ref $$sample_names{ $lane_nr } eq "HASH");
-
-      my $bfout = outfile("$sample_name.1", $lane_nr );
-      print $bfout "$name1\n$bases1\n+\n$qual1\n";
-
-      if ($fh2) {
-	my $bfout = outfile("$sample_name.2", $lane_nr );
-	print $bfout "$name2\n$bases2\n+\n$qual2\n";
-      }
-
-      $stats{ $sample_name }++;
-      $stats{'lane_pass'}++;
-      $stats{'lane_QV30'} += $QV30_1 if ($QV30_1);
-      $stats{'lane_QV30'} += $QV30_2 if ($QV30_2);
-      $read_length = length($bases1) if (! $read_length);
-      $stats{'lane_bases'    } += $read_length;
-      $stats{'lane_bases'    } += $read_length if ($fh2);
-    }
-  }
-  else {
-    my ($input_file, $fout, $demultiplexing, $ebcs) = @_;
-
-    while (my $line1 = <$fh1>) {
-      $stats{lane_total}++;
-      chomp ( $line1 );
-
-      my $line2 = <$fh2> if ($fh2);
-      chomp ( $line2 )   if ($fh2);
-      
-      my ($name1, $bases1, $qual1, $pf1, $QV30_1) = split /\t/, $line1;
-      my ($name2, $bases2, $qual2, $pf2, $QV30_2) = split /\t/, $line2 if ($fh2);
-
-      next if ( ! $pf1 );
-
-      my $sample_name = $$sample_names{$lane_nr};
-
-      my $fout = outfile("$sample_name.1", $lane_nr );
-      print $fout "$name1\n$bases1\n+\n$qual1\n";
-
-      if ($fh2) {
-	my $fout = outfile("$sample_name.2", $lane_nr );
-	print $fout "$name2\n$bases2\n+\n$qual2\n";
-      }
-
-      $stats{ $sample_name }++;
-
-
-      $stats{'lane_pass'}++;
-      $stats{'lane_QV30'} += $QV30_1 if ($QV30_1);
-      $stats{'lane_QV30'} += $QV30_2 if ($QV30_2);
-      $read_length = length($bases1) if (! $read_length);
-      $stats{'lane_bases'} += $read_length;
-      $stats{'lane_bases'} += $read_length if ($fh2);
-    }
-  }
-
-  $stats{'lane_read_length'} = $read_length;
-
-  return (\%stats);
-}

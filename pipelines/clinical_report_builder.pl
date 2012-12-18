@@ -11,7 +11,7 @@ use Data::Dumper;
 use Spreadsheet::WriteExcel;
 
 use lib '/software/installed/easih-toolbox/modules';
-use EASIH::Toolbox;
+use EASIH::Git;
 
 my $PIPELINE_VERSION = '1.3';
 
@@ -75,7 +75,7 @@ $added_worksheets{ 'QC' }->write(0, 0, 'EASIH ID');
 $added_worksheets{ 'QC' }->write(0, 1, $easih_id, $bold);
 $added_worksheets{ 'QC' }->write(1, 0, 'GM No');
 $added_worksheets{ 'QC' }->write(0, 3, 'Pipeline version:');
-$added_worksheets{ 'QC' }->write(0, 4, "$PIPELINE_VERSION-".EASIH::Toolbox::version(), $bold);
+$added_worksheets{ 'QC' }->write(0, 4, "$PIPELINE_VERSION-".EASIH::Git::version(), $bold);
 
 $added_worksheets{ 'QC' }->write(4, 0, 'Name', $bold); 
 $added_worksheets{ 'QC' }->write(4, 1, 'Min depth', $bold);     

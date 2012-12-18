@@ -41,6 +41,7 @@ getopts($opts, \%opts);
 if ( $opts{Q} ) {
 
   $opts{Q} =~ s/\..*//;
+  $opts{Q} =~ s/\.[1|2].fq.*//;
 
   $opts{'1'} = join(",", sort(glob("$opts{Q}.1.fq.gz")));
   $opts{'2'} = join(",", sort(glob("$opts{Q}.2.fq.gz")));
@@ -73,8 +74,10 @@ if ( $opts{Q} ) {
     $opts{ 'B' } = '/data/refs/HNPCC/HNPCC.bed';
     $opts{ 'r' } = '/data/refs/HNPCC/HNPCC.fasta';
   }
-
-
+  else {
+    die "Unknown test for $opts{'1'}\n";
+  }
+  
 
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
@@ -130,14 +133,17 @@ EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
 EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge2' );
 EASIH::Pipeline::add_step('bam_merge2', 'bam_index2');
 EASIH::Pipeline::add_step('bam_index2', 'count_covariates');
-EASIH::Pipeline::add_step('bam_index2', 'flagstats');
+
 EASIH::Pipeline::add_step('count_covariates', 'table_recalibration');
 EASIH::Pipeline::add_step('table_recalibration', 'bam_index3');
 
 EASIH::Pipeline::add_step('bam_index3', 'UnifiedGenotyper');
+EASIH::Pipeline::add_step('bam_index3', 'flagstats');
+EASIH::Pipeline::add_step('flagstats', 'finished');
 
 EASIH::Pipeline::add_step('UnifiedGenotyper', 'annotate_VCF');
 EASIH::Pipeline::add_step('annotate_VCF', 'vcf2xls');
+EASIH::Pipeline::add_step('vcf2xls', 'finished');
 
 EASIH::Pipeline::backend('Local');
 EASIH::Pipeline::max_jobs( $host_cpus );
@@ -147,6 +153,17 @@ EASIH::Pipeline::max_retry(0);
 EASIH::Pipeline::run();
 
 my %file2bam;
+
+
+# 
+# 
+# 
+# Kim Brugger (03 Aug 2011)
+sub finished {
+
+  system "touch $out.done";
+  
+}
 
 
 sub bwa_aln {
@@ -195,8 +212,8 @@ sub bam_sort {
   open( my $sam_in,  $input ) || die "Could not open file '$input': $!\n";
   open( my $sam_out, "| $samtools view -t $reference.fai -o $fixed_bam -Sb - " ) || die "Could not open file '$fixed_bam': $!\n";
   while(<$sam_in>) {
-    if (/^\@/ && !/^\@SQ/) {
-      print $sam_out $_;
+    if (/^\@/ ) {
+      print $sam_out $_ if ( !/^\@SQ/ ); 
 #      print  $_;
     }
     else {
@@ -206,9 +223,11 @@ sub bam_sort {
 	$regions{ $F[2] }++;
 	$F[3] += $start - 1;
 	$F[2] = $chr;
-	print $sam_out join("\t", @F);
 #	print  join("\t", @F);
       }
+      print $sam_out join("\t", @F);
+
+
     }
   }
   close($sam_out);

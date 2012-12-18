@@ -13,7 +13,7 @@ use Spreadsheet::WriteExcel;
 use lib '/software/installed/easih-toolbox/modules';
 use EASIH::Git;
 
-my $PIPELINE_VERSION = '1.3';
+my $PIPELINE_VERSION = '1.4';
 
 
 my $variations;

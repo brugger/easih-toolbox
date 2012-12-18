@@ -30,7 +30,7 @@ use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
 use EASIH::Pipeline;
 use EASIH::Pipeline::Misc;
 
-my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:Pr:R:sS:vV';
+my $opts = '1:2:d:De:f:hH:I:lL:mM:n:No:p:Q:p:Pr:R:sS:vV';
 my %opts;
 getopts($opts, \%opts);
 
@@ -55,7 +55,7 @@ my $username = scalar getpwuid $<;
 if ( $opts{Q} ) {
 
   $opts{Q} =~ s/_.*//;
-  $opts{Q} =~ s/_.[1,2].fq.*//;
+  $opts{Q} =~ s/\.[1,2].fq.*//;
 
   $opts{'1'} = join(",", sort(glob("$opts{Q}*.1.fq"), glob("$opts{Q}*.1.fq.gz")));
   $opts{'2'} = join(",", sort(glob("$opts{Q}*.2.fq"), glob("$opts{Q}*.2.fq.gz")));
@@ -68,8 +68,6 @@ if ( $opts{Q} ) {
 
 }  
 
-#print Dumper( \%opts );
-
 my $first          = $opts{'1'}     || usage();
 $first             = [split(",", $first)];
 my $second         = $opts{'2'}     || usage();
@@ -80,24 +78,14 @@ my $log            = $opts{'L'};
 my $error_log      = $opts{'E'};
 my $mark_dup       = $opts{'m'};
 our $report        = $opts{'o'}     || usage();
-my $platform       = 'ILLUMINA';
-my $reference_dir = $opts{'r'}     || usage();
-
-my $reference   = glob("$reference_dir/*.fasta");
-my ($dbsnp)     = grep(!/excluding/, glob("$reference_dir/dbsnp_*.vcf"));
-my ($mills)     = grep(!/sites/, glob("$reference_dir/Mills_Devine_2hit.indels.b37*.vcf"));
-my ($kg_indel) = grep(!/sites/, glob("$reference_dir/1000G_biallelic.indels.b37*.vcf"));
-
-my ($hapmap)    = glob("$reference_dir/hapmap_*.sites.vcf");
-my ($omni)      = glob("$reference_dir/*omni*.sites.vcf");
+my $platform       = $opts{'p'}     || 'ILLUMINA';
+my $reference      = $opts{'R'}     || usage();
 
 my $bam_file      = "$report.bam";
 my $vcf_file      = "$report.vcf";
 my $host_cpus      = nr_of_cpus();
 
 my $RUN_ON_SGE   = 1;
-
-#$host_cpus = int($host_cpus/2);
 
 my $freeze_file = "$opts{'o'}.maris";
 system "mv $freeze_file $freeze_file.backup"  if ( -e $freeze_file );
@@ -137,19 +125,11 @@ EASIH::Pipeline::add_step('bwa_aln', 'bwa_sampe', );
 EASIH::Pipeline::add_step('bwa_sampe', 'bam_sort');
 EASIH::Pipeline::add_merge_step('bam_sort', 'bam_merge');
 EASIH::Pipeline::add_step('bam_merge', 'bam_clean');
-EASIH::Pipeline::add_step('bam_clean', 'bam_index');
-EASIH::Pipeline::add_step('bam_index', 'realign_targets');
-EASIH::Pipeline::add_step('bam_index', 'get_unmapped_reads');
-EASIH::Pipeline::add_step('get_unmapped_reads', 'bam_merge_realigned');
-EASIH::Pipeline::add_step('realign_targets', 'bam_realign');
-EASIH::Pipeline::add_merge_step('bam_realign', 'bam_merge_realigned', 'bam_merge');
-EASIH::Pipeline::add_step('bam_merge_realigned', 'mark_dups');
-EASIH::Pipeline::add_step('mark_dups', 'bam_index_realigned', 'bam_index');
-EASIH::Pipeline::add_step('bam_index_realigned', 'base_recalibrator');
-EASIH::Pipeline::add_step('base_recalibrator', 'print_reads');
-EASIH::Pipeline::add_step('print_reads', 'bam_index3', 'bam_index');
-EASIH::Pipeline::add_step('bam_index3', 'run_stats');
+EASIH::Pipeline::add_step('bam_clean', 'mark_dups');
+EASIH::Pipeline::add_step('mark_dups', 'bam_index');
 EASIH::Pipeline::add_step('run_stats', 'finished');
+EASIH::Pipeline::add_step('mark_dups', 'run_stats');
+EASIH::Pipeline::add_step('bam_index', 'finished');
 
 EASIH::Pipeline::print_flow();
 
@@ -205,8 +185,6 @@ sub bwa_aln {
   }
 
 }
-
-
 
 # 
 # 
@@ -313,42 +291,6 @@ sub bam_index {
   EASIH::Pipeline::submit_job($cmd, $input);
 }
 
-# 
-# 
-# 
-# Kim Brugger (26 Jun 2012)
-sub bam_index2 {
-  my ($input) = @_;
-
-  my $cmd = "$samtools index $input";
-  EASIH::Pipeline::submit_job($cmd, $input);
-}
-
-
-
-# 
-# 
-# 
-# Kim Brugger (26 Jun 2012)
-sub bam_index3 {
-  my ($input) = @_;
-
-  my $cmd = "$samtools index $input";
-  EASIH::Pipeline::submit_job($cmd, $input);
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (26 Jun 2012)
-sub bam_index4 {
-  my ($input) = @_;
-
-  my $cmd = "$samtools index $input";
-  EASIH::Pipeline::submit_job($cmd, $input);
-}
-
 
 # 
 # 
@@ -360,7 +302,7 @@ sub mark_dups {
   my $username = scalar getpwuid $<;
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $metrix_file = EASIH::Pipeline::tmp_file(".mtx");
-  my $cmd = "$picard -T MarkDuplicates  I= $input O= $tmp_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
+  my $cmd = "$picard -T MarkDuplicates  I= $input O= $bam_file  M= $metrix_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
 }
 
@@ -377,108 +319,6 @@ sub bam_clean {
   my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
   my $cmd = "$picard -T CleanSam I= $input O= $tmp_file VALIDATION_STRINGENCY=SILENT TMP_DIR=/home/$username/scratch/tmp/ MAX_RECORDS_IN_RAM=500000";
   EASIH::Pipeline::submit_job($cmd, $tmp_file);
-}
-
-
-
-sub get_unmapped_reads {
-  my ($input) = @_;
-  
-  my $tmp_file = EASIH::Pipeline::tmp_file(".unmapped.bam");
-  my $cmd = "$samtools view -bf 12 $input > $tmp_file";
-
-  EASIH::Pipeline::submit_job($cmd, $tmp_file);
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub realign_targets {
-  my ($input) = @_;
-
-  my @names = ();
-  open(my $spipe, "$samtools view -H $input | ") || die "Could not open '$input': $!\n";
-  while(<$spipe>) {
-    next if ( ! /\@SQ/);
-    foreach my $field ( split("\t") ) {
-      push @names, $1 if ( $field =~ /SN:(.*)/);
-    }
-  }
-
-  print "$input @names\n";
-
-  foreach my $name ( @names ) {
-    my $tmp_file = EASIH::Pipeline::tmp_file(".intervals");
-
-    my $sleep_time = rand(120);
-
-    my $cmd = "sleep $sleep_time; $gatk -T RealignerTargetCreator -R $reference -o $tmp_file  -L $name -I $input";
-
-    $cmd .= " --known $mills ";
-    $cmd .= " --known $kg_indel ";
-
-    EASIH::Pipeline::submit_job($cmd, "$tmp_file $name $input");
-  }
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub bam_realign {
-  my ($input) = @_;
-
-  my ($interval_file, $region, $tmp_bam_file) = split(" ", $input);
-
-  my $tmp_file = EASIH::Pipeline::tmp_file(".bam");
-
-  my $sleep_time = rand(120);
-
-  # The system will die if an interval file is not present, so make an empty one if ones does not exists.
-  system "touch $interval_file" if ( ! -e $interval_file );
-
-  my $cmd = "sleep $sleep_time; $gatk -T IndelRealigner -targetIntervals $interval_file -L $region -o $tmp_file -R $reference -I $tmp_bam_file ";
-
-  $cmd .= " -known $mills ";
-  $cmd .= " -known $kg_indel ";
-
-  EASIH::Pipeline::submit_job($cmd, $tmp_file);
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub base_recalibrator {
-  my ($input) = @_;
-  
-  my $tmp_file = EASIH::Pipeline::tmp_file(".grp");
-
-  my $cmd = "$gatk -T BaseRecalibrator -R $reference -I $input -o $tmp_file --disable_indel_quals ";
-
-  $cmd .= " -knownSites $dbsnp ";
-  $cmd .= " -knownSites $mills ";
-  $cmd .= " -knownSites $kg_indel ";
-
-  EASIH::Pipeline::submit_job($cmd, "$input $tmp_file");
-}
-
-
-# 
-# 
-# 
-# Kim Brugger (25 Jun 2012)
-sub print_reads {
-  my ($input) = @_;
-  my ($tmp_bam, $recal) = split(" ", $input);
-
-  my $cmd = "$gatk -T PrintReads -R $reference -I $tmp_bam -BQSR $recal -baq RECALCULATE -o $bam_file"; 
-
-  EASIH::Pipeline::submit_job($cmd, $bam_file);
 }
 
 
@@ -510,8 +350,6 @@ sub finished {
   print $out "$bam_file.md5\n";
   print $out "$bam_file.bai\n";
   print $out "$bam_file.bai.md5\n";
-  print $out "$report.vcf\n";
-  print $out "$report.vcf.md5\n";
   print $out "$report.maris\n";
   print $out "$report.maris.md5\n";
   print $out "$report.flagstat\n";
@@ -570,9 +408,6 @@ sub validate_input {
     push @info, "Added bam postfix so '$bam_file' becomes '$bam_file.bam'";
     $bam_file .= ".bam";
   }
-
-  push @errors, "'$dbsnp' does not exists\n" if (! -e $dbsnp);
-  push @errors, "'$dbsnp' don't end with .vcf as expected\n" if ($dbsnp !~ /.vcf\z/);
 
   push @errors, "Platform must be either ILLUMINA or PGM not '$platform'" if ( $platform ne "ILLUMINA" && $platform ne 'PGM');
 

@@ -10,8 +10,6 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-my $debug = 0;
-#$debug = 1;
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -45,11 +43,10 @@ use EASIH::Illumina::Config;
 use EASIH::Parallel;
 use EASIH::MD5;
 
-EASIH::DONE::Connect('done_dev') if ($debug); 
 
 my %opts;
 #getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmb:L:", \%opts);
-getopts("hB:L:bfSdo:", \%opts);
+getopts("hB:L:bfSdo:D", \%opts);
 
 
 # 
@@ -96,16 +93,20 @@ my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_folder );
 
 
 my $mismatches    = $opts{'m'} || 0;
-my $datamonger  = $opts{'d'} || 0;
+my $datamonger  = $opts{'d'} || 1;
 my $outdir      = $opts{'o'};
-$outdir = "/tmp/BCL2BAM/" if ($debug);
 my $parallel =  1;
 $parallel = 0 if ($opts{S});
 
 my $paired_data = 0;
 
-my $fq_out  = $opts{ 'f' } || 0;
+my $fq_out  = $opts{ 'f' } || 1;
 my $bam_out = $opts{ 'b' } || 0;
+
+my $debug = $opts{ 'D' } || 0;
+#$debug = 1;
+EASIH::DONE::Connect('done_dev') if ($debug); 
+$outdir = "/tmp/BCL2BAM/" if ($debug);
 
 
 
@@ -295,7 +296,8 @@ sub validate_names_and_open_outfiles {
       my ($base_filename, $error);
 
       if ( $project_name && $project_name =~ /^CP\d+/) {
-	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir( "$sample_name", "/data/CP/$project_name/");
+	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir_n_version( "$sample_name", "$outdir/CP/$project_name/");
+	system "cp $sample_sheet /data/CP/$project_name/raw/";
       }
       else {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);
@@ -397,6 +399,8 @@ sub id_run_folder {
   else { 
     $dir = $cwd;
   }
+
+  print "$dir $cwd\n";
 
   # the user might only have given the top run folder as input, so lets go on a guessing expedition
   $dir = "$dir/Data/" if ( -e "$dir/Data");

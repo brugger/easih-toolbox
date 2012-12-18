@@ -71,6 +71,31 @@ sub sample2outfilename_wo_project_dir {
 
 
 # 
+# For clinical CP runs, as they dont go into the standard sub project directory structure + we ignore run versions on there runs.
+# 
+# Kim Brugger (30 Oct 2012)
+sub sample2outfilename_wo_project_dir_n_version {
+  my ($sample_name, $outdir ) = @_;
+
+  if ( -e "$outdir" && ! -d "$outdir") {
+    return (undef,  "$outdir is not a directory\n");
+  }
+  elsif ( -e "$outdir" && ! -w "$outdir") {
+    return (undef,  "$outdir is not writeable\n");
+  }
+  if ( $outdir && ! -d $outdir ) {
+    if (system "mkdir -p $outdir") {
+      return (undef,  "Could not create directory '$outdir': $!\n");
+    }
+  }
+
+  return "$outdir/$sample_name";
+}
+
+
+
+
+# 
 # Finds the filename a sample should go to. Will check for std naming + if previous files exsists.
 # outdir overrides the default /data/<PROJECTID>/raw folder.
 #

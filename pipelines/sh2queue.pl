@@ -8,8 +8,19 @@
 use strict;
 use warnings;
 use Data::Dumper;
+use Getopt::Std;
+
+
+my $opts = 'N:';
+my %opts;
+getopts($opts, \%opts);
+
+my $qsub_params = "-cwd ";
+foreach my $k ( keys %opts ) {
+  $qsub_params .= " -$k $opts{ $k } ";
+}
+
 
 while(<>) {
-  chomp;
-  system "echo \" $_ \" | qsub -cwd\n"
+  system "echo \" $_ \" | qsub $qsub_params\n"
 }

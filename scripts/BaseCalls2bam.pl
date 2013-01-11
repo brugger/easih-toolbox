@@ -94,7 +94,7 @@ my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_folder );
 
 my $mismatches    = $opts{'m'} || 0;
 my $datamonger  = $opts{'d'} || 1;
-my $outdir      = $opts{'o'};
+my $outdir      = $opts{'o'} || "/data/";
 my $parallel =  1;
 $parallel = 0 if ($opts{S});
 
@@ -119,6 +119,7 @@ print "RID :: $rid \n";
 my %filenames;
 my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
 
+print Dumper($sample_names);
 
 
 #$runfolder = "ILL_TEST_10" if ( $debug );
@@ -188,6 +189,8 @@ if ( $datamonger ) {
 sub outfile {
   my ( $barcode, $lane_nr ) = @_;
 
+#  return -1;
+
 #  print "$barcode, $lane_nr \n";
 
   return $fhs{ $lane_nr }{ $barcode } if ( $fhs{ $lane_nr }{ $barcode } );
@@ -229,7 +232,6 @@ sub outfile {
 # Kim Brugger (29 Oct 2012)
 sub validate_names_and_open_outfiles {
   my ( $sample_sheet, @lanes ) = @_;
-  
 
   if ( $outdir ) {
     if ( -e "$outdir" && ! -d "$outdir") {
@@ -261,10 +263,9 @@ sub validate_names_and_open_outfiles {
   
 #  print Dumper( $sample_names );
 #  print Dumper( \%filenames );
-  
+
   my %DONE_sample_sheet = EASIH::DONE::fetch_sample_sheet_hash( $rid );
-
-
+#  print STDERR Dumper( \%DONE_sample_sheet );
   foreach my $lane_nr ( keys %DONE_sample_sheet ) {
     my %barcodes;
     map { s/\..*//; $barcodes{$_}++} keys %{$DONE_sample_sheet{ $lane_nr }};
@@ -272,13 +273,15 @@ sub validate_names_and_open_outfiles {
       foreach my $barcode ( keys %{$DONE_sample_sheet{ $lane_nr }} ) {
 	my ($post_fix) = $barcode =~ /\.(.*)/;
 	$DONE_sample_sheet{ $lane_nr }{"default.$post_fix"} = $DONE_sample_sheet{ $lane_nr }{ $barcode };
-	delete $DONE_sample_sheet{ $lane_nr }{ $barcode };
+	delete $DONE_sample_sheet{ $lane_nr }{ $barcode } if ($barcode ne "default.$post_fix");
       }
     }
   }
-      
-#  die Dumper( \%DONE_sample_sheet );
   
+#  print STDERR Dumper( \%DONE_sample_sheet );
+#  print Dumper( $sample_names );
+
+
 #  fail( $errors, "MALFORMED_SAMPLESHEET" ) if ($errors);
 
   $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, @lanes ) ;
@@ -292,41 +295,47 @@ sub validate_names_and_open_outfiles {
     foreach my $bcode (keys %{$$sample_names{$lane_nr}}) {
 
       my $sample_name = $$sample_names{ $lane_nr }{ $bcode };
-	
+
+#      print STDERR "LANE $lane_nr $bcode $sample_name\n";
+      
       my ($base_filename, $error);
 
       if ( $project_name && $project_name =~ /^CP\d+/) {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir_n_version( "$sample_name", "$outdir/CP/$project_name/");
-	system "cp $sample_sheet /data/CP/$project_name/raw/";
+	system "cp $sample_sheet /data/CP/$project_name/";
       }
       else {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);
       }
 
+#      print STDERR "LANE $lane_nr $bcode $sample_name $base_filename\n";
+
       if ( $fq_out ) { 
       
 	$filenames{ $lane_nr }{ "$bcode.1" } = "$base_filename.1.fq.gz";
 
-	$filenames{ $lane_nr }{ "$bcode.1" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.1" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.1" });
-
+	$filenames{ $lane_nr }{ "$bcode.1" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.1" } 
+	  if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.1" });
 
 	outfile("$bcode.1", $lane_nr);
 	if ( $PE ) {
 	  $filenames{ $lane_nr }{ "$bcode.2" }   = "$base_filename.2.fq.gz";
-	  $filenames{ $lane_nr }{ "$bcode.2" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.2" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.2" });
+	  $filenames{ $lane_nr }{ "$bcode.2" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.2" } 
+	    if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.2" });
 	  outfile("$bcode.2", $lane_nr) if ( $PE && $fq_out);
 	}
       }
       
       if ( $bam_out ) {
 	$filenames{ $lane_nr }{ "$bcode.bam" } = "$base_filename.bam";
-	$filenames{ $lane_nr }{ "$bcode.bam" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" } if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" });
-#	print Dumper( %filenames );
+	$filenames{ $lane_nr }{ "$bcode.bam" } = $DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" } 
+	  if ($DONE_sample_sheet{ $lane_nr }{ "$bcode.bam" });
 	outfile("$bcode.bam", $lane_nr);
       }
     }
   }
 
+#  die Dumper( \%filenames );
 #  print Dumper ( \%filenames );
   
   return $sample_names;

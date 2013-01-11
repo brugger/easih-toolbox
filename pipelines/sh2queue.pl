@@ -11,7 +11,7 @@ use Data::Dumper;
 use Getopt::Std;
 
 
-my $opts = 'N:';
+my $opts = 'N:l:';
 my %opts;
 getopts($opts, \%opts);
 
@@ -22,5 +22,5 @@ foreach my $k ( keys %opts ) {
 
 
 while(<>) {
-  system "echo \" $_ \" | qsub $qsub_params\n"
+  system "echo \" $_ \" | qsub $qsub_params \n"
 }

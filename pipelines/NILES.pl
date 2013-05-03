@@ -99,14 +99,14 @@ my $leeway           = $opts{'l'}     || 50;
 my $dbsnp            = $opts{d} || usage();
 my $baits            = $opts{B}  || usage();
 
-my $samtools    = EASIH::Misc::find_program('samtools');
-my $picard      = EASIH::Misc::find_program('picard');
-my $gatk        = EASIH::Misc::find_program('gatk_1.3-14');
+my $samtools    = '/software/bin/samtools';#EASIH::Misc::find_program('samtools');
+my $picard      = '/software/bin/picard';#EASIH::Misc::find_program('picard');
+my $gatk        = '/software/bin/gatk';#EASIH::Misc::find_program('gatk_1.3-14');
 
 # set platform specific bwa aln parameters
 my $align_param .= " -q 15 -e 50";
 
-my $bwa             = EASIH::Misc::find_program('bwa_0.6.1-tpx');
+my $bwa             = '/software/bin/bwa_0.6.2-tpx'; #EASIH::Misc::find_program('bwa_0.6.1-tpx');
 
 my $out = $opts{o} || $first;
 

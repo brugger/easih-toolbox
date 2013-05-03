@@ -11,6 +11,9 @@ use Data::Dumper;
 use Getopt::Std;
 
 
+#die "HACKED version that ignores barcode read nr 2\n";
+
+
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
@@ -46,7 +49,7 @@ use EASIH::MD5;
 
 my %opts;
 #getopts("a:A:1:2:3:4:5:6:7:8:hs:Si:o:lhmb:L:", \%opts);
-getopts("hB:L:bfSdo:D", \%opts);
+getopts("ChB:L:bfSdo:D", \%opts);
 
 
 # 
@@ -81,6 +84,8 @@ my $intensities_folder = "$basecall_folder/../";
 my $run_config = EASIH::Illumina::Config::readin( $basecall_folder );
 my $indexed_run = 0;
 $indexed_run = 1 if ( $$run_config{ is_indexed });
+my $CSEQ_run = $opts{'C'} || 0;
+  
 my $reads = @{$$run_config{ reads}};
 my $PE = 0;
 $PE = 1 if ( ( $indexed_run && $reads >= 3) ||
@@ -92,8 +97,9 @@ my @lanes = @{$$run_config{ 'lanes'}};
 my $sample_sheet = $opts{'s'} || find_sample_sheet( $basecall_folder );
 
 
-my $mismatches    = $opts{'m'} || 0;
+my $mismatches  = $opts{'m'} || 0;
 my $datamonger  = $opts{'d'} || 1;
+$datamonger     = 0 if ( $CSEQ_run );
 my $outdir      = $opts{'o'} || "/data/";
 my $parallel =  1;
 $parallel = 0 if ($opts{S});
@@ -118,6 +124,7 @@ print "RID :: $rid \n";
 
 my %filenames;
 my $sample_names = validate_names_and_open_outfiles( $sample_sheet, @lanes );
+#die Dumper( $sample_names );
 
 print Dumper($sample_names);
 
@@ -218,7 +225,9 @@ sub outfile {
   
   if ( $datamonger ) {
     
+#    print "\n 22222 == $lane_nr $barcode $sample_filename\n";
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($sample_filename);
+#    print "\n 22222 ==  $sample\n";
     my $fid = EASIH::DONE::add_file($sample_filename, $sample, $project, $run_folder, 'ILLUMINA');
     $fids{ $lane_nr }{ $sample_filename }  = $fid;
   }
@@ -287,6 +296,8 @@ sub validate_names_and_open_outfiles {
   $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, @lanes ) ;
 #  fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
 
+#  print Dumper ($sample_names );
+
   # assign filenames to each sample in each lane, as this script can/will
   # run in parallel this has to be done before we loose control.
   foreach my $lane_nr ( @lanes ) {
@@ -296,7 +307,7 @@ sub validate_names_and_open_outfiles {
 
       my $sample_name = $$sample_names{ $lane_nr }{ $bcode };
 
-#      print STDERR "LANE $lane_nr $bcode $sample_name\n";
+      print STDERR "lane $lane_nr $bcode $sample_name\n";
       
       my ($base_filename, $error);
 
@@ -304,11 +315,20 @@ sub validate_names_and_open_outfiles {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir_n_version( "$sample_name", "$outdir/CP/$project_name/");
 	system "cp $sample_sheet /data/CP/$project_name/";
       }
+      elsif ( $CSEQ_run) {
+	print STDERR "CSEQ project \n";
+	if (! $project_name ) {
+	  print STDERR "No project name, please fix SampleSheet\n";
+	  exit -1;
+	}
+	($base_filename, $error) = EASIH::Sample::sample2outfilename_wo_project_dir_n_version( "$sample_name", "$outdir/CP/$project_name/");
+	system "cp $sample_sheet /data/CP/$project_name/";
+      }
       else {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);
       }
 
-#      print STDERR "LANE $lane_nr $bcode $sample_name $base_filename\n";
+      print STDERR "LANE $lane_nr $bcode $sample_name $base_filename\n";
 
       if ( $fq_out ) { 
       
@@ -336,7 +356,7 @@ sub validate_names_and_open_outfiles {
   }
 
 #  die Dumper( \%filenames );
-#  print Dumper ( \%filenames );
+  print Dumper ( \%filenames );
   
   return $sample_names;
 }
@@ -356,6 +376,8 @@ sub verify_bcode {
   if (length($bc1) > length($bc2s[0])) {
     $bc1 = substr( $bc1, 0, length($bc2s[0]));
   }
+
+#  print STDERR "$bc1, @bc2s\n";
 
 #  exit;
   foreach my $bc2 ( @bc2s ) {
@@ -580,6 +602,8 @@ sub analyse_lane {
  
     if ($indexed_run && $read_barcode =~ /.*?BC:Z:(.*?)\t.*/) {
       $read_barcode =~ s/.*?BC:Z:(.*?)\t.*/$1/;
+      # REMOVE NEXT LINE, HACKED VERSION!!!
+#      $read_barcode = substr($read_barcode, 0, 8);
       chomp( $read_barcode );
       $prev_read_barcode = $read_barcode;
     }
@@ -589,10 +613,11 @@ sub analyse_lane {
 
     if ( $indexed_run ) {
     
-#      print "$read_barcode\n";
+#      print STDERR "$read_barcode\n";
       $read_barcode = verify_bcode($read_barcode, @bar_codes) if ( $indexed_run );
       
       next if (! $read_barcode );
+#      print STDERR "good barcode\n";
     }
       
     $read_barcode ||= 'default';

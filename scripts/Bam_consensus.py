@@ -41,7 +41,7 @@ def Find_IUPAC(fb,sb,tb = ''):
     """Return an IUPAC code given a first and second base"""
 
 
-#    print "\t".join([fb,sb,tb])
+    print "\t".join([fb,sb,tb])
 
 
     max_length =  max(len(fb), len(sb), len(tb))
@@ -69,18 +69,19 @@ def Find_IUPAC(fb,sb,tb = ''):
 
 #        print str(len(fb)) , " >= " ,str(i)
 
-        if (len(fb) > i):
+        if (len(fb) > i and fb[i] != '-'):
             bases.append( fb[i] )
 
-        if (len(sb) > i):
+        if (len(sb) > i and sb[i] != '-'):
             bases.append( sb[i] )
 
-        if (len(tb) > i):
+        if (len(tb) > i and tb[i] != '-'):
             bases.append( tb[i] )
 
         fst = ''.join( sorted(set(bases)))
 
-        IUPAC_consensus += IUPAC_Codes[ fst ]
+        if ( fst != ""):
+            IUPAC_consensus += IUPAC_Codes[ fst ]
 
 
 #    print IUPAC_consensus

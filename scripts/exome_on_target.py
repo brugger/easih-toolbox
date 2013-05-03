@@ -8,8 +8,8 @@ import pysam
 letters = 'b:B:' # the : means an argument needs to be passed after the letter
 opts, extraparams = getopt.getopt(sys.argv[1:], letters) 
 
-baits    = '/data/B20/NBG_V3_200.bed'
-baits    = '/data/B20/NBG_V3.bed'
+baits    = '/data/B/20_29/B20/NBG_V3_200.bed'
+baits    = '/data/B/20_29/B20/NBG_V3.bed'
 #baits    = '/scratch/kb468/pysam-0.6/test.bed'
 #baits    = '/scratch/kb468/pysam-0.6/test2.bed'
 bam_file = 'missing'
@@ -144,7 +144,8 @@ for read in samfile.fetch():
       print "No overlap:"+read.qname+"\t"+str(read_chr)+"\t"+str(read_start)+"\t"+str( read_end )+"\t"+str(read.alen)
 
 
-print "MQ0: "+str(mq0)+", MQ20: "+str(mq20)+", MQ50: "+str(mq50)
+
+print "MQ0: "+str(mq0)+" MQ20: "+str(mq20)+" MQ50: "+str(mq50)
 
 
 

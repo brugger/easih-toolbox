@@ -16,7 +16,7 @@ use Spreadsheet::WriteExcel;
 # Makes it possible to work with multiple checkouts without setting 
 # perllib/perl5lib in the enviroment.
 BEGIN {
-  my $DYNAMIC_LIB_PATHS = 0;
+  my $DYNAMIC_LIB_PATHS = 1;
   if ( $DYNAMIC_LIB_PATHS ) {
     my $path = $0;
     if ($path =~ /.*\//) {

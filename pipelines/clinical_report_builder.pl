@@ -10,7 +10,7 @@ use warnings;
 use Data::Dumper;
 use Spreadsheet::WriteExcel;
 
-use lib '/software/installed/easih-toolbox/modules';
+use lib '/software/packages/easih-toolbox/modules';
 use EASIH::Git;
 
 my $PIPELINE_VERSION = '1.4';

@@ -54,7 +54,7 @@ my $module = $opts{J} || $opts{T};
 $module .= ".jar" if ( $module !~ /.jar/);
 
 
-system  "$java -jar $picard_dir/$module @ARGV\n";
+system  "$java -Xmx2000m -jar $picard_dir/$module @ARGV\n";
 my $exit_value = $?>>8;
 exit $exit_value;
 

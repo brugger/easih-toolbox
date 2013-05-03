@@ -10,10 +10,11 @@ use warnings;
 use Data::Dumper;
 use Getopt::Std;
 
-use lib '/software/lib/e62/ensembl-variation/modules/';
-use lib '/software/lib/e62/ensembl/modules/';
-use lib '/software/lib/e62/ensembl-compara/modules/';
-use lib '/software/lib/bioperl/';
+use lib '/software/packages/ensembl-variation/modules/';
+use lib '/software/packages/ensembl/modules/';
+use lib '/software/packages/ensembl-compara/modules/';
+use lib '/software/packages/bioperl/';
+use lib '/software/packages/easih-toolbox/modules';
 
 # Sets up dynamic paths for EASIH modules...
 # Makes it possible to work with multiple checkouts without setting 
@@ -175,6 +176,8 @@ my $ce_mlss =  $mlssa->fetch_by_method_link_type_species_set_name("GERP_CONSTRAI
 #Get constrained_element adaptor
 my $ce_adaptor = $reg->get_adaptor('Multi', 'compara', 'ConstrainedElement');
 
+my $samtools    = '/software/bin/samtools';#EASIH::Misc::find_program('samtools');
+chomp( $samtools);
 
 my %slice_hash = ();
 my ($sth_dbsnp, $sth_pop);
@@ -204,8 +207,6 @@ my $version = EASIH::Git::version();
 
 my %SNPs = ();
 
-my $samtools = `which samtools`;
-chomp( $samtools);
 
 #readin_pileup( $pileup ) if ( $pileup);
 readin_vcf( $snp_vcf ) if ( $snp_vcf);
@@ -1031,8 +1032,9 @@ sub AAF {
   map { $_ = $_."-"x(length($ref_base) - length($_)) } @alt_alleles;
   
 
-  my $bam_allele_freq = "/home/kb468/easih-toolbox/scripts/bam_allele_freq.py";
+  my $bam_allele_freq = "/software/packages/easih-toolbox/scripts/bam_allele_freq.py";
 
+#  print STDERR "$bam_allele_freq $bam $chr $SNP_pos\n";
   my $freqs_line = `$bam_allele_freq $bam $chr $SNP_pos`;
   chomp $freqs_line;
   
@@ -1501,38 +1503,10 @@ sub readin_bed {
 
 
 
-# 
-# 
-# 
-# Kim Brugger (13 Jul 2010)
-sub find_program {
-  my ($program) = @_;
-
-
-  my @paths = ("/home/easih/bin/",
-	       "/home/kb468/bin/",
-	       "/home/kb468/easih-toolbox/scripts/",
-	       "/usr/local/bin");
-  
-  foreach my $path ( @paths ) {
-    
-    return "$path/$program" if ( -e "$path/$program" );
-  }
-
-  my $location = `which $program`;
-  chomp( $location);
-  
-  return $location if ( $location );
-
-  return undef;
-}
-
 
 sub DepthAndCoverage {
   my($bamfile, $bait_regions) = @_;
 
-  my $samtools     = find_program('samtools');
-  my $bam2depth    = find_program('bam2depth');
 
   my ($START, $END) = (0, 1);
   
@@ -1597,8 +1571,6 @@ sub DepthAndCoverage {
 sub exon_coverage {
   my($bamfile, $bait_regions) = @_;
 
-  my $samtools     = find_program('samtools');
-  my $bam2depth    = find_program('bam2depth');
 
   my ($START, $END) = (0, 1);
   

@@ -24,8 +24,10 @@ BEGIN {
 use Getopt::Std;
 
 #use lib '/home/cjp64/git/easih-pipeline/modules';
-use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
-use lib '/home/kb468/projects/BRC_exomes/easih-toolbox/modules';
+#use lib '/home/kb468/projects/BRC_exomes/easih-pipeline/modules';
+#use lib '/home/kb468/projects/BRC_exomes/easih-toolbox/modules';
+use lib '/software/packages/easih-pipeline/modules';
+use lib '/software/packages/easih-toolbox/modules';
 
 use EASIH::Misc;
 use EASIH::Pipeline;
@@ -47,32 +49,32 @@ if ( $opts{Q} ) {
   $opts{'2'} = join(",", sort(glob("$opts{Q}.2.fq.gz")));
 
   if ($opts{'1'} =~ /^C01/ ) {
-    $opts{ 'B' } = '/data/refs/BRCA/BRCA12_exons.bed';
-    $opts{ 'r' } = '/data/refs/BRCA/BRCA12.fasta';
+    $opts{ 'B' } = '/refs/BRCA/BRCA12_exons.bed';
+    $opts{ 'r' } = '/refs/BRCA/BRCA12.fasta';
   }
   elsif ($opts{'1'} =~ /^C02/ ) {
-    $opts{ 'B' } = '/data/refs/STICKLERS/STICKERS.bed';
-    $opts{ 'r' } = '/data/refs/STICKLERS/STICKERS.fasta';
+    $opts{ 'B' } = '/refs/STICKLERS/STICKERS.bed';
+    $opts{ 'r' } = '/refs/STICKLERS/STICKERS.fasta';
   }
   elsif ($opts{'1'} =~ /^C03/ ) {
-    $opts{ 'B' } = '/data/refs/TS/TS_exons.bed';
-    $opts{ 'r' } = '/data/refs/TS/TS.fasta';
+    $opts{ 'B' } = '/refs/TS/TS_exons.bed';
+    $opts{ 'r' } = '/refs/TS/TS.fasta';
   }
   elsif ($opts{'1'} =~ /^C04/ ) {
-    $opts{ 'B' } = '/data/refs/STICKLERS/STICKERS.bed';
-    $opts{ 'r' } = '/data/refs/STICKLERS/STICKERS.fasta';
+    $opts{ 'B' } = '/refs/STICKLERS/STICKERS.bed';
+    $opts{ 'r' } = '/refs/STICKLERS/STICKERS.fasta';
   }
   elsif ($opts{'1'} =~ /^C05/ ) {
-    $opts{ 'B' } = '/data/refs/PKD/PKD.bed';
-    $opts{ 'r' } = '/data/refs/PKD/PKD.fasta';
+    $opts{ 'B' } = '/refs/PKD/PKD.bed';
+    $opts{ 'r' } = '/refs/PKD/PKD.fasta';
   }
   elsif ($opts{'1'} =~ /^C07/ ) {
-    $opts{ 'B' } = '/data/refs/NEMO/NEMO.bed';
-    $opts{ 'r' } = '/data/refs/NEMO/NEMO.fasta';
+    $opts{ 'B' } = '/refs/NEMO/NEMO.bed';
+    $opts{ 'r' } = '/refs/NEMO/NEMO.fasta';
   }
   elsif ($opts{'1'} =~ /^C08/ ) {
-    $opts{ 'B' } = '/data/refs/HNPCC/HNPCC.bed';
-    $opts{ 'r' } = '/data/refs/HNPCC/HNPCC.fasta';
+    $opts{ 'B' } = '/refs/HNPCC/HNPCC.bed';
+    $opts{ 'r' } = '/refs/HNPCC/HNPCC.fasta';
   }
   else {
     die "Unknown test for $opts{'1'}\n";
@@ -82,8 +84,8 @@ if ( $opts{Q} ) {
   $opts{'L'} = "$opts{Q}.log";
   $opts{'o'} = "$opts{Q}";
   
-  $opts{'R'} = '/data/refs/human_1kg/human_g1k_v37.fasta';
-  $opts{'d'} = '/scratch/kb468/GATK_bundle/b37/dbsnp_132.b37.vcf';
+  $opts{'R'} = '/refs/human_1kg/human_g1k_v37.fasta';
+  $opts{'d'} = '/refs/GATK_bundle_2.3/dbsnp_137.b37.vcf';
 
 
 }  
@@ -99,14 +101,14 @@ my $leeway           = $opts{'l'}     || 50;
 my $dbsnp            = $opts{d} || usage();
 my $baits            = $opts{B}  || usage();
 
-my $samtools    = EASIH::Misc::find_program('samtools');
-my $picard      = EASIH::Misc::find_program('picard');
-my $gatk        = EASIH::Misc::find_program('gatk_1.3-14');
+my $samtools    = '/software/bin/samtools';#EASIH::Misc::find_program('samtools');
+my $picard      = '/software/bin/picard';#EASIH::Misc::find_program('picard');
+my $gatk        = '/software/bin/gatk';#EASIH::Misc::find_program('gatk_1.3-14');
 
 # set platform specific bwa aln parameters
 my $align_param .= " -q 15 -e 50";
 
-my $bwa             = EASIH::Misc::find_program('bwa_0.6.1-tpx');
+my $bwa             = '/software/bin/bwa_0.6.2-tpx '; #EASIH::Misc::find_program('bwa_0.6.1-tpx');
 
 my $out = $opts{o} || $first;
 
@@ -191,7 +193,7 @@ sub bwa_sampe {
   my $tmp_file = EASIH::Pipeline::tmp_file(".sam");
 
   my $cmd;
-  $cmd = "$bwa sampe -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file 2> /dev/null";
+  $cmd = "$bwa sampe  -P $small_reference $$input{first_sai} $$input{second_sai} $$input{first_fq} $$input{second_fq} > $tmp_file 2> /dev/null";
 
   $file2bam{ $tmp_file} = $$input{ 'first_fq' };
 
@@ -325,7 +327,7 @@ sub UnifiedGenotyper {
 sub annotate_VCF {
 
 
-  my $cmd = "/software/installed/easih-toolbox/pipelines/clinical_report.pl -v $vcf_file -O $out.var.csv -o $out.var_full.csv -b $bam_file -B $baits \n";
+  my $cmd = "/software/packages/easih-toolbox/pipelines/clinical_report.pl -v $vcf_file -O $out.var.csv -o $out.var_full.csv -b $bam_file -B $baits \n";
   EASIH::Pipeline::submit_job($cmd);
 
 }
@@ -337,7 +339,7 @@ sub annotate_VCF {
 # 
 # Kim Brugger (05 Jul 2012)
 sub vcf2xls {
-  my $cmd = "/software/installed/easih-toolbox/pipelines/clinical_report_builder.pl $out.var_full.csv \n";
+  my $cmd = "/software/packages/easih-toolbox/pipelines/clinical_report_builder.pl $out.var_full.csv \n";
   EASIH::Pipeline::submit_job($cmd);
   
 }
@@ -510,8 +512,8 @@ sub usage {
 
   print "easih-pipeline: " . &EASIH::Pipeline::version() . "\n";
 
-  use EASIH::Toolbox;
-  print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";
+#  use EASIH::Toolbox;
+#  print "easih-toolbox: " . &EASIH::Toolbox::version() . "\n";
 
   exit;
 

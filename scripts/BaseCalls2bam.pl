@@ -218,7 +218,9 @@ sub outfile {
   
   if ( $datamonger ) {
     
+#    print "\n 22222 == $lane_nr $barcode $sample_filename\n";
     my ($sample, $project) = EASIH::Sample::filename2sampleNproject($sample_filename);
+#    print "\n 22222 ==  $sample\n";
     my $fid = EASIH::DONE::add_file($sample_filename, $sample, $project, $run_folder, 'ILLUMINA');
     $fids{ $lane_nr }{ $sample_filename }  = $fid;
   }
@@ -287,6 +289,8 @@ sub validate_names_and_open_outfiles {
   $errors = EASIH::Illumina::Sample_sheet::validate( $sample_names, @lanes ) ;
 #  fail( $errors, "MALFORMED_SAMPLESHEET") if ( $errors );
 
+#  print Dumper ($sample_names );
+
   # assign filenames to each sample in each lane, as this script can/will
   # run in parallel this has to be done before we loose control.
   foreach my $lane_nr ( @lanes ) {
@@ -296,7 +300,7 @@ sub validate_names_and_open_outfiles {
 
       my $sample_name = $$sample_names{ $lane_nr }{ $bcode };
 
-#      print STDERR "LANE $lane_nr $bcode $sample_name\n";
+      print STDERR "LANE $lane_nr $bcode $sample_name\n";
       
       my ($base_filename, $error);
 
@@ -308,7 +312,7 @@ sub validate_names_and_open_outfiles {
 	($base_filename, $error) = EASIH::Sample::sample2outfilename( "$sample_name", $outdir);
       }
 
-#      print STDERR "LANE $lane_nr $bcode $sample_name $base_filename\n";
+      print STDERR "LANE $lane_nr $bcode $sample_name $base_filename\n";
 
       if ( $fq_out ) { 
       
@@ -336,7 +340,7 @@ sub validate_names_and_open_outfiles {
   }
 
 #  die Dumper( \%filenames );
-#  print Dumper ( \%filenames );
+  print Dumper ( \%filenames );
   
   return $sample_names;
 }

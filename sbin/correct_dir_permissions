@@ -12,12 +12,15 @@ do
     for range in `ls /data/$basedir/`
     do
     
+    chmod  775 /data/$basedir/
+    
     if [[ "$range" =~ [0-9]_[0-9] ]]; then
 #        echo "Looking in: /data/$basedir/$range/";
+	chmod  775 /data/$basedir/$range
 
         for project in `ls /data/$basedir/$range/`
         do
-	    chmod -R 4775 /data/$basedir/$range/$project
+	    chmod -R 775 /data/$basedir/$range/$project
 	done
     fi
     done

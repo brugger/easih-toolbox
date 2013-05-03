@@ -108,7 +108,11 @@ my $gatk        = '/software/bin/gatk';#EASIH::Misc::find_program('gatk_1.3-14')
 # set platform specific bwa aln parameters
 my $align_param .= " -q 15 -e 50";
 
+<<<<<<< HEAD
 my $bwa             = '/software/bin/bwa_0.6.2-tpx '; #EASIH::Misc::find_program('bwa_0.6.1-tpx');
+=======
+my $bwa             = '/software/bin/bwa_0.6.2-tpx'; #EASIH::Misc::find_program('bwa_0.6.1-tpx');
+>>>>>>> f4dc8be3ea7892827755b32db1db85f3812867a1
 
 my $out = $opts{o} || $first;
 
